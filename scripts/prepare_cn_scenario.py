@@ -72,12 +72,16 @@ def apply_scenario(config, bundle, provider, ledger):
     return config
 
 
-def compile_qlib(bundle):
-    target = PROJECT / '.data/cn_runs' / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%f') + '-' + bundle['fingerprint'][:10])
-    target.mkdir(parents=True)
+def compile_qlib(bundle, out_dir=None):
+    target = Path(out_dir) if out_dir is not None else (
+        PROJECT / '.data/cn_runs' / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%f') + '-' + bundle['fingerprint'][:10]))
+    target.mkdir(parents=True, exist_ok=True)
     config = yaml.safe_load((PROJECT / 'examples/benchmarks/LightGBM/workflow_config_cn_demo.yaml').read_text())
     config['sys'] = {'path': [str(PROJECT / 'extensions/workbench')]}
     apply_scenario(config, bundle, str(dataset_path(bundle)), str(target / 'fees.jsonl'))
+    if out_dir is not None:
+        # Workbench attempts get their own experiment store so two configurations never share runs.
+        config['qlib_init']['exp_manager']['kwargs']['uri'] = f'sqlite:///{target}/mlflow.db'
     (target / 'effective.json').write_text(json.dumps(bundle, ensure_ascii=False, indent=2)+'\n')
     (target / 'workflow.yaml').write_text(yaml.safe_dump(config, sort_keys=False, allow_unicode=True))
     return target / 'workflow.yaml'
@@ -115,6 +119,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--profile', type=Path, default=profile_path())
     parser.add_argument('--target', choices=['qlib','rdagent'], default='qlib')
+    parser.add_argument('--out-dir', type=Path, help='write the compiled Qlib workflow into this directory')
     args = parser.parse_args()
+    if args.out_dir is not None and args.target != 'qlib':
+        parser.error('--out-dir is only supported for --target qlib')
     b = load_profile(args.profile)
-    print(compile_qlib(b) if args.target == 'qlib' else compile_agent(b))
+    print(compile_qlib(b, args.out_dir) if args.target == 'qlib' else compile_agent(b))

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import uuid
 import time
+from typing import Any
+
 from .telemetry import RequestTelemetry
 
 from .application import WorkbenchService
@@ -14,13 +16,37 @@ def create_app(service: WorkbenchService):
     import json
     from importlib.resources import files
 
-    from fastapi import FastAPI, HTTPException, Query, Request
+    from fastapi import Body, FastAPI, HTTPException, Query, Request
     from fastapi.exceptions import RequestValidationError
     from fastapi.responses import JSONResponse, FileResponse
 
+    from urllib.parse import urlsplit
+
     from .dashboard import validate_dashboard
+    from .execution import ExecutionError
+
+    # ``from __future__ import annotations`` turns annotations into strings; FastAPI resolves
+    # them against module globals, so register the lazily imported request type explicitly.
+    globals().setdefault("Request", Request)
+
+    def require_same_origin(request: Request) -> None:
+        """OPS01: browser writes must come from the workbench origin."""
+        site = (request.headers.get("sec-fetch-site") or "").strip().lower()
+        origin = (request.headers.get("origin") or "").strip()
+        if site == "cross-site":
+            raise HTTPException(403, "cross-site write requests are rejected")
+        if origin:
+            if urlsplit(origin).netloc != (request.headers.get("host") or ""):
+                raise HTTPException(403, "write requests must come from the workbench origin")
 
     app = FastAPI(title="Quant Workbench", version="0.1.0")
+
+    @app.exception_handler(ExecutionError)
+    async def execution_error(request: Request, exc: ExecutionError):
+        rid = getattr(request.state, "request_id", uuid.uuid4().hex)
+        return JSONResponse(status_code=exc.status_code,
+                            content={"code": exc.code, "message": str(exc), "request_id": rid,
+                                     "details": exc.as_details()})
     telemetry = RequestTelemetry()
     ui_root = files("quant_workbench.ui")
 
@@ -162,5 +188,40 @@ def create_app(service: WorkbenchService):
     @app.get("/v1/compare")
     def compare(run_id: list[str] = Query(...), metric_id: str = Query(...), mode: str = Query("auto")):
         return service.compare(run_id, metric_id, mode)
+
+    @app.get("/v1/executions/catalog")
+    def executions_catalog(refresh: bool = False):
+        return service.execution_catalog(refresh)
+
+    @app.get("/v1/executions")
+    def executions(limit: int = Query(20, ge=1, le=100), cursor: str | None = None):
+        return service.executions(limit, cursor)
+
+    @app.get("/v1/executions/{attempt_id}")
+    def execution(attempt_id: str):
+        result = service.execution(attempt_id)
+        if result is None:
+            raise HTTPException(404, "attempt not found")
+        return result
+
+    @app.get("/v1/executions/{attempt_id}/log")
+    def execution_log(attempt_id: str, tail: int = Query(200, ge=1, le=1000)):
+        return service.execution_log(attempt_id, tail)
+
+    @app.post("/v1/executions")
+    def create_execution(request: Request, payload: dict[str, Any] = Body(...)):
+        require_same_origin(request)
+        unknown = set(payload) - {"kind", "params", "idempotency_key"}
+        if unknown:
+            raise HTTPException(400, f"unknown request fields: {', '.join(sorted(unknown))}")
+        idempotency_key = payload.get("idempotency_key") or request.headers.get("idempotency-key")
+        result = service.submit_execution(payload.get("kind"), payload.get("params") or {}, idempotency_key,
+                                          getattr(request.state, "request_id", None))
+        return JSONResponse(status_code=201 if result["created"] else 200, content=result)
+
+    @app.post("/v1/executions/{attempt_id}/cancel")
+    def cancel_execution(attempt_id: str, request: Request):
+        require_same_origin(request)
+        return service.cancel_execution(attempt_id)
 
     return app

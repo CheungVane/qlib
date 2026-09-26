@@ -1,6 +1,6 @@
 const initialQuery = new URLSearchParams(location.search);
 const hasCompareQuery = initialQuery.has('compare');
-const state = {renderGeneration:0, revision: initialQuery.get("revision"), seriesOffsets:{}, runs: [], selected: initialQuery.get('run'), compareIds: (initialQuery.get('compare') || '').split(',').filter(Boolean), researchId: initialQuery.get('research'), researchOffset:0, researchQuery:'', search: '', view: location.hash.slice(1) || 'overview'};
+const state = {renderGeneration:0, revision: initialQuery.get("revision"), seriesOffsets:{}, runs: [], selected: initialQuery.get('run'), compareIds: (initialQuery.get('compare') || '').split(',').filter(Boolean), researchId: initialQuery.get('research'), researchOffset:0, researchQuery:'', search: '', executionKey:null, view: location.hash.slice(1) || 'overview'};
 const titles = {overview:['总览','研究运行、数据状态与系统观察'],backtest:['回测','权益、回撤、费用与来源证据'],training:['训练','指标曲线、阶段状态与来源证据'],compare:['比较','并列查看运行，先核对数据与指标口径'],agent:['研究中心','研究结果、因子内容、过程追踪与下一步'],live:['实时','行情连接与数据新鲜度'],data:['数据','数据集来源、覆盖与质量'],system:['系统','任务状态、请求与错误观察']};
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = (n, digits=2) => typeof n === 'number' ? new Intl.NumberFormat('zh-CN',{maximumFractionDigits:digits}).format(n) : '未知';
@@ -173,7 +173,90 @@ function bindCompare(){
     history.replaceState(null,'',url);render();
   });
 }
-const agentReason = {chat_not_configured:'聊天模型或密钥未配置',embedding_not_configured:'Embedding 模型或对应密钥未配置',embedding_service_unavailable:'本地 Embedding 服务或模型暂不可用',native_runtime_unverified:'RD-Agent 官方仅支持 Linux；当前系统的原生因子流程尚未验证',docker_not_available:'Linux Docker 引擎当前不可用',factor_image_unverified:'因子执行所需的 CPU/arm64 镜像尚未验证',factor_scenario_not_aligned:'因子模板的数据区间与万二费用情景尚未对齐',executor_not_integrated:'工作台执行器尚未接入',checkout_missing:'RD-Agent checkout 不存在',checkout_not_configured:'未指定 RD-Agent checkout'};
+const agentReason = {chat_not_configured:'聊天模型或密钥未配置',embedding_not_configured:'Embedding 模型或对应密钥未配置',embedding_service_unavailable:'本地 Embedding 服务或模型暂不可用',native_runtime_unverified:'RD-Agent 官方仅支持 Linux；当前系统的原生因子流程尚未验证',docker_not_available:'Linux Docker 引擎当前不可用',factor_image_unverified:'因子执行所需的 CPU/arm64 镜像尚未验证',factor_scenario_not_aligned:'因子模板的数据区间与万二费用情景尚未对齐',checkout_missing:'RD-Agent checkout 不存在',checkout_not_configured:'未指定 RD-Agent checkout'};
+const executionReasonLabels = {rdagent_checkout:'RD-Agent checkout 不存在',rdagent_venv:'RD-Agent 虚拟环境缺失','rdagent.checkout':'RD-Agent checkout 不存在','rdagent.venv':'RD-Agent 虚拟环境缺失','rdagent.chat':'聊天模型或密钥未配置（loop 必需）','rdagent.embedding':'本地 Embedding 服务或模型不可用（loop 必需）','rdagent.docker':'Linux Docker 引擎不可用','rdagent.image':'因子执行镜像未构建','rdagent.resources':'Docker 资源低于下限（需至少 2 CPU、4GiB）','rdagent.data_snapshot':'该情景指纹的容器数据快照尚未物化','rdagent.template':'模板与当前情景指纹不一致','rdagent.profile':'CN 情景配置不可用','platform.attempt_store':'平台 Attempt 存储不可用','cn.profile':'CN 情景配置不可用','cn.data_snapshot':'本机数据快照尚未物化','cn.calendar':'交易日历未覆盖研究区间','cn.fee_scenario':'费用情景缺失','cn.engine_env':'Qlib 虚拟环境缺失','cn.attempt_workspace':'执行工作目录不可写'};
+function newIdempotencyKey(){return (crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random().toString(16).slice(2)}`);}
+function reasonLabel(id){return executionReasonLabels[id]||agentReason[id]||id;}
+function outcomeSummary(outcome){
+ if(!outcome)return '未记录';
+ const parts=[];
+ const quality=outcome.quality;
+ if(quality)parts.push(`质量 ${quality.status||'未知'} · 有效IC ${quality.valid_ic_days??'未知'}天 · 交易 ${quality.trade_days??'未知'}天`);
+ if(outcome.evidence)parts.push(`指标 ${outcome.evidence.metric_count??'未知'}项`);
+ if(outcome.artifacts?.mlflow_runs?.length)parts.push(`MLflow run ${outcome.artifacts.mlflow_runs.map(x=>x.slice(0,8)).join('、')}`);
+ if(outcome.research_sessions_synced?.length)parts.push(`研究会话 ${outcome.research_sessions_synced.length}个`);
+ if(outcome.collection_error)parts.push('摘要收集受限');
+ if(outcome.result_import==='manual_import_required')parts.push('结果需显式导入');
+ return parts.join(' · ')||'已记录';
+}
+function executionChecks(entry){
+ const required=entry.reasons||[];
+ return `<ul class="checklist">${entry.checks.map(c=>{const blocking=required.includes(c.id);const informational=!(c.required_for||[]).includes(entry.kind);return `<li class="${c.status==='ok'?'ok':'warn'}">${c.status==='ok'?'✓':'!'} ${esc(reasonLabel(c.id))}${informational?' <small>（该入口非必需）</small>':(blocking?' <small class="warning">（阻塞启动）</small>':'')}<br><small>${esc(c.detail||'')}</small></li>`;}).join('')}</ul>`;
+}
+function executionPanel(catalog,attempts){
+ const available=catalog.items.filter(x=>x.available);
+ const options=catalog.items.map(x=>`<option value="${esc(x.kind)}" ${x.available?'':'disabled'}>${esc(x.label)}${x.available?'':'（前置条件未满足）'}</option>`).join('');
+ const form=`<form id="execution-form" class="toolbar"><label class="sr-only" for="execution-kind">执行入口</label><select id="execution-kind" aria-label="执行入口" ${available.length?'':'disabled'}>${options}</select><input id="execution-note" aria-label="备注" placeholder="可选备注（随 Attempt 保存）"><button class="action" id="execution-submit" ${available.length?'':'disabled'}>启动研究</button><small>启动请求期间复用同一幂等键（重复点击不会产生第二个进程）；启动成功或去重后自动换用新键，可再次启动新 Attempt。</small></form><p id="execution-feedback" class="panel-note">${available.length?'前置条件已满足，可启动隔离进程执行。':'当前没有可用执行入口；下方逐项列出缺失条件，不会提供假启动。'}</p>`;
+ const entries=catalog.items.map(x=>`<details class="execution-entry" ${x.available?'':'open'}><summary>${esc(x.label)} ${x.probe?badge('limited'):''} ${x.available?badge('measured'):badge('unsupported')}</summary><p class="panel-note">执行器 <code>${esc(x.executor_id)}</code> · 数据性质 ${esc(x.data_nature||'未记录')}<br>${esc(x.description||'')}</p>${executionChecks(x)}</details>`).join('');
+ return card('启动研究（隔离进程）',form+entries,'前置条件逐项核对；探针类执行标记为集成探针');
+}
+function attemptTable(attempts){
+ if(!attempts.length)return empty('还没有执行记录。启动一次研究后，这里会显示状态、退出码、结果摘要与日志入口。');
+ const rows=attempts.map(a=>{
+  const actions=[];
+  if(a.has_log)actions.push(`<button class="link-button" data-attempt-log="${esc(a.attempt_id)}">日志尾部</button>`);
+  if(['queued','running'].includes(a.status))actions.push(`<button class="link-button" data-attempt-cancel="${esc(a.attempt_id)}">${a.cancel_pending?'取消请求中…':'取消'}</button>`);
+  const started=(a.started_at||a.created_at||'').replace('T',' ').slice(0,19);
+  const ended=a.ended_at?('→ '+a.ended_at.replace('T',' ').slice(0,19)):'进行中';
+  const exitCode=(a.exit_code===null||a.exit_code===undefined)?'未知':esc(a.exit_code);
+  return `<tr><td><code>${esc(a.attempt_id.slice(0,8))}</code><br><small>${esc(a.label)}${a.probe?' · 集成探针':''}</small></td><td>${statusLabel(a.status)}${a.cancel_pending?'<br><small class="warning">取消请求中</small>':''}</td><td><small>${esc(started)}<br>${esc(ended)}</small></td><td>${exitCode}${a.error_code?`<br><small class="warning">${esc(a.error_code)}</small>`:''}</td><td>${esc(outcomeSummary(a.outcome))}${a.error_message?`<br><small class="warning">${esc(a.error_message)}</small>`:''}<br><small>指纹 ${esc((a.config_fingerprint||'未知').slice(0,10))} · 工作目录 ${esc(a.workspace_label||'未记录')}</small></td><td>${actions.join(' ')||'—'}</td></tr>`;
+ }).join('');
+ return `<div class="table-scroll"><table class="table"><thead><tr><th>Attempt</th><th>状态</th><th>时间</th><th>退出码</th><th>结果与证据</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table></div><div id="attempt-log"></div>`;
+}
+function bindExecution(catalog){
+ const form=document.getElementById('execution-form');
+ if(form)form.onsubmit=async event=>{
+  event.preventDefault();
+  const kind=document.getElementById('execution-kind').value;
+  const note=document.getElementById('execution-note').value.trim();
+  const button=document.getElementById('execution-submit');
+  button.disabled=true;
+  try{
+   const response=await fetch('/v1/executions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,params:note?{note}:{},idempotency_key:state.executionKey})});
+   const body=await response.json().catch(()=>({}));
+   if(!response.ok){
+    const detail=(body.details?.reasons||[]).map(reasonLabel).join('；');
+    throw new Error(`${body.message||'启动失败'}${detail?'：'+detail:''}${body.request_id?' · request_id: '+body.request_id:''}`);
+   }
+   state.executionKey=newIdempotencyKey();
+   setNotice(body.created?`已启动 ${body.attempt.label}（${body.attempt.attempt_id.slice(0,8)}）`:`已存在同一幂等键的 Attempt，未重复启动（${body.attempt.status}）`);
+   render();
+  }catch(error){setNotice(error.message);button.disabled=false;}
+ };
+ const select=document.getElementById('execution-kind');
+ if(select)select.onchange=()=>{state.executionKey=newIdempotencyKey();render();};
+ document.querySelectorAll('[data-attempt-cancel]').forEach(button=>button.onclick=async()=>{
+  if(!window.confirm('取消需要执行器确认进程结束后才落终态；确认请求取消？'))return;
+  button.disabled=true;
+  try{
+   const response=await fetch(`/v1/executions/${encodeURIComponent(button.dataset.attemptCancel)}/cancel`,{method:'POST'});
+   const body=await response.json().catch(()=>({}));
+   if(!response.ok)throw new Error(body.message||'取消失败');
+   setNotice(body.cancel_confirmed?`已确认进程结束，终态 ${body.attempt.status}`:`未确认取消（${body.reason||'未知'}），当前状态 ${body.attempt.status}`);
+  }catch(error){setNotice(error.message);}
+  render();
+ });
+ document.querySelectorAll('[data-attempt-log]').forEach(button=>button.onclick=async()=>{
+  const target=document.getElementById('attempt-log');
+  target.innerHTML='正在读取日志尾部…';
+  try{
+   const response=await fetch(`/v1/executions/${encodeURIComponent(button.dataset.attemptLog)}/log?tail=80`);
+   const body=await response.json().catch(()=>({}));
+   if(!response.ok)throw new Error(body.message||'日志读取失败');
+   target.innerHTML=`<details open><summary>日志尾部（脱敏；最多80行，${body.truncated?'已截断':'未截断'}）</summary><pre>${esc((body.lines||[]).join('\n'))}</pre></details>`;
+  }catch(error){target.innerHTML=`<p class="warning">${esc(error.message)}</p>`;}
+ });
+}
 const researchMetricNames = {'IC':'IC（相关系数）','Rank IC':'Rank IC','ICIR':'ICIR','Rank ICIR':'Rank ICIR','1day.excess_return_with_cost.annualized_return':'成本后年化超额收益（原生口径）','1day.excess_return_with_cost.max_drawdown':'成本后超额最大回撤','1day.excess_return_with_cost.information_ratio':'成本后信息比率','l2.train':'训练 L2','l2.valid':'验证 L2'};
 function reviewPanel(review,evidence={}){
   if(!review)return '';
@@ -214,15 +297,19 @@ async function renderResearchDetail(){
 }
 async function renderAgent(){
  if(state.researchId){await renderResearchDetail();return;}
- const [list,runtime]=await Promise.all([api(`/v1/research?limit=20&offset=${state.researchOffset}&query=${encodeURIComponent(state.researchQuery)}`),api('/v1/agents/rdagent')]);
+ const [list,runtime,catalog,attempts]=await Promise.all([api(`/v1/research?limit=20&offset=${state.researchOffset}&query=${encodeURIComponent(state.researchQuery)}`),api('/v1/agents/rdagent'),api('/v1/executions/catalog'),api('/v1/executions?limit=20')]);
+ if(catalog.items.length&&!state.executionKey)state.executionKey=newIdempotencyKey();
  const toolbar=`<form id="research-search" class="toolbar"><input aria-label="搜索研究" id="research-query" placeholder="搜索因子名、日期、状态" value="${esc(state.researchQuery)}"><button class="action">搜索</button><button type="button" id="research-refresh" class="action secondary">刷新记录</button><small>共 ${list.total} 条</small></form><p class="panel-note">每条研究可查看结果、假设、生成代码和阶段记录。历史缺失信息会保留为未记录；完整指标可在统一比较页并列查看。</p>`;
  const pager=`<div class="toolbar"><button class="action secondary" id="research-prev" ${state.researchOffset===0?'disabled':''}>上一页</button><button class="action secondary" id="research-next" ${list.next_offset===null?'disabled':''}>下一页</button></div>`;
- const ready=`<details><summary>环境与执行能力</summary><p>聊天模型：${esc(runtime.chat?.model||'未连接')}；Embedding：${esc(runtime.embedding?.model||'未连接')}；Linux Docker：${runtime.runtime?.linux_container_available?'可用':'不可用'}。</p><p>当前支持查看已有研究与比较结果；界面启动/停止研究尚未接入。</p><p class="panel-note">同步已有历史产物：在 RD-Agent 目录执行 .venv/bin/python ../qlib/scripts/export_rdagent_research.py --trust-local-artifacts --synthetic；刷新只重新读取已导出的快照，不执行研究。</p></details>`;
- document.getElementById('content').innerHTML=`<div class="stack">${card('研究记录',toolbar+researchTable(list.items)+pager)}${card('运行环境',ready)}</div>`;
+ const reasons=(runtime.execution?.reasons||[]).map(reasonLabel);
+ const ready=`<details><summary>环境与执行能力</summary><p>聊天模型：${esc(runtime.chat?.model||'未连接')}；Embedding：${esc(runtime.embedding?.model||'未连接')}；Linux Docker：${runtime.runtime?.linux_container_available?'可用':'不可用'}。</p><p>界面可启动/取消隔离进程执行；被阻塞的入口会列出缺失条件${reasons.length?'（当前：'+esc(reasons.join('；'))+'）':''}。取消需执行器确认进程结束后才落终态。</p><p class="panel-note">同步已有历史产物：在 RD-Agent 目录执行 .venv/bin/python ../qlib/scripts/export_rdagent_research.py --trust-local-artifacts --synthetic；历史刷新只重新读取已导出的快照，不执行研究。</p></details>`;
+ document.getElementById('content').innerHTML=`<div class="stack">${executionPanel(catalog,attempts.items)}${card('执行记录',attemptTable(attempts.items),'平台执行状态；结果进入结果库仍需显式导入')}${card('研究记录',toolbar+researchTable(list.items)+pager)}${card('运行环境',ready)}</div>`;
  document.getElementById('research-search').onsubmit=e=>{e.preventDefault();state.researchQuery=document.getElementById('research-query').value;state.researchOffset=0;render();};
  document.getElementById('research-prev').onclick=()=>{state.researchOffset=Math.max(0,state.researchOffset-20);render();};
  document.getElementById('research-next').onclick=()=>{state.researchOffset=list.next_offset;render();};
- document.getElementById('research-refresh').onclick=async()=>{await refreshRuns();render();};bindResearch();
+ document.getElementById('research-refresh').onclick=async()=>{await refreshRuns();render();};
+ bindExecution(catalog);bindResearch();
+ if(attempts.items.some(x=>['queued','running'].includes(x.status)))setTimeout(()=>{if(state.view==='agent'&&!state.researchId)render();},5000);
 }
 async function refreshRuns(){
  let items=[],cursor=null;
@@ -232,7 +319,7 @@ async function refreshRuns(){
 
 async function renderSystem(){
  const [stats,health]=await Promise.all([api('/v1/observability'),api('/v1/health')]);
- document.getElementById('content').innerHTML=`<div class="stack">${card('API 运行观测',`${badge('measured')}${badge('limited')}<p class="panel-note">仅本工作台HTTP服务的实测，非Qlib或RD-Agent错误率。</p><div class="metric-row"><div class="metric-box"><small>5xx 错误率</small><strong>${stats.error_rate===null?'无样本':fmt(stats.error_rate*100)+'%'}</strong></div><div class="metric-box"><small>已完成请求</small><strong>${stats.completed_requests}</strong></div><div class="metric-box"><small>4xx / 5xx</small><strong>${stats.client_errors} / ${stats.server_errors}</strong></div><div class="metric-box"><small>P95 响应耗时</small><strong>${fmt(stats.p95_ms)} ms</strong></div></div><p class="panel-note">覆盖 ${fmt(stats.coverage_seconds,0)} / 300 秒；${stats.truncated?'达到容量上限，统计覆盖不完整':'未截断'}。${esc(stats.scope)}<br>采集开始 ${esc(stats.collection_started_at)}</p><button id="system-refresh" class="action secondary">刷新观测</button>`)}${await capabilityPanel()}${card('存储与任务',`${badge('unsupported')}<p>本地结果库：${esc(health.status)}。</p><p class="panel-note">任务 Attempt 监控尚未接入；历史过程不完整不等同于失败，不能用于推算任务失败率。</p>`)}</div>`;
+ document.getElementById('content').innerHTML=`<div class="stack">${card('API 运行观测',`${badge('measured')}${badge('limited')}<p class="panel-note">仅本工作台HTTP服务的实测，非Qlib或RD-Agent错误率。</p><div class="metric-row"><div class="metric-box"><small>5xx 错误率</small><strong>${stats.error_rate===null?'无样本':fmt(stats.error_rate*100)+'%'}</strong></div><div class="metric-box"><small>已完成请求</small><strong>${stats.completed_requests}</strong></div><div class="metric-box"><small>4xx / 5xx</small><strong>${stats.client_errors} / ${stats.server_errors}</strong></div><div class="metric-box"><small>P95 响应耗时</small><strong>${fmt(stats.p95_ms)} ms</strong></div></div><p class="panel-note">覆盖 ${fmt(stats.coverage_seconds,0)} / 300 秒；${stats.truncated?'达到容量上限，统计覆盖不完整':'未截断'}。${esc(stats.scope)}<br>采集开始 ${esc(stats.collection_started_at)}</p><button id="system-refresh" class="action secondary">刷新观测</button>`)}${await capabilityPanel()}${card('存储与任务',`${badge('measured')}<p>本地结果库：${esc(health.status)}（schema ${esc(health.schema_version)}）。</p><p class="panel-note">执行 Attempt 在“研究中心 → 执行记录”查看，含状态、退出码与日志尾部；本页的请求统计不代替任务失败率，历史过程不完整不等同于失败。</p>`)}</div>`;
  document.getElementById('system-refresh').onclick=()=>render();
 }
 async function renderDataEvidence(){

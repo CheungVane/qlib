@@ -16,7 +16,7 @@ from prepare_cn_scenario import compile_agent, effective_segments, load_profile,
 
 
 PROJECT = Path(__file__).resolve().parents[1]
-AGENT = PROJECT.parent / "RD-Agent"
+AGENT = Path(os.environ.get("QWB_RDAGENT_ROOT") or PROJECT.parent / "RD-Agent").resolve()
 BASE_FEATURES = AGENT / "git_ignore_folder/qwb_base_features"
 EVIDENCE = AGENT / "git_ignore_folder/qwb_factor_smoke.json"
 

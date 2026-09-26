@@ -1,0 +1,355 @@
+"""Execution domain: Attempt lifecycle, executor port and the shared execution service.
+
+No engine SDK, database SDK or UI imports belong here; executors are injected ports.
+"""
+
+from __future__ import annotations
+
+import json
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Protocol
+
+from .source_safety import Sanitizer
+
+TERMINAL_STATUSES = ("succeeded", "failed", "cancelled", "interrupted")
+OPEN_STATUSES = ("queued", "running")
+MAX_PARAMS_BYTES = 8192
+MAX_ERROR_MESSAGE = 500
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+class ExecutionError(RuntimeError):
+    code = "execution_error"
+    status_code = 400
+
+    def as_details(self) -> dict[str, Any]:
+        return {}
+
+
+class InvalidExecutionRequest(ExecutionError):
+    code = "invalid_request"
+    status_code = 400
+
+
+class UnknownExecutionKind(ExecutionError):
+    code = "unknown_kind"
+    status_code = 404
+
+
+class AttemptNotFound(ExecutionError):
+    code = "attempt_not_found"
+    status_code = 404
+
+
+class PreconditionFailed(ExecutionError):
+    code = "precondition_failed"
+    status_code = 409
+
+    def __init__(self, checks: list[dict[str, Any]], reasons: list[str]):
+        self.checks = checks
+        self.reasons = reasons
+        super().__init__("execution preconditions are not satisfied")
+
+    def as_details(self) -> dict[str, Any]:
+        return {"checks": self.checks, "reasons": self.reasons}
+
+
+class ExecutorPort(Protocol):
+    """Executor boundary.
+
+    ``preflight`` returns ``{"checks": [...], "available": {kind: bool}, "reasons": {kind: [check_id]}}``;
+    a check carries ``required_for`` listing the kinds it blocks. ``prepare`` must not start work.
+    """
+
+    executor_id: str
+    kinds: tuple[str, ...]
+
+    def describe(self, kind: str) -> dict[str, Any]: ...
+
+    def preflight(self, refresh: bool = False) -> dict[str, Any]: ...
+
+    def prepare(self, attempt_id: str, kind: str, params: dict[str, Any]) -> dict[str, Any]: ...
+
+    def start(self, attempt_id: str, prepared: dict[str, Any]) -> dict[str, Any]: ...
+
+    def poll(self, attempt: dict[str, Any]) -> dict[str, Any]: ...
+
+    def cancel(self, attempt: dict[str, Any]) -> dict[str, Any]: ...
+
+    def outcome(self, attempt: dict[str, Any]) -> dict[str, Any]: ...
+
+    def log_tail(self, attempt: dict[str, Any], lines: int) -> dict[str, Any]: ...
+
+
+def attempt_dto(row: dict[str, Any]) -> dict[str, Any]:
+    """Browser/CLI projection: no server paths, no credentials, unknown stays null."""
+    sanitizer = Sanitizer()
+    workspace = row.get("workspace") or ""
+    cancel_requested_at = row.get("cancel_requested_at")
+    return {
+        "attempt_id": row["attempt_id"],
+        "kind": row["kind"],
+        "executor_id": row["executor_id"],
+        "label": row["label"],
+        "probe": bool(row.get("probe")),
+        "status": row["status"],
+        "cancel_pending": bool(cancel_requested_at and row["status"] in OPEN_STATUSES),
+        "cancel_requested_at": cancel_requested_at,
+        "created_at": row["created_at"],
+        "queued_at": row.get("queued_at"),
+        "started_at": row.get("started_at"),
+        "ended_at": row.get("ended_at"),
+        "heartbeat_at": row.get("heartbeat_at"),
+        "exit_code": row.get("exit_code"),
+        "error_code": row.get("error_code"),
+        "error_message": sanitizer.text(row.get("error_message"), MAX_ERROR_MESSAGE) if row.get("error_message") else None,
+        "config_fingerprint": row.get("config_fingerprint"),
+        "workspace_label": Path(workspace).name if workspace else None,
+        "has_log": bool(row.get("log_path")),
+        "idempotency_key_present": bool(row.get("idempotency_key")),
+        "request_id": row.get("request_id"),
+        "params": sanitizer.scrub(row.get("params") or {}),
+        "outcome": sanitizer.scrub(row.get("outcome")),
+    }
+
+
+class ExecutionService:
+    """Submit, inspect, reconcile and cancel attempts through injected executors."""
+
+    def __init__(self, repository, executors: list[ExecutorPort] | None = None):
+        self.repository = repository
+        self.executors = list(executors or [])
+        self._by_kind: dict[str, ExecutorPort] = {}
+        self._by_id: dict[str, ExecutorPort] = {}
+        for executor in self.executors:
+            self._by_id[executor.executor_id] = executor
+            for kind in executor.kinds:
+                self._by_kind[kind] = executor
+
+    # -- catalog ---------------------------------------------------------
+    def platform_checks(self) -> list[dict[str, Any]]:
+        kinds = sorted(self._by_kind)
+        try:
+            health = self.repository.health()
+            status = "ok" if health.get("status") == "ok" else "missing"
+            detail = f"platform attempt store ready (schema {health.get('schema_version')})"
+        except Exception as exc:
+            status, detail = "missing", f"platform attempt store unavailable: {type(exc).__name__}"
+        return [{"id": "platform.attempt_store", "status": status, "detail": detail, "required_for": kinds}]
+
+    def _preflight(self, kind: str, refresh: bool = False) -> tuple[ExecutorPort, list[dict[str, Any]], list[str]]:
+        executor = self._by_kind.get(kind)
+        if executor is None:
+            raise UnknownExecutionKind(f"no executor is configured for kind '{kind}'")
+        payload = executor.preflight(refresh=refresh)
+        platform = self.platform_checks()
+        reasons = [reason for reason in payload.get("reasons", {}).get(kind, [])
+                   if reason not in {check["id"] for check in platform}]
+        reasons += [check["id"] for check in platform if check["status"] != "ok"]
+        return executor, list(payload.get("checks", [])) + platform, reasons
+
+    def catalog(self, refresh: bool = False) -> dict[str, Any]:
+        items = []
+        platform = self.platform_checks()
+        for executor in self.executors:
+            preflight = executor.preflight(refresh=refresh)
+            for kind in executor.kinds:
+                meta = executor.describe(kind)
+                reasons = list(preflight.get("reasons", {}).get(kind, []))
+                available = bool(preflight.get("available", {}).get(kind)) and all(
+                    check["status"] == "ok" for check in platform)
+                reasons += [check["id"] for check in platform if check["status"] != "ok"]
+                items.append({
+                    "kind": kind,
+                    "executor_id": executor.executor_id,
+                    "label": meta.get("label", kind),
+                    "description": meta.get("description"),
+                    "probe": bool(meta.get("probe")),
+                    "data_nature": meta.get("data_nature"),
+                    "params": meta.get("params", []),
+                    "available": available,
+                    "checks": list(preflight.get("checks", [])) + platform,
+                    "reasons": sorted(set(reasons)),
+                    "checked_at": preflight.get("checked_at"),
+                })
+        return {"items": items, "checked_at": utc_now()}
+
+    def capabilities(self) -> dict[str, Any]:
+        return {
+            "executor": "subprocess_v1" if self.executors else "not_implemented",
+            "kinds": sorted(self._by_kind),
+            "executors": [executor.executor_id for executor in self.executors],
+        }
+
+    # -- lifecycle -------------------------------------------------------
+    def submit(self, kind: str, params: dict[str, Any] | None = None,
+               idempotency_key: str | None = None, request_id: str | None = None) -> dict[str, Any]:
+        if not isinstance(kind, str) or not kind.strip():
+            raise InvalidExecutionRequest("kind is required")
+        params = {} if params is None else params
+        if not isinstance(params, dict):
+            raise InvalidExecutionRequest("params must be an object")
+        try:
+            encoded_params = json.dumps(params, ensure_ascii=False, allow_nan=False)
+        except (TypeError, ValueError) as exc:
+            raise InvalidExecutionRequest(f"params must be JSON serialisable: {exc}") from exc
+        if len(encoded_params.encode()) > MAX_PARAMS_BYTES:
+            raise InvalidExecutionRequest("params are too large")
+        if not isinstance(idempotency_key, str) or not idempotency_key.strip() or len(idempotency_key) > 128:
+            raise InvalidExecutionRequest("a non-empty idempotency_key of at most 128 characters is required")
+
+        previous = self.repository.find_attempt_by_key(idempotency_key)
+        if previous is not None:
+            return {"attempt": attempt_dto(previous), "created": False}
+
+        executor, checks, reasons = self._preflight(kind)
+        if reasons:
+            raise PreconditionFailed(checks, reasons)
+
+        attempt_id = str(uuid.uuid4())
+        prepared = executor.prepare(attempt_id, kind, params)
+        meta = executor.describe(kind)
+        created_at = utc_now()
+        row, created = self.repository.create_attempt({
+            "attempt_id": attempt_id, "kind": kind, "executor_id": executor.executor_id,
+            "label": meta.get("label", kind), "probe": bool(meta.get("probe")), "status": "queued",
+            "params": prepared.get("params", params), "idempotency_key": idempotency_key, "request_id": request_id,
+            "config_fingerprint": prepared.get("config_fingerprint"), "workspace": prepared.get("workspace"),
+            "log_path": prepared.get("log_path"), "created_at": created_at, "queued_at": created_at,
+        })
+        if not created:
+            return {"attempt": attempt_dto(row), "created": False}
+        try:
+            started = executor.start(attempt_id, prepared)
+        except Exception as exc:  # start failure is a platform-side failure, not a silent queued attempt
+            self.repository.update_attempt(
+                row["attempt_id"], status="failed", ended_at=utc_now(), error_code="start_failed",
+                error_message=f"{type(exc).__name__}: {exc}")
+            raise ExecutionError(f"executor failed to start the attempt: {exc}") from exc
+        updated = self.repository.update_attempt(
+            row["attempt_id"], status="running", started_at=utc_now(), heartbeat_at=utc_now(),
+            pid=started.get("pid"), workspace=started.get("workspace", prepared.get("workspace")),
+            log_path=started.get("log_path", prepared.get("log_path")))
+        return {"attempt": attempt_dto(updated or row), "created": True}
+
+    def reconcile(self, attempt_ids: list[str] | None = None, limit: int = 100) -> dict[str, Any]:
+        if attempt_ids:
+            rows = [self.repository.get_attempt(attempt_id) for attempt_id in attempt_ids]
+        else:
+            rows = self.repository.list_open_attempts(limit)
+        checked, transitioned = 0, 0
+        for row in rows:
+            if not row or row["status"] not in OPEN_STATUSES:
+                continue
+            executor = self._by_id.get(row["executor_id"])
+            if executor is None:
+                self.repository.update_attempt(
+                    row["attempt_id"], error_code="executor_not_configured",
+                    error_message=f"executor '{row['executor_id']}' is not configured in this process")
+                continue
+            checked += 1
+            result = executor.poll(row)
+            state = result.get("state")
+            if state == "running":
+                self.repository.update_attempt(row["attempt_id"], heartbeat_at=utc_now())
+                continue
+            if state not in TERMINAL_STATUSES:
+                continue
+            if state == "cancelled":
+                # A cancel signal observed first must not resurrect an open attempt.
+                self.repository.update_attempt(
+                    row["attempt_id"], status="cancelled", ended_at=result.get("ended_at") or utc_now(),
+                    exit_code=result.get("exit_code"), heartbeat_at=utc_now(),
+                    error_code=result.get("error_code"), error_message=result.get("error_message"))
+                transitioned += 1
+                continue
+            terminal = {**row, "status": state, "exit_code": result.get("exit_code"),
+                        "ended_at": result.get("ended_at") or utc_now()}
+            outcome = None
+            try:
+                outcome = executor.outcome(terminal)
+            except Exception as exc:  # outcome collection must never overwrite the execution result
+                outcome = {"collection_error": f"{type(exc).__name__}: {exc}"}
+            self.repository.update_attempt(
+                row["attempt_id"], status=state, ended_at=terminal["ended_at"],
+                exit_code=result.get("exit_code"), heartbeat_at=utc_now(),
+                error_code=result.get("error_code"), error_message=result.get("error_message"), outcome=outcome)
+            transitioned += 1
+        return {"checked": checked, "transitioned": transitioned}
+
+    def list(self, limit: int = 20, cursor: str | None = None) -> dict[str, Any]:
+        self.reconcile()
+        page = self.repository.list_attempts(limit, cursor)
+        return {"items": [attempt_dto(row) for row in page["items"]], "next_cursor": page["next_cursor"]}
+
+    def get(self, attempt_id: str) -> dict[str, Any] | None:
+        self.reconcile([attempt_id])
+        row = self.repository.get_attempt(attempt_id)
+        return attempt_dto(row) if row else None
+
+    def cancel(self, attempt_id: str) -> dict[str, Any]:
+        attempt = self.repository.get_attempt(attempt_id)
+        if attempt is None:
+            raise AttemptNotFound(f"attempt '{attempt_id}' was not found")
+        if attempt["status"] in TERMINAL_STATUSES:
+            return {"attempt": attempt_dto(attempt), "cancel_confirmed": False, "reason": "already_terminal"}
+        executor = self._by_id.get(attempt["executor_id"])
+        if executor is None:
+            raise InvalidExecutionRequest(f"executor '{attempt['executor_id']}' is not configured")
+        if not attempt.get("pid"):
+            updated = self.repository.update_attempt(
+                attempt_id, status="cancelled", ended_at=utc_now(),
+                cancel_requested_at=attempt.get("cancel_requested_at") or utc_now(),
+                outcome={"cancel": {"reason": "not_started", "confirmed_at": utc_now()}})
+            return {"attempt": attempt_dto(updated), "cancel_confirmed": True, "reason": "not_started"}
+
+        requested_at = attempt.get("cancel_requested_at") or utc_now()
+        attempt = self.repository.update_attempt(attempt_id, cancel_requested_at=requested_at)
+        result = executor.cancel(attempt)
+        state = result.get("state")
+        if state in TERMINAL_STATUSES and state != "cancelled":
+            # Completion evidence wins over a late cancel request (RUN02).
+            fresh = self.repository.get_attempt(attempt_id)
+            if fresh["status"] not in TERMINAL_STATUSES:
+                outcome = None
+                try:
+                    outcome = executor.outcome({**fresh, "status": state, "exit_code": result.get("exit_code")})
+                except Exception:
+                    outcome = None
+                self.repository.update_attempt(
+                    attempt_id, status=state, ended_at=result.get("ended_at") or utc_now(),
+                    exit_code=result.get("exit_code"), outcome=outcome, heartbeat_at=utc_now())
+            return {"attempt": attempt_dto(self.repository.get_attempt(attempt_id)),
+                    "cancel_confirmed": False, "reason": "terminal_evidence_wins"}
+        if not result.get("confirmed"):
+            updated = self.repository.update_attempt(
+                attempt_id, error_code="cancel_not_confirmed",
+                error_message=result.get("reason") or "executor did not confirm the process end")
+            return {"attempt": attempt_dto(updated), "cancel_confirmed": False,
+                    "reason": result.get("reason") or "cancel_not_confirmed"}
+        # A concurrent refresh can observe the killed process before the exit marker exists and
+        # label it interrupted; a confirmed cancel must not keep that failure label (RUN02).
+        updated = self.repository.update_attempt(
+            attempt_id, status="cancelled", ended_at=result.get("ended_at") or utc_now(),
+            exit_code=result.get("exit_code"), heartbeat_at=utc_now(),
+            error_code=None, error_message=None,
+            outcome={"cancel": {"requested_at": requested_at, "confirmed_at": utc_now(),
+                                "evidence": result.get("evidence")}})
+        return {"attempt": attempt_dto(updated), "cancel_confirmed": True,
+                "reason": result.get("reason") or "process_end_confirmed"}
+
+    def log(self, attempt_id: str, lines: int = 200) -> dict[str, Any]:
+        if isinstance(lines, bool) or not isinstance(lines, int) or not 1 <= lines <= 1000:
+            raise InvalidExecutionRequest("tail must be between 1 and 1000 lines")
+        attempt = self.repository.get_attempt(attempt_id)
+        if attempt is None:
+            raise AttemptNotFound(f"attempt '{attempt_id}' was not found")
+        executor = self._by_id.get(attempt["executor_id"])
+        if executor is None:
+            return {"attempt_id": attempt_id, "available": False, "reason": "executor_not_configured", "lines": []}
+        return {"attempt_id": attempt_id, **executor.log_tail(attempt, lines)}

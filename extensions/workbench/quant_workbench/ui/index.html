@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Quant Workbench</title>
-  <link rel="stylesheet" href="/ui/style.css?v=6">
-  <script src="/ui/app.js?v=12" defer></script>
+  <link rel="stylesheet" href="/ui/style.css?v=7">
+  <script src="/ui/app.js?v=14" defer></script>
 </head>
 <body>
   <div class="shell">
@@ -25,10 +25,10 @@
       <div class="side-label recent-label">最近运行</div>
       <label class="run-search-wrap"><span class="sr-only">搜索运行</span><input id="run-search" type="search" placeholder="搜索运行或引擎" autocomplete="off"></label>
       <div id="run-list" class="run-list"><div class="muted pad">加载中…</div></div>
-      <div class="sidebar-foot"><span class="status-dot"></span> 本地只读服务 <span id="health-label">检查中</span></div>
+      <div class="sidebar-foot"><span class="status-dot"></span> 本地研究服务 <span id="health-label">检查中</span></div>
     </aside>
     <main class="main">
-      <header class="topbar"><div><div class="eyebrow">RESEARCH / WORKBENCH</div><h1 id="page-title">总览</h1><p id="page-subtitle">研究运行、数据状态与系统观察</p></div><div class="top-actions"><span class="pill">中国市场</span><span class="pill ghost">只读预览</span></div></header>
+      <header class="topbar"><div><div class="eyebrow">RESEARCH / WORKBENCH</div><h1 id="page-title">总览</h1><p id="page-subtitle">研究运行、数据状态与系统观察</p></div><div class="top-actions"><span class="pill">中国市场</span><span class="pill ghost">本地可写 · 同源校验</span></div></header>
       <div class="source-legend">来源标记：<span class="origin origin-native">引擎原始记录</span><span class="origin origin-derived">工作台计算</span><span class="origin origin-custom">定制检查</span><span class="origin origin-opinion">Agent生成意见</span><span class="origin origin-fixture">手写演示样本</span><span class="origin origin-limited">能力受限</span><span class="origin origin-unsupported">未接入</span><p>来源与真实性不同：原始引擎输出也可基于模拟行情；未记录值不补零。</p></div>
       <div id="notice" role="status" aria-live="polite"></div>
       <div id="content" class="content"><div class="loading">正在加载工作台…</div></div>

@@ -10,9 +10,21 @@ from pathlib import Path
 
 from .adapters.json_result import JsonResultImporter
 from .application import WorkbenchService
+from .adapters.executors import QlibCNExecutor, RDAgentExecutor
 from .adapters.rdagent_status import RDAgentStatusProvider
+from .execution import ExecutionService
 from .storage import LocalResultRepository
 from .research import ResearchSnapshots
+
+
+def build_service(root: Path, with_executors: bool = True) -> WorkbenchService:
+    repository = LocalResultRepository(root)
+    agent_root = os.environ.get("QWB_RDAGENT_ROOT")
+    observer = RDAgentStatusProvider(agent_root) if agent_root else None
+    execution = None
+    if with_executors:
+        execution = ExecutionService(repository, executors=[QlibCNExecutor(), RDAgentExecutor()])
+    return WorkbenchService(repository, observer, ResearchSnapshots(root / "research"), execution)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -60,6 +72,22 @@ def parser() -> argparse.ArgumentParser:
     a = sub.add_parser('review')
     a.add_argument('run_id')
     a.add_argument("--revision-id")
+    a = sub.add_parser("execution-catalog", help="show execution entries and their preconditions")
+    a.add_argument("--refresh", action="store_true")
+    a = sub.add_parser("execute", help="start one isolated research attempt")
+    a.add_argument("kind")
+    a.add_argument("--params", default="{}", help="JSON object with entry parameters")
+    a.add_argument("--idempotency-key", required=True, help="caller generated key; repeats reuse the attempt")
+    a = sub.add_parser("executions", help="list attempts")
+    a.add_argument("--limit", type=int, default=20)
+    a.add_argument("--cursor")
+    a = sub.add_parser("execution", help="show one attempt")
+    a.add_argument("attempt_id")
+    a = sub.add_parser("execution-log", help="show the sanitized log tail of one attempt")
+    a.add_argument("attempt_id")
+    a.add_argument("--tail", type=int, default=200)
+    a = sub.add_parser("cancel", help="request cancellation and wait for the confirmed process end")
+    a.add_argument("attempt_id")
     sub.add_parser("capabilities")
     sub.add_parser("agent-status", help="show sanitized RD-Agent integration status")
     sub.add_parser("health")
@@ -71,9 +99,7 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
-        agent_root = os.environ.get("QWB_RDAGENT_ROOT")
-        observer = RDAgentStatusProvider(agent_root) if agent_root else None
-        service = WorkbenchService(LocalResultRepository(Path(args.root)), observer, ResearchSnapshots(Path(args.root) / "research"))
+        service = build_service(Path(args.root))
         if args.command == "import-json":
             importer = JsonResultImporter()
             result = service.import_package(args.source_instance, args.external_id, importer.adapter_version,
@@ -105,6 +131,21 @@ def main(argv: list[str] | None = None) -> int:
             result = service.research_detail(args.identity)
         elif args.command == 'review':
             result = service.review(args.run_id, args.revision_id)
+        elif args.command == 'execution-catalog':
+            result = service.execution_catalog(args.refresh)
+        elif args.command == 'execute':
+            params = json.loads(args.params)
+            if not isinstance(params, dict):
+                raise ValueError("--params must be a JSON object")
+            result = service.submit_execution(args.kind, params, args.idempotency_key, None)
+        elif args.command == 'executions':
+            result = service.executions(args.limit, args.cursor)
+        elif args.command == 'execution':
+            result = service.execution(args.attempt_id)
+        elif args.command == 'execution-log':
+            result = service.execution_log(args.attempt_id, args.tail)
+        elif args.command == 'cancel':
+            result = service.cancel_execution(args.attempt_id)
         elif args.command == "capabilities":
             result = service.capabilities()
         elif args.command == "agent-status":

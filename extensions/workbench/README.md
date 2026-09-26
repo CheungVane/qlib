@@ -1,10 +1,10 @@
 # Quant Workbench（本地原型）
 
-工作台是独立包；Qlib 仍在仓库根目录，工作台核心不导入 Qlib/MLflow。当前实现结果导入、SQLite + 不可变本地对象、CLI、只读 API，以及总览/回测/训练/比较/因子 Agent 页面。实时行情与正式数据目录仍显示未接入；系统页已采集当前API进程的窗口错误率与响应耗时。
+工作台是独立包；Qlib 仍在仓库根目录，工作台核心不导入 Qlib/MLflow。当前实现结果导入、SQLite + 不可变本地对象、CLI、HTTP API（读取 + 受控写入）、隔离进程执行器，以及总览/回测/训练/比较/研究中心页面。实时行情与正式数据目录仍显示未接入；系统页已采集当前API进程的窗口错误率与响应耗时。执行层合同见 [EXECUTION](../../docs/spec/EXECUTION.md)。
 
 若同级目录存在用户的 `RD-Agent` checkout，启动脚本会自动将它登记为只读观察来源。界面「因子 Agent」显示 DeepSeek 聊天配置、embedding/执行前提、fork 的 upstream 状态与最近会话目录；也可运行 `QWB_RDAGENT_ROOT=/path/to/RD-Agent extensions/workbench/.venv/bin/qwb agent-status`。工作台只判断密钥是否已配置，不返回或展示密钥内容。执行边界见 [RD-Agent 接入规范](../../docs/spec/RDAGENT_INTEGRATION.md)。
 
-本机 Linux Docker 与本地 embedding 环境可用 `bash scripts/start_research_runtime.sh` 恢复：Colima `rdagent` profile 提供 Linux/arm64 容器，Ollama 在 Mac 上提供 `bge-m3`。CPU Qlib 镜像、中国市场合成数据及万二费用模板已通过 RD-Agent 基线训练和回测，得到 19 项指标。复现入口为 `scripts/run_rdagent_factor_smoke.py --mode baseline`（从 RD-Agent checkout 用其 `.venv/bin/python` 运行）。工作台仍只读观察；因子研究启动器尚未接入。
+本机 Linux Docker 与本地 embedding 环境可用 `bash scripts/start_research_runtime.sh` 恢复：Colima `rdagent` profile 提供 Linux/arm64 容器，Ollama 在 Mac 上提供 `bge-m3`。CPU Qlib 镜像、中国市场合成数据及万二费用模板已通过 RD-Agent 基线训练和回测，得到 19 项指标。复现入口为 `scripts/run_rdagent_factor_smoke.py --mode baseline`（从 RD-Agent checkout 用其 `.venv/bin/python` 运行），也可由工作台执行器启动（见下文执行层）。
 
 完整单轮探针也已实测：5 个生成因子、123 个回测交易日、19 项结果指标；有效 IC 123 天、发生交易 122 天，配置中的质量检查通过（不代表有效 alpha）。旧的 132 天结果保留为历史记录。`--mode loop` 会调用 DeepSeek 并执行生成代码，本机版本通过进程内适配使用 Mac Python 编码和 Linux Docker 回测。详情和证据见 [接入规范](../../docs/spec/RDAGENT_INTEGRATION.md)。
 
@@ -50,7 +50,28 @@ extensions/workbench/.venv/bin/python -m unittest discover -s extensions/workben
 uv pip check --python extensions/workbench/.venv/bin/python
 ```
 
-接口文档在服务启动后访问 `/docs`。工作台的目标与验收定义见 [spec](../../docs/spec/README.md)；当前完成度按 [实施状态](../../docs/spec/IMPLEMENTATION.md) 判断。这个本地原型还没有真实行情源、多用户权限、远程部署或持久化任务遥测。
+接口文档在服务启动后访问 `/docs`。工作台的目标与验收定义见 [spec](../../docs/spec/README.md)；当前完成度按 [实施状态](../../docs/spec/IMPLEMENTATION.md) 判断。这个本地原型还没有真实行情源、多用户权限或远程部署；执行Attempt已持久化，但Attempt级失败率统计与调度器仍未接入。
+
+## 执行层：启动与取消研究
+
+研究中心可查看每个执行入口的前置条件并启动/取消隔离进程。命令行等价操作：
+
+```bash
+# 执行入口与逐项前置条件（缺条件时 available=false，不会假启动）
+extensions/workbench/.venv/bin/qwb execution-catalog
+
+# 启动一次真实执行；幂等键由调用方生成，重复提交不会产生第二个进程
+extensions/workbench/.venv/bin/qwb execute qlib.cn_synthetic_backtest \
+  --params '{"note":"手动验证"}' --idempotency-key local-1
+
+extensions/workbench/.venv/bin/qwb executions
+...
+extensions/workbench/.venv/bin/qwb execution <ATTEMPT_ID>
+extensions/workbench/.venv/bin/qwb execution-log <ATTEMPT_ID> --tail 80
+extensions/workbench/.venv/bin/qwb cancel <ATTEMPT_ID>   # 只有执行器确认进程结束后才落 cancelled
+```
+
+规则：每次 Attempt 独立进程、独立工作目录与独立 `mlflow.db`（Qlib）；退出码缺失时标记 `interrupted`，不推断成功；`queued/running` 与终态分开，取消请求与已取消分开；写接口校验来源，读取接口不启动执行。执行成功不自动进入结果库——`outcome.import_hint` 给出显式导入所需的 tracking URI 与 run ID，据此走上面的 `import-qlib`。RD-Agent 入口是合成情景的集成探针，界面与结果中保留该标记。
 
 ## 研究结果与过程
 
@@ -71,4 +92,4 @@ uv pip check --python extensions/workbench/.venv/bin/python
 
 结果导出按Loop/runner事件分开，旧会话链接转为分轮导航；旧v1结果仍可追溯但禁止排名。Qlib只读导入始终在临时MLflow副本上进行。源证据与`--real/--synthetic`冲突会拒绝导入。序列按2000点分页，摘要使用完整revision；CLI `review --revision-id`可锁定版本，`compare --mode auto|equity|metric`使用共同口径检查。
 
-新增回归：`node --test extensions/workbench/tests/test_ui.cjs`；Python仍用上述unittest发现命令。详见[修复与验收](../../docs/spec/FIXES_20260926.md)，不代表完整实时/执行器/多数据库已经支持。
+新增回归：`node --test extensions/workbench/tests/test_ui.cjs`；Python仍用上述unittest发现命令（2026-09-26含16项执行层回归）。详见[修复与验收](../../docs/spec/FIXES_20260926.md)与[执行层规范](../../docs/spec/EXECUTION.md)；不代表完整实时/数据目录/多数据库已经支持。

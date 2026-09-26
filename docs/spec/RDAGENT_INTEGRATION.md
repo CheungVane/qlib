@@ -8,11 +8,11 @@
 
 配置指纹：`b1d50a4a179583d447997dfab594c9eb2572cca3142fc286d62f66a4bc8612e6`。操作和限制见 [配置说明](../../configs/cn/README.md)。当前只编译已验证的 LightGBM baseline/combined-factor 模板，未支持的模型模板拒绝生成。
 
-状态：2026-09-26 只读观察接入；本地 Linux Docker、embedding、合成数据因子基线与完整单轮 Agent 循环已实测。RD-Agent 是用户维护的独立 fork，工作台不得把其源码复制进 Qlib，也不得直接导入 RD-Agent Python 对象到 API 进程。通过独立 checkout、外部配置、适配器和后续执行进程接入。
+状态：2026-09-26 只读观察接入 + 执行层接入（`rdagent.factor.baseline` / `rdagent.factor.loop`，界面与CLI共用同一服务）；本地 Linux Docker、embedding、合成数据因子基线与完整单轮 Agent 循环已实测。RD-Agent 是用户维护的独立 fork，工作台不得把其源码复制进 Qlib，也不得直接导入 RD-Agent Python 对象到 API 进程。通过独立 checkout、外部配置、适配器和独立子进程接入，见 [执行层规范](EXECUTION.md)。
 
 ## 用户意图与边界
 
-- 因子研究流程在统一工作台中可发现、观察，已支持查看历史结果；未来接入界面启动。
+- 因子研究流程在统一工作台中可发现、观察、启动与取消；执行入口为合成情景集成探针，探针标签在研究结果与执行记录中保留。
 - RD-Agent 的 `origin` 保持用户 fork；登记官方 `microsoft/RD-Agent` 为 `upstream`，上游更新先审查再集成。
 - DeepSeek 聊天模型从 RD-Agent 本地 `.env` 注入，密钥不写入 tracked 文件、API 响应、浏览器代码、日志或研究结果。
 - 因子研究需另行满足 embedding、运行环境和 Qlib 数据/费用情景一致性；只配置聊天密钥不等于因子流程可运行。

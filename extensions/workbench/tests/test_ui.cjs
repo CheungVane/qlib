@@ -4,7 +4,7 @@ const source=fs.readFileSync(require('node:path').join(__dirname,'../quant_workb
 function ui(fetch){
   const elements={};
   const document={getElementById:id=>elements[id]??=( {innerHTML:'',textContent:''}),querySelectorAll:()=>[]};
-  const context={URLSearchParams,URL,location:{search:'',hash:'',href:'http://localhost/'},Intl,fetch,document};
+  const context={URLSearchParams,URL,location:{search:'',hash:'',href:'http://localhost/'},Intl,fetch,document,crypto:require('node:crypto').webcrypto};
   vm.createContext(context);vm.runInContext(source,context);return {context,elements,run:code=>vm.runInContext(code,context)};
 }
 const response=(data,status=200)=>({ok:status===200,status,json:async()=>data});
@@ -67,4 +67,29 @@ test('obsolete page requests cannot replace the current selection',async()=>{
   const old=x.run("api('/old')");x.run('state.renderGeneration++');
   finish(response({title:'old'}));
   await assert.rejects(old,e=>e.name==='StaleRender');
+});
+
+test('EXEC09: a successful launch rotates the idempotency key so the same entry can run again',async()=>{
+  const posts=[];
+  const x=ui(async(path,options)=>{
+    if(options?.method==='POST'){posts.push(JSON.parse(options.body));return response({created:true,attempt:{label:'桩入口',attempt_id:'abcdefgh-0000',status:'running'}});}
+    if(path.startsWith('/v1/research'))return response({items:[],total:0,next_offset:null});
+    return response({items:[]});
+  });
+  x.elements['execution-form']={innerHTML:'',textContent:''};
+  x.elements['execution-kind']={innerHTML:'',textContent:'',value:'stub.kind'};
+  x.elements['execution-note']={innerHTML:'',textContent:'',value:'note'};
+  x.elements['execution-submit']={innerHTML:'',textContent:'',disabled:false};
+  x.run("state.view='agent';state.executionKey='key-1';bindExecution({items:[]})");
+  await x.elements['execution-form'].onsubmit({preventDefault(){}});
+  await new Promise(resolve=>setTimeout(resolve,0));
+  assert.equal(posts.length,1);
+  assert.equal(posts[0].idempotency_key,'key-1');
+  const rotated=x.run('state.executionKey');
+  assert.notEqual(rotated,'key-1');
+  await x.elements['execution-form'].onsubmit({preventDefault(){}});
+  await new Promise(resolve=>setTimeout(resolve,0));
+  assert.equal(posts.length,2);
+  assert.equal(posts[1].idempotency_key,rotated);
+  assert.notEqual(posts[1].idempotency_key,posts[0].idempotency_key);
 });

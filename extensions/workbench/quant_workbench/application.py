@@ -10,17 +10,62 @@ from .metrics import summarize, coordinate
 
 
 class WorkbenchService:
-    def __init__(self, repository: ResultRepository, rdagent: AgentObservationPort | None = None, research=None):
+    def __init__(self, repository: ResultRepository, rdagent: AgentObservationPort | None = None,
+                 research=None, execution=None):
         self.repository = repository
         self.rdagent = rdagent
         self.research = research
+        # named *_service so the attribute cannot shadow the read methods below
+        self.execution_service = execution
 
     def rdagent_status(self) -> dict[str, Any]:
         if self.rdagent is None:
             return {"availability": "not_connected", "reason": "RD-Agent checkout 未配置",
                     "chat": {"configured": False}, "embedding": {"configured": False},
                     "execution": {"available": False, "reasons": ["checkout_not_configured"]}, "traces": []}
-        return self.rdagent.status()
+        status = self.rdagent.status()
+        if self.execution_service is None:
+            return status
+        items = [item for item in self.execution_service.catalog()["items"]
+                 if item["executor_id"] == "rdagent_subprocess"]
+        if not items:
+            return status
+        return {**status, "execution": {
+            "available": any(item["available"] for item in items),
+            "reasons": sorted({reason for item in items for reason in item["reasons"]}),
+            "kinds": [{"kind": item["kind"], "label": item["label"], "available": item["available"],
+                       "probe": item["probe"], "reasons": item["reasons"]} for item in items],
+        }}
+
+    def execution_catalog(self, refresh: bool = False) -> dict[str, Any]:
+        if self.execution_service is None:
+            return {"items": [], "checked_at": None,
+                    "reason": "execution_not_configured"}
+        return self.execution_service.catalog(refresh)
+
+    def submit_execution(self, kind: str, params: dict[str, Any], idempotency_key: str | None,
+                         request_id: str | None) -> dict[str, Any]:
+        if self.execution_service is None:
+            raise LookupError("execution service is not configured")
+        return self.execution_service.submit(kind, params, idempotency_key, request_id)
+
+    def executions(self, limit: int = 20, cursor: str | None = None) -> dict[str, Any]:
+        if self.execution_service is None:
+            return {"items": [], "next_cursor": None, "reason": "execution_not_configured"}
+        return self.execution_service.list(limit, cursor)
+
+    def execution(self, attempt_id: str) -> dict[str, Any] | None:
+        return None if self.execution_service is None else self.execution_service.get(attempt_id)
+
+    def cancel_execution(self, attempt_id: str) -> dict[str, Any]:
+        if self.execution_service is None:
+            raise LookupError("execution service is not configured")
+        return self.execution_service.cancel(attempt_id)
+
+    def execution_log(self, attempt_id: str, tail: int = 200) -> dict[str, Any]:
+        if self.execution_service is None:
+            raise LookupError("execution service is not configured")
+        return self.execution_service.log(attempt_id, tail)
 
     def research_list(self, limit=20, offset=0, query=''):
         return self.research.listing(limit, offset, query) if self.research else {'items': [], 'total': 0, 'next_offset': None}
@@ -147,8 +192,12 @@ class WorkbenchService:
         return capabilities_audit()
 
     def capabilities(self) -> dict[str, Any]:
+        execution = (self.execution_service.capabilities() if self.execution_service is not None
+                     else {"executor": "not_implemented", "kinds": [], "executors": []})
         return {"result_importers": ["generic_json_v1", "qlib_mlflow_v2"],
-                "executor": "not_implemented", "live_data": "not_connected",
+                "executor": execution["executor"], "execution_kinds": execution["kinds"],
+                "executors": execution["executors"],
+                "live_data": "not_connected",
                 "storage": "sqlite_local_objects_v1",
                 "agent_observers": ["rdagent_checkout_v1"] if self.rdagent else []}
 

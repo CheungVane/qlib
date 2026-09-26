@@ -158,9 +158,8 @@ class RDAgentStatusProvider:
             reasons.append("docker_not_available")
         if baseline is None:
             reasons.extend(("factor_image_unverified", "factor_scenario_not_aligned"))
-        # The workbench has no RD-Agent executor yet. Keep execution unavailable even
-        # when the external checkout's prerequisites are satisfied.
-        reasons.append("executor_not_integrated")
+        # Execution availability is decided by the registered executor preflight
+        # (see EXECUTION.md); this observer only reports checkout/runtime facts.
         head = self._git("rev-parse", "--short", "HEAD")
         upstream = self._git("rev-parse", "--short", "upstream/main")
         return {

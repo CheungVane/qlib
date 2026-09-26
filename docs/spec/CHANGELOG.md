@@ -2,6 +2,17 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-26 — U13：执行层（Attempt、隔离进程、取消与幂等）
+
+- 来源：用户确认按优先级推进“执行层——Attempt 持久化 + 界面启动/停止研究 + 取消与幂等”，把工作台从只读看板变成可执行的研究平台。
+- 合同：新增[执行层规范](EXECUTION.md)（EXEC01—EXEC11），明确Attempt状态机、执行器端口、独立进程、幂等键、取消确认语义、前置条件、写接口来源校验、DTO脱敏与CLI/UI共用服务；WORKBENCH_SPEC的RUN02/API02改为引用该专题。
+- 实现：平台数据库schema 1→2显式迁移新增`attempts`表（保留既有runs/revisions）；`ExecutorPort`与`SubprocessExecutor`；`qlib.cn_synthetic_backtest`、`rdagent.factor.baseline`、`rdagent.factor.loop`三个入口；`/v1/executions`系列与CLI `execute/executions/execution/execution-log/cancel/execution-catalog`；研究中心提供启动、取消、逐项前置条件、结果摘要与脱敏日志尾部，并在启动成功后轮换幂等键，使同一条目可再次启动而不被上一次静默去重。
+- 隔离：Qlib每次Attempt在新的工作目录运行并写入自己的`mlflow.db`；RD-Agent只写其Git忽略目录；工作台进程不导入Qlib/RD-Agent。前置条件覆盖运行时、聊天与embedding、数据快照指纹、日历、费用情景、容器资源与Attempt存储；缺任一项拒绝提交。
+- 验证：工作台55项测试54通过、1项Qlib隔离跳过（新增17项执行层回归：幂等、崩溃interrupted、取消确认、取消竞争清除失败标签、终态优先、来源403、前置条件409、读取不启动、v1→v2迁移、DTO脱敏）；6项JS回归通过；两次真实Qlib合成行情Attempt退出码0（有效IC123天、交易122天）且第二次经显式导入成为平台运行；RD-Agent基线探针退出码0（19项指标、快照指纹一致）；单轮loop探针退出码0、耗时3分29秒、5个因子、因子值8832行、19项指标、质量检查`passed_checks`（有效IC123天、交易120天），并同步1个研究会话。
+- 浏览器验证：研究中心经界面启动2次真实Qlib Attempt（均退出码0）并取消1次（确认落`cancelled`）；取消竞争修复前，确认取消会残留`process_lost_without_exit_evidence`标签，已修复并加回归；启动成功后界面轮换幂等键，同一条目可再次启动。
+- 限制：结果不自动入库（`result_import=manual_import_required`）；无调度、并发上限与资源硬限制；日志为有界尾部；真实数据目录、A16/A17、Attempt级失败率统计与云数据库仍为缺口。
+- 兼容：不迁移或覆盖历史revision/对象；写入`attempts`表与新增API，既有读取接口与DTO字段保持；工作台服务需重启以加载执行层。
+
 ## 2026-09-26 — R01—R12修复及S01—S06合同收敛
 
 - 来源：用户明确要求修复上一轮审查。先补RESULT_CONTRACT与冲突条款，再落地实现；没有删除未实现阶段来制造全量合规。

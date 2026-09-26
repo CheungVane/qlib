@@ -20,7 +20,68 @@ def instant_order(value):
 
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+ATTEMPT_TERMINAL_STATUSES = ("succeeded", "failed", "cancelled", "interrupted")
+ATTEMPT_OPEN_STATUSES = ("queued", "running")
+
+V1_SCHEMA = """
+CREATE TABLE runs (
+    run_id TEXT PRIMARY KEY,
+    source_instance_id TEXT NOT NULL,
+    external_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    latest_revision_id TEXT,
+    UNIQUE(source_instance_id, external_id)
+);
+CREATE TABLE revisions (
+    revision_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES runs(run_id),
+    content_hash TEXT NOT NULL,
+    adapter_version TEXT NOT NULL,
+    object_key TEXT NOT NULL,
+    published_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    UNIQUE(run_id, content_hash, adapter_version)
+);
+CREATE INDEX revisions_run ON revisions(run_id, published_at);
+PRAGMA user_version=1;
+"""
+
+V2_ATTEMPT_SCHEMA = """
+CREATE TABLE IF NOT EXISTS attempts (
+    attempt_id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    executor_id TEXT NOT NULL,
+    label TEXT NOT NULL,
+    probe INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL,
+    params_json TEXT NOT NULL DEFAULT '{}',
+    idempotency_key TEXT UNIQUE,
+    request_id TEXT,
+    config_fingerprint TEXT,
+    workspace TEXT,
+    log_path TEXT,
+    pid INTEGER,
+    exit_code INTEGER,
+    error_code TEXT,
+    error_message TEXT,
+    outcome_json TEXT,
+    created_at TEXT NOT NULL,
+    queued_at TEXT NOT NULL,
+    started_at TEXT,
+    ended_at TEXT,
+    heartbeat_at TEXT,
+    cancel_requested_at TEXT,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS attempts_created ON attempts(created_at, attempt_id);
+CREATE INDEX IF NOT EXISTS attempts_status ON attempts(status);
+PRAGMA user_version=2;
+"""
+
+ATTEMPT_MUTABLE_FIELDS = (
+    "status", "started_at", "ended_at", "heartbeat_at", "cancel_requested_at", "exit_code",
+    "pid", "workspace", "log_path", "config_fingerprint", "error_code", "error_message", "outcome",
+)
 
 
 class SchemaVersionError(RuntimeError):
@@ -46,36 +107,24 @@ class LocalResultRepository:
         return conn
 
     def _init_db(self) -> None:
+        """Create or migrate the platform database one version at a time.
+
+        Migrations only add platform tables; result revisions and runs are never rewritten.
+        """
         with self._connect() as conn:
             version = conn.execute("PRAGMA user_version").fetchone()[0]
-            if version != SCHEMA_VERSION and version != 0:
-                raise SchemaVersionError(f"database schema {version}; expected {SCHEMA_VERSION}; no automatic migration")
+            if version not in (0, 1, SCHEMA_VERSION):
+                raise SchemaVersionError(
+                    f"database schema {version}; supported versions are 0..{SCHEMA_VERSION}; refusing to modify")
             if version == 0 and any(row[0] != "sqlite_sequence" for row in conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'"
             )):
                 raise SchemaVersionError("existing unversioned database; refusing to modify it")
             if version == 0:
-                conn.executescript("""
-                CREATE TABLE runs (
-                    run_id TEXT PRIMARY KEY,
-                    source_instance_id TEXT NOT NULL,
-                    external_id TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    latest_revision_id TEXT,
-                    UNIQUE(source_instance_id, external_id)
-                );
-                CREATE TABLE revisions (
-                    revision_id TEXT PRIMARY KEY,
-                    run_id TEXT NOT NULL REFERENCES runs(run_id),
-                    content_hash TEXT NOT NULL,
-                    adapter_version TEXT NOT NULL,
-                    object_key TEXT NOT NULL,
-                    published_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-                    UNIQUE(run_id, content_hash, adapter_version)
-                );
-                CREATE INDEX revisions_run ON revisions(run_id, published_at);
-                PRAGMA user_version=1;
-                """)
+                conn.executescript(V1_SCHEMA)
+                version = 1
+            if version == 1:
+                conn.executescript(V2_ATTEMPT_SCHEMA)
             conn.execute("PRAGMA journal_mode=WAL")
 
     def _write_object(self, content_hash: str, data: bytes) -> str:
@@ -189,6 +238,122 @@ class LocalResultRepository:
         if hashlib.sha256(data).hexdigest() != path.stem:
             raise RuntimeError(f"object digest mismatch: {key}")
         return json.loads(data)
+
+    @staticmethod
+    def _attempt_row(row: sqlite3.Row) -> dict[str, Any]:
+        record = dict(row)
+        record["probe"] = bool(record.get("probe"))
+        record["params"] = json.loads(record.pop("params_json") or "{}")
+        outcome = record.pop("outcome_json", None)
+        record["outcome"] = json.loads(outcome) if outcome else None
+        return record
+
+    def create_attempt(self, record: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+        """Insert one attempt; a duplicate idempotency key returns the existing row."""
+        required = ("attempt_id", "kind", "executor_id", "label", "params", "created_at")
+        if not all(record.get(key) not in (None, "") for key in required):
+            raise ValueError("attempt_id, kind, executor_id, label, params and created_at are required")
+        if record.get("status") not in ATTEMPT_OPEN_STATUSES:
+            raise ValueError("new attempts must start queued or running")
+        key = record.get("idempotency_key")
+        if key is not None and (not isinstance(key, str) or not key.strip() or len(key) > 128):
+            raise ValueError("idempotency_key must be a non-empty string of at most 128 characters")
+        payload = (
+            record["attempt_id"], record["kind"], record["executor_id"], record["label"],
+            1 if record.get("probe") else 0, record["status"],
+            json.dumps(record["params"], ensure_ascii=False, allow_nan=False, sort_keys=True),
+            key, record.get("request_id"), record.get("config_fingerprint"), record.get("workspace"),
+            record.get("log_path"), record.get("pid"), record.get("exit_code"), record.get("error_code"),
+            record.get("error_message"),
+            json.dumps(record["outcome"], ensure_ascii=False, allow_nan=False) if record.get("outcome") else None,
+            record["created_at"], record.get("queued_at") or record["created_at"], record.get("started_at"),
+            record.get("ended_at"), record.get("heartbeat_at"), record.get("cancel_requested_at"),
+            record["created_at"],
+        )
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                conn.execute(
+                    """INSERT INTO attempts(attempt_id,kind,executor_id,label,probe,status,params_json,
+                       idempotency_key,request_id,config_fingerprint,workspace,log_path,pid,exit_code,error_code,
+                       error_message,outcome_json,created_at,queued_at,started_at,ended_at,heartbeat_at,
+                       cancel_requested_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    payload)
+            except sqlite3.IntegrityError:
+                if key is None:
+                    raise
+                row = conn.execute("SELECT * FROM attempts WHERE idempotency_key=?", (key,)).fetchone()
+                if row is None:
+                    raise
+                return self._attempt_row(row), False
+            row = conn.execute("SELECT * FROM attempts WHERE attempt_id=?", (record["attempt_id"],)).fetchone()
+        return self._attempt_row(row), True
+
+    def get_attempt(self, attempt_id: str) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+        return self._attempt_row(row) if row else None
+
+    def find_attempt_by_key(self, idempotency_key: str) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM attempts WHERE idempotency_key=?", (idempotency_key,)).fetchone()
+        return self._attempt_row(row) if row else None
+
+    def update_attempt(self, attempt_id: str, **fields: Any) -> dict[str, Any] | None:
+        unknown = set(fields) - set(ATTEMPT_MUTABLE_FIELDS)
+        if unknown:
+            raise ValueError(f"attempt fields are not updatable: {sorted(unknown)}")
+        if not fields:
+            return self.get_attempt(attempt_id)
+        columns, values = [], []
+        for key, value in fields.items():
+            if key == "outcome":
+                key, value = "outcome_json", (
+                    json.dumps(value, ensure_ascii=False, allow_nan=False) if value is not None else None)
+            columns.append(f"{key}=?")
+            values.append(value)
+        columns.append("updated_at=?")
+        values.extend((datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"), attempt_id))
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            cursor = conn.execute(f"UPDATE attempts SET {','.join(columns)} WHERE attempt_id=?", values)
+            if cursor.rowcount == 0:
+                return None
+            row = conn.execute("SELECT * FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
+        return self._attempt_row(row)
+
+    def list_attempts(self, limit: int = 20, cursor: str | None = None) -> dict[str, Any]:
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        if cursor is not None and (not isinstance(cursor, str) or len(cursor) != 36):
+            raise ValueError("invalid cursor")
+        query = "SELECT * FROM attempts"
+        params: list[Any] = []
+        if cursor:
+            with self._connect() as conn:
+                anchor = conn.execute("SELECT created_at,attempt_id FROM attempts WHERE attempt_id=?", (cursor,)).fetchone()
+            if anchor is None:
+                raise ValueError("unknown cursor")
+            query += (" WHERE (instant_order(created_at) < instant_order(?) OR "
+                      "(instant_order(created_at) = instant_order(?) AND attempt_id < ?))")
+            params.extend((anchor["created_at"], anchor["created_at"], anchor["attempt_id"]))
+        query += " ORDER BY instant_order(created_at) DESC, attempt_id DESC LIMIT ?"
+        params.append(limit + 1)
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        more = len(rows) > limit
+        items = [self._attempt_row(row) for row in rows[:limit]]
+        return {"items": items, "next_cursor": items[-1]["attempt_id"] if more else None}
+
+    def list_open_attempts(self, limit: int = 100) -> list[dict[str, Any]]:
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 500:
+            raise ValueError("limit must be between 1 and 500")
+        placeholders = ",".join("?" for _ in ATTEMPT_OPEN_STATUSES)
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"SELECT * FROM attempts WHERE status IN ({placeholders}) "
+                "ORDER BY instant_order(created_at) ASC LIMIT ?", (*ATTEMPT_OPEN_STATUSES, limit)).fetchall()
+        return [self._attempt_row(row) for row in rows]
 
     def health(self) -> dict[str, Any]:
         with self._connect() as conn:
