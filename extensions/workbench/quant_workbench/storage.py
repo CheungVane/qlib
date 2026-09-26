@@ -11,7 +11,13 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable
 
-from .model import validate_package
+from .model import validate_package, _instant
+from datetime import datetime, timezone
+
+def instant_order(value):
+    delta = _instant(value, "created_at") - datetime(1970, 1, 1, tzinfo=timezone.utc)
+    return (delta.days * 86400 + delta.seconds) * 1000000 + delta.microseconds
+
 
 
 SCHEMA_VERSION = 1
@@ -34,6 +40,7 @@ class LocalResultRepository:
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db, timeout=30)
         conn.row_factory = sqlite3.Row
+        conn.create_function("instant_order", 1, instant_order, deterministic=True)
         conn.execute("PRAGMA foreign_keys=ON")
         conn.execute("PRAGMA busy_timeout=30000")
         return conn
@@ -140,9 +147,9 @@ class LocalResultRepository:
                 anchor = conn.execute("SELECT created_at,run_id FROM runs WHERE run_id=?", (cursor,)).fetchone()
             if anchor is None:
                 raise ValueError("unknown cursor")
-            query += " WHERE (r.created_at < ? OR (r.created_at = ? AND r.run_id < ?))"
+            query += " WHERE (instant_order(r.created_at) < instant_order(?) OR (instant_order(r.created_at) = instant_order(?) AND r.run_id < ?))"
             params.extend((anchor["created_at"], anchor["created_at"], anchor["run_id"]))
-        query += " ORDER BY r.created_at DESC,r.run_id DESC LIMIT ?"
+        query += " ORDER BY instant_order(r.created_at) DESC,r.run_id DESC LIMIT ?"
         params.append(limit + 1)
         with self._connect() as conn:
             rows = conn.execute(query, params).fetchall()

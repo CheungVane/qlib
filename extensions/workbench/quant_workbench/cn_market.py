@@ -6,6 +6,7 @@ import json
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 from pathlib import Path
+from .cn_schema import check, validate_shapes
 
 
 def dec(value):
@@ -15,6 +16,7 @@ def dec(value):
 def load_profile(path):
     path = Path(path).resolve()
     index = json.loads(path.read_text())
+    check(index, {"schema_version":"v1", **{k:"text" for k in ("rules","account","calendar","research")}}, "profile")
     if index.get("schema_version") != 1:
         raise ValueError("Unsupported CN profile schema")
     bundle = {key: json.loads((path.parent / index[key]).read_text())
@@ -26,6 +28,7 @@ def load_profile(path):
 
 
 def validate(bundle):
+    validate_shapes(bundle)
     rules, account, calendar, research = (bundle[k] for k in ("rules", "account", "calendar", "research"))
     expected = {
         'rules': 'schema_version id as_of effective_from timezone scope tick_size share_settlement_days fees boards sources verification_notes',

@@ -7,6 +7,7 @@ import time
 from .telemetry import RequestTelemetry
 
 from .application import WorkbenchService
+from .metrics import summarize
 
 
 def create_app(service: WorkbenchService):
@@ -145,7 +146,7 @@ def create_app(service: WorkbenchService):
             raise HTTPException(404, "revision not found")
         return {k: v for k, v in result.items() if k != "result"} | {
             "run": result["result"]["run"],
-            "series": [{k: v for k, v in entry.items() if k != "points"} | {"point_count": len(entry["points"])}
+            "series": [{k: v for k, v in entry.items() if k != "points"} | {"point_count": len(entry["points"]), "summary": summarize(entry)}
                        for entry in result["result"]["series"]],
             "evidence": result["result"].get("evidence", {}),
         }
@@ -159,7 +160,7 @@ def create_app(service: WorkbenchService):
         return result
 
     @app.get("/v1/compare")
-    def compare(run_id: list[str] = Query(...), metric_id: str = Query(...)):
-        return service.compare(run_id, metric_id)
+    def compare(run_id: list[str] = Query(...), metric_id: str = Query(...), mode: str = Query("auto")):
+        return service.compare(run_id, metric_id, mode)
 
     return app

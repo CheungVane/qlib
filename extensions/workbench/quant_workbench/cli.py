@@ -50,6 +50,7 @@ def parser() -> argparse.ArgumentParser:
     a = sub.add_parser("compare")
     a.add_argument("metric_id")
     a.add_argument("run_ids", nargs="+")
+    a.add_argument("--mode", choices=["auto","equity","metric"], default="auto")
     a = sub.add_parser('research-list')
     a.add_argument('--limit', type=int, default=20)
     a.add_argument('--offset', type=int, default=0)
@@ -58,6 +59,7 @@ def parser() -> argparse.ArgumentParser:
     a.add_argument('identity')
     a = sub.add_parser('review')
     a.add_argument('run_id')
+    a.add_argument("--revision-id")
     sub.add_parser("capabilities")
     sub.add_parser("agent-status", help="show sanitized RD-Agent integration status")
     sub.add_parser("health")
@@ -96,13 +98,13 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "series":
             result = service.get_series(args.run_id, args.metric_id, args.revision_id, args.limit, args.offset)
         elif args.command == "compare":
-            result = service.compare(args.run_ids, args.metric_id)
+            result = service.compare(args.run_ids, args.metric_id, args.mode)
         elif args.command == 'research-list':
             result = service.research_list(args.limit, args.offset, args.query)
         elif args.command == 'research-detail':
             result = service.research_detail(args.identity)
         elif args.command == 'review':
-            result = service.review(args.run_id)
+            result = service.review(args.run_id, args.revision_id)
         elif args.command == "capabilities":
             result = service.capabilities()
         elif args.command == "agent-status":

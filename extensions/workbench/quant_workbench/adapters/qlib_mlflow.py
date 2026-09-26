@@ -10,6 +10,8 @@ from typing import Any
 from urllib.parse import urlparse
 
 from ..model import validate_package
+from ..source_safety import data_nature, comparison_context, Sanitizer
+from .mlflow_readonly import isolated_mlflow_client
 
 
 def _utc_ms(value: int | None) -> str | None:
@@ -33,21 +35,19 @@ def _day_series(metric_id: str, definition_id: str, unit: str, calendar_id: str,
 
 
 class QlibMlflowImporter:
-    adapter_version = "qlib_mlflow_v1"
+    adapter_version = "qlib_mlflow_v2"
 
     def load(self, *, tracking_uri: str, external_id: str, dataset_id: str,
              dataset_version: str | None, synthetic: bool, trust_local_artifacts: bool,
              config_path: str | None = None) -> dict[str, Any]:
         if not trust_local_artifacts:
             raise ValueError("Qlib reports use pickle; pass --trust-local-artifacts for a trusted local run")
-        parsed = urlparse(tracking_uri)
-        if parsed.scheme not in ("", "file", "sqlite"):
-            raise ValueError("the first Qlib adapter only accepts a local MLflow tracking URI")
-        # MLflow and pandas stay behind this adapter; core and API can import without them.
-        import pandas as pd
-        from mlflow.tracking import MlflowClient
+        with isolated_mlflow_client(tracking_uri) as client:
+            return self._load(client, external_id, dataset_id, dataset_version, synthetic, config_path)
 
-        client = MlflowClient(tracking_uri=tracking_uri)
+    def _load(self, client, external_id, dataset_id, dataset_version, synthetic, config_path):
+        import pandas as pd
+        effective = None
         external = client.get_run(external_id)
         artifact_uri = urlparse(external.info.artifact_uri)
         if artifact_uri.scheme not in ("", "file"):
@@ -132,6 +132,9 @@ class QlibMlflowImporter:
                     evidence['research_quality'] = json.loads(Path(quality_path).read_text())
                     if evidence['research_quality']['scenario_fingerprint'] != effective['fingerprint']:
                         raise ValueError('CN quality scenario mismatch')
+        evidence["data_nature"] = data_nature(synthetic, effective)
+        if effective:
+            evidence["comparison"] = comparison_context(effective)
         package = {
             "schema_version": 1,
             "run": {"title": external.data.tags.get("mlflow.runName", f"Qlib {external_id[:8]}"),
@@ -146,4 +149,4 @@ class QlibMlflowImporter:
                                {"kind": "backtest", "status": "unknown"}]},
             "series": series, "evidence": evidence,
         }
-        return validate_package(package)
+        return validate_package(Sanitizer().scrub(package))

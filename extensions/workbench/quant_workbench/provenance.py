@@ -11,12 +11,14 @@ def mark(kind,source,limitations=None):
 def classify(package,adapter_version=''):
     evidence=package.get('evidence',{})
     fixture=evidence.get('fixture') is True
-    native_source=bool((adapter_version=='qlib_mlflow_v1' and evidence.get('mlflow_run_id')) or
-                       (adapter_version=='rdagent_history_v1' and evidence.get('research_id')))
+    native_source=bool((adapter_version in {'qlib_mlflow_v1','qlib_mlflow_v2'} and evidence.get('mlflow_run_id')) or
+                       (adapter_version=='rdagent_history_v2' and evidence.get('research_id')))
     run_mark=mark('fixture' if fixture else 'native' if native_source else 'unknown',
                  'examples/generic-result.json；手工填写，非引擎执行' if fixture else
                  '本机历史产物；版本/完整性仍受下列限制' if native_source else '没有受支持的来源映射证据',
                  ['模拟行情不代表真实市场'] if package['run'].get('synthetic') else [])
+    if adapter_version == 'rdagent_history_v1':
+        run_mark = mark('limited', '旧版会话导出；实验归属未复核，请查看新版分轮研究', ['禁止排名；历史revision保留，不作为当前实验结果证据'])
     rows=[]
     for entry in package['series']:
         mid=entry['metric_id']

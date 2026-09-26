@@ -1,0 +1,59 @@
+{
+  "review_baseline": "89a3eb7",
+  "review_commit": "168b8316",
+  "date": "2026-09-26",
+  "resolved_implementation_findings": [
+    "R01",
+    "R02",
+    "R03",
+    "R04",
+    "R05",
+    "R06",
+    "R07",
+    "R08",
+    "R09",
+    "R10",
+    "R11",
+    "R12"
+  ],
+  "tests": {
+    "workbench": {
+      "run": 38,
+      "passed": 37,
+      "skipped": 1
+    },
+    "qlib_cn": {
+      "run": 6,
+      "passed": 6
+    },
+    "newer_mlflow_3_16_1": {
+      "run": 1,
+      "passed": 1
+    },
+    "ui_node": {
+      "run": 5,
+      "passed": 5
+    }
+  },
+  "source_mlflow_schema": "7d34483879f0",
+  "source_db_digest_unchanged_in_integration_tests": true,
+  "historical_export": {
+    "sessions_exported": 31,
+    "experiment_snapshots": 31,
+    "report_snapshots": 5,
+    "historical_objects_preserved": 8,
+    "configured_credential_matches": 0,
+    "backup_created": true
+  },
+  "browser_checks": [
+    "2002-point fixture first and last page retain ending equity 500000",
+    "missing observations break chart segments and show reason",
+    "31 experiment observations and latest 5-factor detail",
+    "research result link locks revision and displays ending equity 935401.06"
+  ],
+  "limits": [
+    "No paid model execution",
+    "No new real market or regulatory validation",
+    "Second engine/database, full machine schema, execution, live data and layout persistence remain incomplete"
+  ]
+}

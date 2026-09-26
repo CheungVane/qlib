@@ -1,6 +1,7 @@
 """Runs against the synthetic Qlib workflow produced by scripts/run_cn_demo.sh."""
 
 import math
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,18 +14,25 @@ TRACKING_DB = ROOT / ".data" / "qlib_mlruns_mlflow3_12.db"
 class QlibIntegrationTests(unittest.TestCase):
     def test_real_qlib_report_mapping_and_unknown_runtime_version(self):
         import pandas as pd
-        from mlflow.tracking import MlflowClient
+        from quant_workbench.adapters.mlflow_readonly import isolated_mlflow_client
         from quant_workbench.adapters.qlib_mlflow import QlibMlflowImporter
         from quant_workbench.application import WorkbenchService
         from quant_workbench.storage import LocalResultRepository
 
+        source_digest = hashlib.sha256(TRACKING_DB.read_bytes()).hexdigest()
+        self.addCleanup(lambda: self.assertEqual(hashlib.sha256(TRACKING_DB.read_bytes()).hexdigest(), source_digest))
         tracking_uri = f"sqlite:///{TRACKING_DB}"
-        client = MlflowClient(tracking_uri=tracking_uri)
+        client = self.enterContext(isolated_mlflow_client(tracking_uri))
         experiment = client.get_experiment_by_name("workflow")
         source = client.search_runs([experiment.experiment_id], max_results=1)[0]
         source_report = pd.read_pickle(client.download_artifacts(source.info.run_id,
             "portfolio_analysis/report_normal_1day.pkl"))
         importer = QlibMlflowImporter()
+        if source.data.tags.get('cn_scenario'):
+            with self.assertRaisesRegex(ValueError, 'data nature conflicts'):
+                importer.load(tracking_uri=tracking_uri, external_id=source.info.run_id,
+                              dataset_id='cn_demo', dataset_version=None, synthetic=False,
+                              trust_local_artifacts=True)
         with tempfile.TemporaryDirectory() as folder:
             service = WorkbenchService(LocalResultRepository(folder))
             result = service.import_package("integration", source.info.run_id, importer.adapter_version,

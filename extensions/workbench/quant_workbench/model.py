@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 import math
-from datetime import date, datetime
+import copy
+from datetime import date, datetime, timezone
 from typing import Any
 
 
@@ -23,7 +24,7 @@ def _nonempty(value: Any, name: str) -> str:
     return value
 
 
-def _instant(value: Any, name: str) -> None:
+def _instant(value: Any, name: str) -> datetime | None:
     if value is None:
         return
     if not isinstance(value, str):
@@ -34,6 +35,7 @@ def _instant(value: Any, name: str) -> None:
         raise ContractError(f"{name} must be an ISO timestamp") from exc
     if parsed.tzinfo is None:
         raise ContractError(f"{name} must include an offset")
+    return parsed.astimezone(timezone.utc)
 
 
 def validate_package(package: dict[str, Any]) -> dict[str, Any]:
@@ -43,6 +45,7 @@ def validate_package(package: dict[str, Any]) -> dict[str, Any]:
     """
     if not isinstance(package, dict) or package.get("schema_version") != 1:
         raise ContractError("schema_version must be 1")
+    package = copy.deepcopy(package)
     run = package.get("run")
     if not isinstance(run, dict):
         raise ContractError("run is required")
@@ -59,6 +62,13 @@ def validate_package(package: dict[str, Any]) -> dict[str, Any]:
         raise ContractError("queued runs cannot have start/end times")
     if run["status"] == "running" and run.get("ended_at"):
         raise ContractError("running runs cannot have ended_at")
+    for key in ("created_at", "started_at", "ended_at"):
+        if run.get(key) is not None:
+            run[key] = _instant(run[key], key).isoformat(timespec="microseconds")
+    if run.get("started_at") and run.get("ended_at") and run["started_at"] > run["ended_at"]:
+        raise ContractError("end time precedes start time")
+    if package.get("evidence", {}).get("fixture") and not run.get("synthetic"):
+        raise ContractError("fixture must be synthetic")
     for key in ("engine", "dataset"):
         item = run.get(key)
         if not isinstance(item, dict):
@@ -69,6 +79,16 @@ def validate_package(package: dict[str, Any]) -> dict[str, Any]:
             _nonempty(version, f"run.{key}.version")
     if not isinstance(run.get("synthetic"), bool):
         raise ContractError("run.synthetic must be a boolean")
+    context = package.get("evidence", {}).get("comparison")
+    if context is not None:
+        if not isinstance(context, dict):
+            raise ContractError("comparison context must be an object")
+        for key in ("execution_id", "cashflow_policy", "price_basis", "benchmark_id", "evaluation_id"):
+            if context.get(key) is not None:
+                _nonempty(context[key], "comparison." + key)
+        initial = context.get("initial_equity")
+        if initial is not None and (type(initial) not in (int, float) or not math.isfinite(initial) or initial <= 0):
+            raise ContractError("initial_equity must be positive finite or null")
     stages = run.get("stages", [])
     if not isinstance(stages, list):
         raise ContractError("run.stages must be a list")
@@ -103,6 +123,11 @@ def validate_package(package: dict[str, Any]) -> dict[str, Any]:
             raise ContractError(f"{metric_id} is available but has no points")
         if entry["availability"] != "available" and points:
             raise ContractError(f"{metric_id} is unavailable but has points")
+        axis = entry["axis"]
+        if axis == "step":
+            _nonempty(entry.get("step_kind"), f"{metric_id}.step_kind")
+        if axis == "trading_date":
+            _nonempty(entry.get("calendar_id"), f"{metric_id}.calendar_id")
         last_x = None
         for point in points:
             if not isinstance(point, dict):
@@ -129,6 +154,9 @@ def validate_package(package: dict[str, Any]) -> dict[str, Any]:
                 _instant(x, f"{metric_id} point x")
                 if x is None:
                     raise ContractError(f"{metric_id} time x is required")
+            if axis == "time":
+                x = _instant(x, metric_id).isoformat(timespec="microseconds")
+                point["x"] = x
             if last_x is not None and x <= last_x:
                 raise ContractError(f"{metric_id} points must be strictly ordered")
             last_x = x

@@ -3,13 +3,13 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from .metrics import summarize, equity_drawdown
 
 
 def review_result(package):
     entries = {x['metric_id']: x for x in package['series']}
-    def values(key):
-        return [p['value'] for p in entries.get(key, {}).get('points', []) if p['value'] is not None]
-    eq, dd, cost = values('platform.equity'), values('platform.drawdown'), values('native.qlib.total_cost')
+    eq = summarize(entries.get('platform.equity'))
+    cost = summarize(entries.get('native.qlib.total_cost'))
     evidence = package.get('evidence', {})
     quality = evidence.get('research_quality')
     gaps = []
@@ -18,12 +18,20 @@ def review_result(package):
     if not evidence.get('cn_scenario'): gaps.append('费用与执行情景证据不完整')
     if not quality: gaps.append('未记录研究质量检查')
     elif quality.get('status') != 'passed_checks': gaps.append('研究质量检查未通过')
-    if not eq: gaps.append('没有权益报告')
-    facts = {'ending_equity': eq[-1] if eq else None,
-             'first_observed_equity': eq[0] if eq else None,
-             'observed_equity_change': eq[-1]/eq[0]-1 if eq and eq[0] else None,
-             'max_observed_drawdown': min(dd) if dd else None,
-             'total_cost': cost[-1] if cost else None}
+    if not eq['point_count']: gaps.append('没有权益报告')
+    if eq['missing_points']: gaps.append('权益报告存在缺测，完整区间回撤不可确定')
+    context = evidence.get('comparison', {})
+    initial = context.get('initial_equity')
+    full = isinstance(initial, (int, float)) and not isinstance(initial, bool) and initial > 0 and context.get('cashflow_policy') == 'none'
+    points = entries.get('platform.equity', {}).get('points', [])
+    facts = {'ending_equity': eq['last'], 'ending_equity_reason': eq['last_reason'],
+             'first_observed_equity': eq['first'],
+             'observed_equity_change': eq['last']/eq['first']-1 if eq['first'] and eq['last'] is not None else None,
+             'max_observed_drawdown': equity_drawdown(points),
+             'max_full_drawdown': equity_drawdown(points, initial) if full else None,
+             'total_return': eq['last']/initial-1 if full and eq['complete'] else None,
+             'total_cost': cost['last'], 'total_cost_reason': cost['last_reason'],
+             'last_valid_equity': eq['last_valid'], 'equity_coverage': eq}
     def scalar(suffix):
         matches=[x for x in package['series'] if x['axis']=='scalar' and x['metric_id'].endswith(suffix)]
         return matches[0]['points'][-1]['value'] if len(matches)==1 and matches[0]['points'] else None
@@ -60,7 +68,7 @@ class ResearchSnapshots:
         items=[]
         for p in self.root.glob('*.json'):
             data=self.detail(p.stem)
-            if not data: continue
+            if not data or data.get("status") == "session_index": continue
             row={k:data.get(k) for k in ('id','title','session','updated_at','observed_at','status','factor_count','metrics','platform_run_id','warnings','synthetic')}
             row['facts']=data.get('review',{}).get('facts',{})
             if query.casefold() in json.dumps(row,ensure_ascii=False).casefold(): items.append(row)

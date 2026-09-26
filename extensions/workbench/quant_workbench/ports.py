@@ -15,6 +15,10 @@ class ResultRepository(Protocol):
 
     def get_revision(self, run_id: str, revision_id: str | None = None) -> dict[str, Any] | None: ...
 
+    def list_revisions(self, run_id: str) -> list[dict[str, Any]]: ...
+
+    def health(self) -> dict[str, Any]: ...
+
 
 class ResultImporter(Protocol):
     adapter_version: str

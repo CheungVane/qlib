@@ -12,7 +12,7 @@
 
 ## 用户意图与边界
 
-- 因子研究流程在统一工作台中可发现、观察，未来可启动与查看结果。
+- 因子研究流程在统一工作台中可发现、观察，已支持查看历史结果；未来接入界面启动。
 - RD-Agent 的 `origin` 保持用户 fork；登记官方 `microsoft/RD-Agent` 为 `upstream`，上游更新先审查再集成。
 - DeepSeek 聊天模型从 RD-Agent 本地 `.env` 注入，密钥不写入 tracked 文件、API 响应、浏览器代码、日志或研究结果。
 - 因子研究需另行满足 embedding、运行环境和 Qlib 数据/费用情景一致性；只配置聊天密钥不等于因子流程可运行。
@@ -22,12 +22,12 @@
 | ID | 约束与验收 |
 | --- | --- |
 | AGENT01 | UI 经 `/v1/agents/rdagent` 只读查询接入状态；Qlib 工作台核心/API 不导入 RD-Agent 包；缺 checkout 时返回 `not_connected` |
-| AGENT02 | API 仅返回模型名、配置和本地服务是否可用、fork/upstream commit、会话元数据；不得返回 `.env` 中密钥、原始日志或可执行路径。密钥文件被 Git 忽略且权限仅限所有者 |
-| AGENT03 | 外部会话观察不反序列化 RD-Agent 的 pickle；无会话显示空态，不伪造成功因子、IC 或收益 |
+| AGENT02 | 状态API仅返回模型/服务/fork和会话元信息；研究API可返回已脱敏中立结果与过程摘录，不返回原始凭据日志或可执行路径。密钥文件被 Git 忽略且权限仅限所有者 |
+| AGENT03 | HTTP观察进程不反序列化pickle；可信本机产物仅由显式授权的离线CLI解析，并在发布前脱敏（RW03）；无会话显示空态，不伪造成功因子、IC 或收益 |
 | AGENT04 | 执行接入前验证已实测的运行环境（官方 Linux 路径，或另行验证的 macOS/容器方案）、聊天与 embedding、数据快照、交易日历、费用情景、资源上限、Attempt 持久化和终态证据；缺任一条件时 UI 不提供假启动 |
 | AGENT05 | 上游更新后验证 RD-Agent 的配置键、CLI/日志契约和适配器，再升级；不得自动合并、改写用户 fork 的工作分支或迁移其日志 |
 
-## 本机实测与限制
+## 历史实测与限制（以下含旧探针参数，当前入口以顶部共享配置为准）
 
 - RD-Agent checkout `484776c` 与已获取的 `upstream/main` 相同；仅 Git remote 配置增加 `upstream`，tracked 源码没有改动。
 - 本地 `.env` 使用 `CHAT_MODEL=deepseek/deepseek-flash` 和 DeepSeek 官方 URL。官方 `/models` 与最小聊天调用均返回 200；RD-Agent 独立环境中的 LiteLLM 调用也成功。DeepSeek [官方接口文档](https://api-docs.deepseek.com/zh-cn/)当前列出 `deepseek-flash`。
