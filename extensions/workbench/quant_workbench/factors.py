@@ -83,11 +83,6 @@ def canonical_panel(payload: dict[str, Any]) -> dict[str, Any]:
     return panel
 
 
-def panel_hash(panel: dict[str, Any]) -> str:
-    return hashlib.sha256(json.dumps(panel, sort_keys=True, separators=(",", ":"),
-                                     allow_nan=False).encode()).hexdigest()
-
-
 def panel_matrix(panel: dict[str, Any]):
     """Dense numpy matrix (dates × instruments) with NaN for missing cells."""
     np = _numpy()

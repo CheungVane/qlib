@@ -13,6 +13,8 @@ from quant_workbench.application import WorkbenchService
 from quant_workbench.execution import ExecutionService, attempt_dto
 from quant_workbench.storage import LocalResultRepository
 
+ROOT = Path(__file__).resolve().parents[3]
+
 
 # Key sets of core read DTOs. Adding or removing a field must be an explicit decision here.
 CORE_DTO_KEYS = {
@@ -34,6 +36,20 @@ ATTEMPT_DTO_KEYS = ["attempt_id", "cancel_pending", "cancel_requested_at", "conf
                     "ended_at", "error_code", "error_message", "executor_id", "exit_code", "has_log",
                     "heartbeat_at", "idempotency_key_present", "kind", "label", "outcome", "params", "probe",
                     "queued_at", "request_id", "started_at", "status", "workspace_label"]
+
+
+def _snapshot(root, dates, instruments, prices):
+    import numpy as np
+    (root / "calendars").mkdir(parents=True, exist_ok=True)
+    (root / "calendars/day.txt").write_text("\n".join(dates) + "\n", encoding="utf-8")
+    (root / "instruments").mkdir(exist_ok=True)
+    (root / "instruments/all.txt").write_text(
+        "".join(f"{code}\t{dates[0]}\t{dates[-1]}\n" for code in instruments), encoding="utf-8")
+    for code, series in zip(instruments, prices):
+        folder = root / "features" / code.lower()
+        folder.mkdir(parents=True, exist_ok=True)
+        np.asarray([0.0] + list(series), dtype="<f4").tofile(folder / "close.day.bin")
+    return root
 
 
 class ContractTests(unittest.TestCase):
@@ -64,6 +80,58 @@ class ContractTests(unittest.TestCase):
             for method, operation in methods.items():
                 responses = operation.get("responses") or {}
                 self.assertTrue(responses, f"{method.upper()} {path} documents no response")
+
+
+    def test_new_domain_endpoints_freeze_their_top_level_keys(self):
+        """C6: the contract test must cover the endpoints added after API03."""
+        import json as _json
+        import numpy as np
+        from quant_workbench.cn_market import snapshot_content_digest
+
+        fixture = _json.loads((ROOT / "extensions/workbench/examples/generic-result.json").read_text())
+        dates = [f"2021-{month:02d}-{day:02d}" for month in range(1, 4) for day in range(1, 11)]
+        rng = np.random.default_rng(11)
+        equity = 1_000_000 * np.cumprod(1 + rng.normal(0.001, 0.009, len(dates)))
+        fixture["run"]["dataset"] = {"id": "dataset1", "version": "content-v1"}
+        fixture["series"] = [{"metric_id": "platform.equity", "definition_id": "platform.equity.account.v1",
+                              "axis": "trading_date", "calendar_id": "qlib.day:dataset1", "unit": "CNY",
+                              "currency": "CNY", "availability": "available",
+                              "points": [{"x": day, "value": value} for day, value in zip(dates, equity)]}]
+        first = self.service.import_package("test", "contract-a", "generic_v1", fixture)["run_id"]
+        second = self.service.import_package("test", "contract-b", "generic_v1", fixture)["run_id"]
+
+        instruments = [f"SH60000{index}" for index in range(6)]
+        snapshot = _snapshot(Path(self.temp.name) / "snap", dates, instruments,
+                             [equity.tolist()] * len(instruments))
+        digest = snapshot_content_digest(snapshot)
+        self.service.factor_snapshot_dir = lambda dataset: snapshot
+        factor = self.service.import_factor_panel(
+            {"source_instance_id": "test", "external_id": "contract-factor", "name": "mom",
+             "dataset": {"id": "dataset1", "version": digest["digest"], "snapshot_label": "snap"},
+             "calendar_id": "qlib.day:dataset1"},
+            {"schema_version": 1, "name": "mom", "dates": dates, "instruments": instruments,
+             "values": [float(value) for value in rng.normal(size=len(dates) * len(instruments))]})
+
+        expectations = {
+            "/v1/attention": ["counts", "generated_at", "items", "scope", "total"],
+            "/v1/factors": ["items"],
+            f"/v1/factors/{factor['factor_id']}": ["calendar_id", "created_at", "dataset", "definition",
+                                                   "external_id", "factor_id", "name", "panel", "panel_count",
+                                                   "panels", "provenance", "source_instance_id"],
+            f"/v1/factor-analysis?factor_id={factor['factor_id']}&horizon=1": ["basis", "factors", "limitations",
+                                                                              "overlap"],
+            f"/v1/risk?run_id={first}": ["count", "items", "periods_per_year",
+                                         "periods_per_year_source", "scope"],
+            f"/v1/validation?run_id={first}&run_id={second}&blocks=4": ["basis", "configs",
+                                                                        "leakage", "limitations",
+                                                                        "not_available", "pbo"],
+            f"/v1/runs/{first}/revisions": ["items", "next_cursor"],
+        }
+        for path, expected in expectations.items():
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(sorted(response.json()), expected)
 
     def test_core_read_dto_keys_are_frozen(self):
         for path, expected in CORE_DTO_KEYS.items():

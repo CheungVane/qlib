@@ -50,6 +50,35 @@ class RiskTests(unittest.TestCase):
         with self.assertRaises(risk.RiskError):
             risk.performance_report(dates, [0.01] * 20, periods_per_year=0)
 
+    def test_annualisation_must_come_from_config(self):
+        import quant_workbench.cn_market as cn_market
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        service = WorkbenchService(LocalResultRepository(Path(tmp.name) / "store"))
+        dates = [f"2021-01-{day:02d}" for day in range(1, 25)]
+        payload = json.loads(FIXTURE.read_text())
+        payload["run"]["dataset"] = {"id": "dataset1", "version": "content-v1"}
+        payload["series"] = [{"metric_id": "platform.equity", "definition_id": "platform.equity.account.v1",
+                              "axis": "trading_date", "calendar_id": "qlib.day:dataset1", "unit": "CNY",
+                              "currency": "CNY", "availability": "available",
+                              "points": [{"x": day, "value": 1_000_000 + index * 100}
+                                         for index, day in enumerate(dates)]}]
+        run_id = service.import_package("test", "annual-1", "generic_v1", payload)["run_id"]
+        original = cn_market.load_profile
+        cn_market.load_profile = lambda *a, **k: (_ for _ in ()).throw(OSError("profile missing"))
+        try:
+            with self.assertRaises(risk.RiskError) as caught:
+                service.risk_report([run_id])
+            self.assertIn("不得使用默认值", str(caught.exception))
+        finally:
+            cn_market.load_profile = original
+        report = service.risk_report([run_id], periods_per_year=252)
+        self.assertEqual(report["periods_per_year_source"], "caller")
+        self.assertEqual(report["items"][0]["basis"]["periods_per_year_source"], "caller")
+        self.assertEqual(report["items"][0]["basis"]["parameters"]["periods_per_year"], 252)
+        with self.assertRaises(risk.RiskError):
+            service.risk_report([run_id], periods_per_year=0)
+
     def test_var_cvar_and_calendar_aggregation(self):
         dates = [f"2021-{month:02d}-{day:02d}" for month in range(1, 3) for day in range(1, 11)]
         values = [-0.05, -0.04, -0.03, -0.02, -0.01] + [0.01] * 15

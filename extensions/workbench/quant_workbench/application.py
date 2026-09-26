@@ -272,12 +272,19 @@ class WorkbenchService:
         if not requested:
             raise risk_layer.RiskError("run_id is required")
         if periods_per_year is None:
+            from .cn_market import default_profile_path, load_profile
             try:
-                from .cn_market import default_profile_path, load_profile
                 periods_per_year = int(load_profile(default_profile_path())["research"]["annualization"]
                                        ["native_portfolio_days"])
-            except Exception:
-                periods_per_year = 238
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                # RESULT_CONTRACT: annualisation must come from the configuration, never a default.
+                raise risk_layer.RiskError(
+                    f"无法从配置读取年化交易日（{type(exc).__name__}）；按结果合同不得使用默认值") from exc
+            annualisation_source = "config: configs/cn/profile.json"
+        else:
+            annualisation_source = "caller"
+        if isinstance(periods_per_year, bool) or not 1 <= int(periods_per_year) <= 1000:
+            raise risk_layer.RiskError("periods_per_year must be between 1 and 1000")
         reports = []
         for run_id in requested:
             revision = self.get_revision(run_id)
@@ -307,9 +314,11 @@ class WorkbenchService:
             report["title"] = revision["result"]["run"]["title"]
             report["return_source"] = source
             report["basis"]["dataset"] = revision["result"]["run"].get("dataset") or {}
+            report["basis"]["periods_per_year_source"] = annualisation_source
             reports.append(report)
         return {"items": reports, "count": len(reports),
                 "periods_per_year": periods_per_year,
+                "periods_per_year_source": annualisation_source,
                 "scope": "每个运行独立计算；未接入项见各自的 not_available 列表"}
 
     # -- attention centre (UI07 / U21) -------------------------------------

@@ -2,6 +2,14 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-26 — 第三轮审查修复：验证/风险口径收敛与契约覆盖
+
+- 来源：用户要求"去修 bug"；本轮按第三轮审查顺序处理可确认为缺陷或治理漏洞的条目。
+- 修复：①**C1 撤回**——复核发现月度复利的 `bucket.get(month) or 0.0` 与显式判断逐位等价（累加值为 0.0 与"尚未累计"同义，四种序列实测相同），原判定为误报，已在审查记录中保留纠正而不是静默删除；②**C5 静默降级**——`risk_report` 读配置失败不再回退 238，改为报 `RiskError` 并在 basis/顶层记录 `periods_per_year_source`（`config:`/`caller`），越界值同样拒绝；③**C6 契约漏洞**——契约测试新增七个新接口的顶层键冻结（attention/factors/因子详情/factor-analysis/risk/validation/revisions）；④**C8 死代码**——删除未被调用的 `factors.panel_hash()`。
+- 验证：Python 108项测试107通过、1项环境隔离跳过（`test_risk.py` 增至 5 项、`test_contracts.py` 增至 5 项）；JS回归16项通过；`scripts/workbench_gate.sh` 通过。
+- 未处理（按审查建议顺序保留）：C2/C3 服务层膨胀与 `json_safe`/`_numpy`/Sharpe 重复、C4 `storage.py` 四职责、C7 前端 924 行单文件、C9 容差分散、C10 测试分层。
+- 兼容：只改服务端内部行为与测试；`/v1/risk` 在配置缺失时由"静默给 238"变为显式 400，属预期的 fail-closed 收紧。
+
 ## 2026-09-26 — 文档整理与第三轮代码审查
 
 - 来源：用户要求 review spec（删除冗余、修正错误信息）并 review 代码（架构、质量、实现手段）。
