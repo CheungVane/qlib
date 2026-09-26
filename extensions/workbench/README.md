@@ -94,6 +94,18 @@ extensions/workbench/.venv/bin/qwb cancel <ATTEMPT_ID>   # 只有执行器确认
 
 「研究中心」可搜索、分页并打开每个会话的结果、因子说明/代码、评审反馈与阶段日志；有报告的会话进入统一回测、训练、比较页面。总览展示最近研究；回测/训练展示判断依据及下一步；系统页展示当前进程的真实API观测。
 
+「因子」页是因子层入口：按数据集内容版本分组展示已入库的因子面板，计算单因子统计（Rank IC、Newey-West t、p、BH-FDR、ICIR、分位差与单调性、秩换手），并给出重叠性（因子值相关矩阵、VIF 共线、冗余度、IC 序列相关）与增量贡献（正交残差 IC、等权组合加入/去掉某因子的 IC 变化）。收益标签由平台按 `close`（含复权因子）计算 `r=close_{t+h}/close_t-1`，只用同一数据内容版本的快照；持仓重叠与拥挤度当前显式标注"未接入"并说明缺少的数据。RD-Agent 研究会话导出时会自动发布该会话的因子面板；也可手工导入：
+
+```bash
+extensions/workbench/.venv/bin/qwb factors
+extensions/workbench/.venv/bin/qwb import-factor-panel panel.json --source-instance manual \
+  --external-id my-factor-v1 --dataset-id cn-current-synthetic \
+  --dataset-version <内容摘要> --snapshot-label <快照目录名>
+extensions/workbench/.venv/bin/qwb factor-analysis <FACTOR_ID> [<FACTOR_ID> ...] --horizons 1,5,10,20
+```
+
+比较视图按对象分组：训练、研究、回测各自指标集合不同，**跨组只并排、不做排名**；只有同组且同一把尺子（数据内容 + 执行口径 + 评估口径）时才显示最优/最劣。
+
 同步既有 RD-Agent 本机可信产物（从 RD-Agent checkout，当前这些记录均是模拟数据）：
 
 ```bash
