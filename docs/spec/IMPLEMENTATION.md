@@ -23,7 +23,7 @@
 
 ## 阶段 M0：契约与独立包
 
-交付：`extensions/workbench/` 下的独立包、依赖锁、领域对象/端口、组合根、配置加载、迁移入口；JSON Schema 与后续 OpenAPI 从单一运行时模型生成或建立一致性检查。旧 prototype 不作为输入。增加 engine-neutral JSON 结果样本和受信任 Qlib 导入样本说明。
+交付：`extensions/workbench/` 下的独立包、依赖锁、领域对象/端口、组合根、配置加载、迁移入口；机器可读契约先落地**核心 DTO 键集合冻结与 `/v1` 路由覆盖**（API03，见对应验收与门禁脚本），**完整 JSON Schema 校验器与从单一模型生成 Schema 仍为缺口**，不得把键冻结读作 Schema 已生成。旧 prototype 不作为输入。增加 engine-neutral JSON 结果样本和受信任 Qlib 导入样本说明。
 
 | 验收ID | 场景与通过条件 | 对应要求 |
 | --- | --- | --- |
@@ -125,7 +125,9 @@ M2正式验收以M1完成为前提；允许为验证用户流程提前建设明�
 
 2026-09-26 U16界面可用性修复：侧栏最近运行改为固定可视高度（折叠240px/展开62vh）并由侧栏自身滚动，展开后可见行数3→5、按钮显示条数；历史卡片把搜索与翻页移到滚动区之外并恢复滚动位置；三种执行入口各有一句话用途与`exec.kind.*`问号说明；执行入口选择改为`state.executionKind`持久化，选择变化不再整页重渲染，5秒自动刷新不重置选择、备注输入时暂停刷新。验证：Python 69项测试68通过、1项环境隔离跳过；JS回归12项通过；`scripts/workbench_gate.sh`通过；浏览器逐条复验（侧栏240→446px、研究tab面板`scrollTop=510`时搜索栏仍可见、选择`rdagent.factor.loop`经两次自动刷新与视图往返保持）。限制：折叠与滚动为展示层控制，不放宽分页上限；耗时为本机实测值。
 
-2026-09-26 U17比较表：新增`/v1/compare/table`（服务端计算方向、最优/最劣与行级口径原因）、CLI `compare-table`与比较页表格视图；指标方向登记在`metrics.COMPARE_ROWS`，红=最优/绿=最劣并同时给出文字标记，1e-9相对容差只过滤浮点噪声。为让比较有意义，补齐两处身份数据：数据快照写入`content.json`（按文件SHA-256的内容摘要）并随编译写入`dataset.json`，导入时记录为`run.dataset.version`；CN比较证据新增`evaluation_id=情景指纹`。同时修复金额类原生序列缺少`currency`导致成本行永远不可比的缺陷。验证：Python 78项测试77通过、1项环境隔离跳过；JS回归13项通过；浏览器实测比较表11行、表头含数据版本摘要、未通过行的原因可见且明细区默认折叠。限制：同情景两次运行的数值差异在容差内，因此当前真实数据不会出现着色；跨引擎/跨实验变量的比较需要后续身份拆分（见审查记录）。
+2026-09-26 U17比较表：新增`/v1/compare/table`（服务端计算方向、最优/最劣与行级口径原因）、CLI `compare-table`与比较页表格视图；指标方向登记在`metrics.COMPARE_ROWS`，红=最优/绿=最劣并同时给出文字标记，1e-9相对容差只过滤浮点噪声。为让比较有意义，补齐两处身份数据：数据快照写入`content.json`（按文件SHA-256的内容摘要）并随编译写入`dataset.json`，导入时记录为`run.dataset.version`；CN比较证据新增`evaluation_id`。同时修复金额类原生序列缺少`currency`导致成本行永远不可比的缺陷。验证：Python 78项测试77通过、1项环境隔离跳过；JS回归13项通过；浏览器实测比较表11行、表头含数据版本摘要、未通过行的原因可见且明细区默认折叠。
+
+2026-09-26 第二轮审查修复（B-1—B-9、A-1—A-8）：按[审查记录](review-20260926b.md)顺序落地。**身份分层**：`cn_market.scenario_identities()`把情景拆成`execution_fingerprint`（规则/账户/日历/撮合）、`evaluation_fingerprint`（区间/切分/标签/质量）、`experiment_id`（模型/策略/Agent）与`data_identity`；完整`fingerprint`仍用于数据物化与模板。比较证据改用拆分身份，`experiment_id`差异进入`experiment_variables`且**不阻断排名**（RESULT_CONTRACT 身份分层）。**逻辑内容摘要**：快照摘要改为只覆盖数据文件（排除`scenario.json`/`content.json`），本机快照与 RD-Agent 容器快照得到同一摘要`eb27e8cc…`；RD-Agent 导出改为写入该摘要作为`dataset.version`，并在缺少派生身份时由`comparison_context`按记录配置现算。**其他修复**：Qlib 导入日历改用情景日历（跨引擎日历一致）、金额序列补`currency`、执行目录新增`result_destination`（UI 不再按 kind 分支）、运行展示标题在服务端合成、比较页顶部改为"N/M 行可排名"、`/v1/runs/{id}/revisions` 有界分页、widget 注册但未实现返回`unsupported`、比较表每运行只加载一次 revision、UI 测试新增 strict DOM 模式、stub 进程组按组清理。验证：Python 83项测试82通过、1项环境隔离跳过（新增`test_review2_fixes.py` 5项）；JS回归14项通过；浏览器与API实测**跨引擎同情景比较**（Qlib 运行`7fa46b8f` vs RD-Agent 运行`d6c0c4b2`，同一内容摘要、同一执行/评估身份）得到 4 行可排名：期末权益、首末变化、最大回撤、累计成本各标出最优/最劣（成本行`越低越好`方向正确），换手率与额外行保持中性。限制：跨*实验变量*的排名口径（费用情景模式）仍待立项；正式数据目录接入后逻辑摘要由供应商版本替代。
 
 ## Spec治理交付门槛（GOV01 / U11）
 

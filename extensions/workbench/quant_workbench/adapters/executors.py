@@ -18,7 +18,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ..cn_market import CN_SYNTHETIC_DATASET_ID, CN_SYNTHETIC_SOURCE_INSTANCE, load_profile
+from ..cn_market import (
+    CN_SYNTHETIC_DATASET_ID, CN_SYNTHETIC_SOURCE_INSTANCE, load_profile, rdagent_snapshot_path,
+)
 from ..execution import InvalidExecutionRequest
 from ..source_safety import Sanitizer
 
@@ -357,9 +359,11 @@ class QlibCNExecutor(SubprocessExecutor):
     def describe(self, kind: str) -> dict[str, Any]:
         return {
             "label": "Qlib CN 合成行情训练+回测",
-            "description": "按 configs/cn/profile.json 编译独立工作目录，用 Qlib 自身环境运行；结果需显式导入结果库。",
+            "description": "按 configs/cn/profile.json 编译独立工作目录，用 Qlib 自身环境运行；成功后平台自动发布结果并写回执。",
             "probe": False,
             "data_nature": "synthetic_current_rules_counterfactual",
+            # EXEC12: the platform publishes this entry's result automatically.
+            "result_destination": "auto_import",
             "params": [{"name": "note", "type": "string", "required": False,
                         "description": "可选备注，仅随 Attempt 保存"}],
         }
@@ -586,6 +590,8 @@ class RDAgentExecutor(SubprocessExecutor):
                             "在 RD-Agent fork 内运行因子基线回测（本地环境，不发聊天请求），并同步研究快照。"),
             "probe": True,
             "data_nature": "synthetic_probe",
+            # EXEC12: research snapshots enter the result library through the trusted export.
+            "result_destination": "manual_export_required",
             "params": [{"name": "mode", "type": "string", "required": False, "default": mode,
                         "choices": ["baseline", "loop"], "description": "RD-Agent 运行模式，默认与入口一致"},
                        {"name": "note", "type": "string", "required": False,
@@ -700,7 +706,7 @@ class RDAgentExecutor(SubprocessExecutor):
         enough = cpu is not None and memory is not None and cpu >= 2 and memory >= 4 * 1024 ** 3
         add("rdagent.resources", "ok" if enough else "missing",
             f"docker resources cpu={cpu} mem={round((memory or 0) / 1024 ** 3, 1)}GiB (need >=2 cpu, >=4GiB)")
-        snapshot = Path.home() / ".qlib/qlib_data/qwb_cn_current" / fingerprint[:12]
+        snapshot = rdagent_snapshot_path(fingerprint)
         if (snapshot / "instruments").is_dir() and (snapshot / "features").is_dir():
             add("rdagent.data_snapshot", "ok", f"container snapshot {snapshot.name} matches the profile fingerprint")
         else:

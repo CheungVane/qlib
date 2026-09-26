@@ -2,6 +2,15 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-26 — 第二轮审查修复：身份分层、逻辑内容摘要与跨引擎比较
+
+- 来源：用户要求按[第二轮审查](review-20260926b.md)的建议顺序修复，并"以稳为主"。审查发现 2 项严重（身份模型、数据集身份链）、2 项高（UI 引擎分支、比较页结论）、5 项中、6 项低。
+- 合同：[结果合同](RESULT_CONTRACT.md)新增「身份分层」：数据内容身份、执行口径身份（`execution_id`）、评估口径身份（`evaluation_id`）与**研究实验身份**（`experiment_id`，允许不同并作为实验变量列出）；[核心规范](WORKBENCH_SPEC.md)COMPARE01 指向该分层，UI06 增加配色共存规则，API02 补齐比较/执行/观测接口枚举，需求表补记 U16 并把覆盖区间改为 U01—U17；[执行层规范](EXECUTION.md)§5 补 EXEC09/EXEC11 验收行；IMPLEMENTATION 的 M0 交付改为"键集合冻结 + 路由覆盖已落地、完整 JSON Schema 仍是缺口"；CN 审计补记数据身份机制。
+- 实现（按 B 组顺序）：①`scenario_identities()` 拆分身份，`comparison_context()` 对历史记录现算拆分身份（记录不完整则身份留空而非编造），比较与比较表用 `assess()` 共用同一口径且不再逐行重读 revision；②快照摘要改为**逻辑内容摘要**（只覆盖数据文件），RD-Agent 导出写入同一摘要（本机与容器快照均为 `eb27e8cc…`），并由 `rdagent_snapshot_path()` 统一路径；③执行目录新增 `result_destination`、运行展示标题在服务端合成、Qlib 导入日历改用情景日历、金额序列补 `currency`；④比较页顶部改为"N/M 行可排名"并显示实验变量；⑤`/v1/runs/{id}/revisions` 有界分页、widget 已注册未实现返回 `unsupported`；⑥UI 测试新增 strict DOM 模式（缺元素即失败）、stub 进程按进程组清理。
+- 验证：Python 83项测试82通过、1项环境隔离跳过（新增`test_review2_fixes.py` 5项覆盖分页、展示标题、widget 语义、结果去向、单次加载）；JS回归14项通过；`scripts/workbench_gate.sh`通过。**跨引擎比较实测**：Qlib 运行`7fa46b8f`与 RD-Agent 运行`d6c0c4b2`（同一情景、同一内容摘要）在比较表得到4行可排名——期末权益/首末变化/最大回撤（越高越好）与累计成本（越低越好）各标注最优/最劣，界面显示4个最优、4个最劣单元与文字标记，顶部显示"4/9 行可按统一口径排名"，换手率与额外行保持中性。
+- 限制：跨实验变量的费用情景排名口径未定义（当前作为实验变量并排展示）；正式数据目录接入后由供应商版本或内容摘要替代本地摘要机制；完整 JSON Schema、外部 CI、实时回放与第二真实引擎仍未实现。
+- 兼容：新增派生身份字段与 `experiment_variables`/`result_destination`/`display_title` 均为增量；历史 revision 与旧证据不改写，缺少内容版本或身份的旧对象继续保持不可排名；`/v1/runs/{id}/revisions` 响应新增 `next_cursor`（由 `{"items"}` 扩展），CLI `revisions` 新增 `--limit/--cursor`。
+
 ## 2026-09-26 — U17：比较表（一行一指标、列内配色）与数据集内容身份
 
 - 来源：用户反馈比较页数据分散在不同卡片、不直观，要求一行一个指标、每列一个运行，并用颜色区分优劣（红=最优、绿=最劣）。

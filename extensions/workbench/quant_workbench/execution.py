@@ -176,6 +176,7 @@ class ExecutionService:
                     "description": meta.get("description"),
                     "probe": bool(meta.get("probe")),
                     "data_nature": meta.get("data_nature"),
+                    "result_destination": meta.get("result_destination", "unknown"),
                     "params": meta.get("params", []),
                     "available": available,
                     "checks": list(preflight.get("checks", [])) + platform,

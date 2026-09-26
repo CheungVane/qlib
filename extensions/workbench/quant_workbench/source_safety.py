@@ -21,8 +21,10 @@ def data_nature(declared, effective=None, fixture=False):
 
 
 def verify_effective(effective, quality=None):
-    digest = hashlib.sha256(json.dumps({k:v for k,v in effective.items() if k != 'fingerprint'},
-                                      sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    from .cn_market import DERIVED_IDENTITY_KEYS
+    digest = hashlib.sha256(json.dumps({k: v for k, v in effective.items()
+                                        if k not in DERIVED_IDENTITY_KEYS},
+                                       sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     if digest != effective.get('fingerprint'):
         raise SourceConflict('CN scenario fingerprint mismatch')
     if quality and quality.get('scenario_fingerprint') != digest:
@@ -30,12 +32,26 @@ def verify_effective(effective, quality=None):
 
 
 def comparison_context(effective):
-    # evaluation_id identifies the evaluation semantics and sample scope; for the CN scenario the
-    # scenario fingerprint is that identity. It never substitutes the dataset content version.
-    return {'execution_id': effective['fingerprint'], 'evaluation_id': effective['fingerprint'],
-            'initial_equity': effective['account']['initial_cash'],
-            'cashflow_policy': 'none', 'price_basis': 'qlib_adjusted_account',
-            'benchmark_id': effective['research']['benchmark']}
+    """Split identities (RESULT_CONTRACT 身份分层); older scenarios fall back to the full fingerprint."""
+    from .cn_market import scenario_identities
+    if not effective.get('execution_fingerprint'):
+        # Historic scenario recordings predate the split; derive the same identities from the
+        # recorded configuration instead of falling back to the full fingerprint.
+        try:
+            effective = {**effective, **scenario_identities(effective)}
+        except (KeyError, TypeError):
+            # A partially recorded scenario cannot be split: keep the identity unknown so the
+            # comparison checks report the missing scope instead of inventing one.
+            effective = {**effective, 'execution_fingerprint': None, 'evaluation_fingerprint': None}
+    execution = effective.get('execution_fingerprint')
+    evaluation = effective.get('evaluation_fingerprint')
+    context = {'execution_id': execution, 'evaluation_id': evaluation,
+               'initial_equity': effective['account']['initial_cash'],
+               'cashflow_policy': 'none', 'price_basis': 'qlib_adjusted_account',
+               'benchmark_id': effective['research']['benchmark']}
+    if effective.get('experiment_id'):
+        context['experiment_id'] = effective['experiment_id']
+    return context
 
 
 class Sanitizer:

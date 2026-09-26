@@ -55,6 +55,8 @@ def parser() -> argparse.ArgumentParser:
     a.add_argument("run_id")
     a = sub.add_parser("revisions")
     a.add_argument("run_id")
+    a.add_argument("--limit", type=int, default=20)
+    a.add_argument("--cursor")
     a = sub.add_parser("series")
     a.add_argument("run_id")
     a.add_argument("metric_id")
@@ -129,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "show-run":
             result = service.get_run(args.run_id)
         elif args.command == "revisions":
-            result = {"items": service.list_revisions(args.run_id)}
+            result = service.list_revisions_page(args.run_id, args.limit, args.cursor)
         elif args.command == "series":
             result = service.get_series(args.run_id, args.metric_id, args.revision_id, args.limit, args.offset)
         elif args.command == "compare":

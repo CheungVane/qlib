@@ -11,7 +11,22 @@ from .metrics import (
 )
 
 
+def display_run_title(run: dict[str, Any] | None) -> str:
+    """Reader-facing title; engine/date composition lives on the server, not in the UI."""
+    run = run or {}
+    title = (run.get("title") or "").strip()
+    if title and title not in WorkbenchService.GENERIC_RUN_TITLES:
+        return title
+    engine = ((run.get("engine") or {}).get("id") or "结果").strip()
+    stamp = (run.get("created_at") or "")[:10]
+    return f"{engine} 回测 · {stamp}".strip(" ·")
+
+
 class WorkbenchService:
+    # Engine defaults that carry no information for a reader; the display title is composed
+    # here (server side) so the UI never has to branch on engine names (ARC03).
+    GENERIC_RUN_TITLES = {"mlflow_recorder", "mlflow", "default", ""}
+
     def __init__(self, repository: ResultRepository, rdagent: AgentObservationPort | None = None,
                  research=None, execution=None):
         self.repository = repository
@@ -101,16 +116,21 @@ class WorkbenchService:
         for row in result['items']:
             revision = self.get_revision(row['run_id'], row['revision_id'])
             row['run']['provenance'] = revision['provenance']['run']
+            row['display_title'] = display_run_title(row['run'])
         return result
 
     def get_run(self, run_id: str) -> dict[str, Any] | None:
         row = self.repository.get_run(run_id)
         if row:
             row['run']['provenance'] = self.get_revision(run_id, row['revision_id'])['provenance']['run']
+            row['display_title'] = display_run_title(row['run'])
         return row
 
     def list_revisions(self, run_id: str) -> list[dict[str, Any]]:
         return self.repository.list_revisions(run_id)
+
+    def list_revisions_page(self, run_id: str, limit: int = 20, cursor: str | None = None) -> dict[str, Any]:
+        return self.repository.list_revisions_page(run_id, limit, cursor)
 
     def get_revision(self, run_id: str, revision_id: str | None = None) -> dict[str, Any] | None:
         revision = self.repository.get_revision(run_id, revision_id)
@@ -143,19 +163,25 @@ class WorkbenchService:
             raise ValueError("provide 2 to 10 distinct run IDs")
         if mode not in {"auto", "equity", "metric"}:
             raise ValueError("unknown comparison mode")
-        mode = ("equity" if metric_id == "platform.equity" else "metric") if mode == "auto" else mode
-        if (mode == "equity") != (metric_id == "platform.equity"):
-            raise ValueError("comparison mode does not match metric")
-        found = []
         revisions = []
         for run_id in run_ids:
             revision = self.get_revision(run_id)
             if revision is None:
                 return {"status": "incompatible", "reasons": [f"run_not_found:{run_id}"]}
+            revisions.append(revision)
+        return self.assess(run_ids, revisions, metric_id, mode)
+
+    def assess(self, run_ids: list[str], revisions: list[dict[str, Any]], metric_id: str,
+               mode: str = "auto") -> dict[str, Any]:
+        """One口径 implementation reused by compare() and compare_table() (no re-reads)."""
+        mode = ("equity" if metric_id == "platform.equity" else "metric") if mode == "auto" else mode
+        if (mode == "equity") != (metric_id == "platform.equity"):
+            raise ValueError("comparison mode does not match metric")
+        found = []
+        for run_id, revision in zip(run_ids, revisions):
             metric = next((x for x in revision["result"]["series"] if x["metric_id"] == metric_id), None)
             if metric is None or metric["availability"] != "available":
                 return {"status": "incompatible", "reasons": [f"metric_unavailable:{run_id}"]}
-            revisions.append(revision)
             found.append((revision["result"]["run"], metric))
 
         reasons = []
@@ -198,9 +224,17 @@ class WorkbenchService:
                 reasons.append('initial_equity_invalid')
         else:
             check([c.get('evaluation_id') for c in contexts], 'evaluation_unknown_or_differs')
+        # Research experiment identity may differ: listed as an experimental variable (U17/B-1).
+        experiments = [c.get('experiment_id') for c in contexts]
+        variables = []
+        if any(not known(value) for value in experiments):
+            variables.append('experiment_id_unknown')
+        elif len(set(experiments)) != 1:
+            variables.append('experiment_id_differs')
         return {'mode': mode, 'status':'comparable' if not reasons else 'partial',
                 'overlay_allowed':not overlay_reasons, 'ranking_allowed':not reasons,
-                'reasons':reasons, 'revisions':{rid:rev['revision_id'] for rid,rev in zip(run_ids,revisions)}}
+                'reasons':reasons, 'experiment_variables':variables,
+                'revisions':{rid:rev['revision_id'] for rid,rev in zip(run_ids,revisions)}}
 
     def compare_table(self, run_ids: list[str], metric_ids: list[str] | None = None) -> dict[str, Any]:
         """UI06: one row per metric, one column per run; best/worst are decided here, not in the UI."""
@@ -215,11 +249,13 @@ class WorkbenchService:
             revisions.append(revision)
         rows = []
         for descriptor in self._table_descriptors(revisions, metric_ids):
-            assessment = self.compare(run_ids, descriptor["metric_id"], "auto")
+            assessment = self.assess(run_ids, revisions, descriptor["metric_id"], "auto")
             if assessment.get("status") == "incompatible":
                 allowed, reasons = False, list(assessment.get("reasons", []))
+                variables = list(assessment.get("experiment_variables", []))
             else:
                 allowed, reasons = bool(assessment.get("ranking_allowed")), list(assessment.get("reasons", []))
+                variables = list(assessment.get("experiment_variables", []))
             direction = descriptor.get("direction", "unknown")
             if direction not in ("higher_better", "lower_better"):
                 if allowed:
@@ -264,13 +300,16 @@ class WorkbenchService:
                 "aggregation": descriptor["aggregation"], "direction": direction,
                 "direction_label": DIRECTIONS.get(direction, DIRECTIONS["unknown"]),
                 "unit": next((cell["unit"] for cell in cells if cell["unit"]), None),
-                "ranking_allowed": allowed, "reasons": sorted(set(extra_reasons)), "cells": cells,
+                "ranking_allowed": allowed, "reasons": sorted(set(extra_reasons)),
+                "experiment_variables": sorted(set(variables)), "cells": cells,
             })
         overall = sorted({reason for row in rows for reason in row["reasons"]})
+        experiment_variables = sorted({variable for row in rows for variable in row["experiment_variables"]})
         return {
             "status": "comparable" if rows and all(row["ranking_allowed"] for row in rows) else "partial",
             "ranking_allowed": bool(rows) and all(row["ranking_allowed"] for row in rows),
             "reasons": overall,
+            "experiment_variables": experiment_variables,
             "run_ids": list(run_ids),
             "runs": [{"run_id": run_id, "title": revision["result"]["run"]["title"],
                       "engine_id": revision["result"]["run"]["engine"]["id"],

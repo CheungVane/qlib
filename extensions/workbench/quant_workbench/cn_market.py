@@ -17,11 +17,17 @@ CN_SYNTHETIC_DATASET_ID = "cn-current-synthetic"
 
 
 def snapshot_content_digest(path) -> dict:
-    """Content digest of a materialised snapshot: sha256 over sorted path/file digests."""
+    """Logical content digest: data trees only, ignoring scenario/config manifests.
+
+    `scenario.json` describes the configuration and `content.json` records this digest, so
+    neither may feed the digest; otherwise the version would move with configuration changes
+    (GOV-CONFIG) instead of describing the data.
+    """
     root = Path(path)
     if not root.is_dir():
         raise ValueError(f"snapshot path is not a directory: {root}")
-    files = sorted(p for p in root.rglob("*") if p.is_file() and p.name != "content.json")
+    ignored = {"content.json", "scenario.json"}
+    files = sorted(p for p in root.rglob("*") if p.is_file() and p.name not in ignored)
     outer = hashlib.sha256()
     size = 0
     for file in files:
@@ -51,6 +57,12 @@ def ensure_snapshot_content(path) -> dict:
               "note": "synthetic snapshot; digest covers file bytes only, not market truth"}
     manifest.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return record
+
+
+def rdagent_snapshot_path(fingerprint: str, home=None) -> Path:
+    """Container snapshot used by the RD-Agent factor template (same scenario data)."""
+    base = Path(home).expanduser() if home else Path.home()
+    return base / ".qlib/qlib_data/qwb_cn_current" / fingerprint[:12]
 CN_SYNTHETIC_SOURCE_INSTANCE = "qlib-cn-attempt"
 
 
@@ -63,9 +75,51 @@ def load_profile(path):
     bundle = {key: json.loads((path.parent / index[key]).read_text())
               for key in ("rules", "account", "calendar", "research")}
     validate(bundle)
-    bundle["fingerprint"] = hashlib.sha256(
-        json.dumps(bundle, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    bundle["fingerprint"] = scenario_fingerprint(bundle)
+    bundle.update(scenario_identities(bundle))
     return bundle
+
+
+# Derived identity keys are excluded when re-verifying a recorded scenario.
+DERIVED_IDENTITY_KEYS = ("fingerprint", "execution_fingerprint", "evaluation_fingerprint",
+                         "experiment_id", "data_identity")
+
+
+def _digest(payload) -> str:
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def scenario_fingerprint(bundle) -> str:
+    """Scenario identity over the recorded configuration, ignoring derived identity keys."""
+    return _digest({key: value for key, value in bundle.items() if key not in DERIVED_IDENTITY_KEYS})
+
+
+def scenario_identities(bundle) -> dict:
+    """Split one scenario into comparison identities (see RESULT_CONTRACT 身份分层).
+
+    The full `fingerprint` still keys data materialisation and templates; ranking uses the
+    split below so that changing research parameters stops blocking a fair comparison.
+    """
+    rules, account, calendar, research = (bundle[k] for k in ("rules", "account", "calendar", "research"))
+    execution = _digest({
+        "rules": rules, "account": account, "calendar": calendar,
+        "market": research["market"], "benchmark": research["benchmark"],
+        "execution": research["execution"], "synthetic": research["synthetic"],
+    })
+    evaluation = _digest({
+        "date_range": research["date_range"], "segments": research["segments"],
+        "label": research["label"], "market": research["market"], "benchmark": research["benchmark"],
+        "quality": research["quality"], "annualization": research.get("annualization"),
+    })
+    experiment = _digest({"model": research["model"], "strategy": research["strategy"],
+                          "agent": research.get("agent")})
+    data = _digest({
+        "calendar": calendar, "fixture": research["fixture"], "market": research["market"],
+        "benchmark": research["benchmark"], "date_range": research["date_range"],
+        "tick_size": rules["tick_size"], "boards": rules["boards"],
+    })
+    return {"execution_fingerprint": execution, "evaluation_fingerprint": evaluation,
+            "experiment_id": experiment, "data_identity": data}
 
 
 def validate(bundle):

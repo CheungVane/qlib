@@ -21,6 +21,7 @@ def export(root, output, platform, synthetic, session_names=None):
     from quant_workbench.storage import LocalResultRepository
     from quant_workbench.application import WorkbenchService
     from quant_workbench.research import review_result
+    from quant_workbench.cn_market import rdagent_snapshot_path, snapshot_content_digest
     from quant_workbench.source_safety import Sanitizer, data_nature, verify_effective, comparison_context
     root = Path(root).resolve()
     service = WorkbenchService(LocalResultRepository(platform))
@@ -123,6 +124,16 @@ def export(root, output, platform, synthetic, session_names=None):
             if runner_report is not None: report=runner_report
             if effective:
                 verify_effective(effective, quality)
+            # Dataset content version: the container snapshot is the same logical data as the
+            # local one, so the same content digest makes cross-engine comparison possible.
+            dataset_version = None
+            if effective:
+                snapshot = rdagent_snapshot_path(effective['fingerprint'])
+                if snapshot.is_dir():
+                    try:
+                        dataset_version = snapshot_content_digest(snapshot)['digest']
+                    except OSError:
+                        dataset_version = None
             nature = data_nature(synthetic, effective)
             if report is None: warnings.append('本实验未恢复权益报告；未借用其他实验结果')
             # Keep incomplete sessions too. Do not infer terminal state from old timestamps.
@@ -168,7 +179,7 @@ def export(root, output, platform, synthetic, session_names=None):
                             'execution':effective['research']['execution'],'account_assumptions':effective['account']['assumptions']}
                     package={'schema_version':1,'run':{'title':title,'kind':'research','status':'unknown','created_at':started,
                         'started_at':started,'ended_at':None,'engine':{'id':'rdagent-qlib','version':None},
-                        'dataset':{'id':'cn-current-synthetic' if effective else 'rdagent-source-unknown','version':None},
+                        'dataset':{'id':'cn-current-synthetic' if effective else 'rdagent-source-unknown','version':dataset_version},
                         'synthetic':synthetic,'stages':[]},'series':entries,'evidence':evidence}
                     if effective:
                         evidence['comparison'] = comparison_context(effective)

@@ -149,5 +149,7 @@ EXEC11（演进，GOV-UPSTREAM）：Qlib 与 RD-Agent 保持外部引擎边界�
 | EXEC07 | 跨源写请求 403；幂等重放 200；未知 kind 拒绝 | 回归测试（TestClient） |
 | EXEC10 | `/v1/observability` 同时返回 HTTP 与 Attempt 两块；无样本为 null；cancelled 单列；分母与窗口披露 | 回归测试 + 系统页 |
 | EXEC12 | 成功 Attempt 自动发布结果并写 ImportReceipt；无候选保留 `manual_import_required`；导入失败保留原因；重复核对不重复发布；DTO 不泄漏跟踪库路径 | 回归测试 + 本机真实 Attempt 记录 |
+| EXEC09 | 执行目录逐入口说明用途/依赖/产出/结果去向/耗时；前置条件缺失时不提供假启动；自动刷新不重置入口选择、不在备注输入时抢焦点 | `test_ui.cjs`（U16 回归）+ 浏览器检查 |
+| EXEC11 | 执行器为适配层，不修改上游源码；上游更新后重验执行器命令、前置条件与适配器契约 | 上游合并检查清单（无自动门禁，见 IMPLEMENTATION） |
 
 完成状态与实测证据记录在 [IMPLEMENTATION.md](IMPLEMENTATION.md)，变更历史记录在 [CHANGELOG.md](CHANGELOG.md)。通过测试不等于执行器已覆盖真实数据或生产部署。

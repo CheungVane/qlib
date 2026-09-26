@@ -243,6 +243,32 @@ class LocalResultRepository:
                                 (run_id,)).fetchall()
         return [dict(row) for row in rows]
 
+    def list_revisions_page(self, run_id: str, limit: int = 20, cursor: str | None = None) -> dict[str, Any]:
+        """Bounded revision list (ARC07); newest first with a stable cursor."""
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        if cursor is not None and (not isinstance(cursor, str) or not cursor):
+            raise ValueError("invalid cursor")
+        query = ("SELECT revision_id,content_hash,adapter_version,published_at FROM revisions WHERE run_id=?")
+        params: list[Any] = [run_id]
+        if cursor:
+            with self._connect() as conn:
+                anchor = conn.execute(
+                    "SELECT published_at FROM revisions WHERE run_id=? AND revision_id=?",
+                    (run_id, cursor)).fetchone()
+            if anchor is None:
+                raise ValueError("unknown cursor")
+            query += (" AND (instant_order(published_at) < instant_order(?) OR "
+                      "(instant_order(published_at) = instant_order(?) AND revision_id < ?))")
+            params.extend((anchor["published_at"], anchor["published_at"], cursor))
+        query += " ORDER BY instant_order(published_at) DESC, revision_id DESC LIMIT ?"
+        params.append(limit + 1)
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        more = len(rows) > limit
+        items = [dict(row) for row in rows[:limit]]
+        return {"items": items, "next_cursor": items[-1]["revision_id"] if more else None}
+
     def get_revision(self, run_id: str, revision_id: str | None = None) -> dict[str, Any] | None:
         with self._connect() as conn:
             row = conn.execute("""SELECT v.* FROM revisions v JOIN runs r ON r.run_id=v.run_id

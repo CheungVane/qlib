@@ -77,7 +77,11 @@ def check(value, shape, path='config'):
 
 
 def validate_shapes(bundle):
-    if set(bundle) not in (set(SHAPES),set(SHAPES)|{'fingerprint'}):
+    from .cn_market import DERIVED_IDENTITY_KEYS
+    allowed = {frozenset(SHAPES)}
+    for extra in ({'fingerprint'}, set(DERIVED_IDENTITY_KEYS)):
+        allowed.add(frozenset(set(SHAPES) | extra))
+    if frozenset(bundle) not in allowed:
         raise ValueError('Unknown or missing scenario fields')
     for name,shape in SHAPES.items(): check(bundle[name],shape,name)
     r,c,a=bundle['research'],bundle['calendar'],bundle['rules']

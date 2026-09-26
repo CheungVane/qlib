@@ -10,7 +10,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from ..model import validate_package
-from ..source_safety import data_nature, comparison_context, Sanitizer
+from ..source_safety import data_nature, comparison_context, verify_effective, Sanitizer
 from .mlflow_readonly import isolated_mlflow_client
 
 
@@ -117,10 +117,10 @@ class QlibMlflowImporter:
             import json
             effective_path = client.download_artifacts(external_id, 'cn_quality/effective.json')
             effective = json.loads(Path(effective_path).read_text())
-            calculated = hashlib.sha256(json.dumps({k: v for k, v in effective.items() if k != 'fingerprint'},
-                                                   sort_keys=True, separators=(',', ':')).encode()).hexdigest()
-            if effective['fingerprint'] != external.data.tags['cn_scenario'] or calculated != effective['fingerprint']:
+            if effective['fingerprint'] != external.data.tags['cn_scenario']:
                 raise ValueError('CN scenario fingerprint mismatch')
+            # One shared verifier: derived identity keys are excluded, historic scenarios still pass.
+            verify_effective(effective)
             evidence['cn_scenario'] = {
                 'fingerprint': effective['fingerprint'], 'mode': effective['research']['mode'],
                 'rules_as_of': effective['rules']['as_of'], 'calendar_id': effective['calendar']['id'],
@@ -135,15 +135,28 @@ class QlibMlflowImporter:
                     evidence['research_quality'] = json.loads(Path(quality_path).read_text())
                     if evidence['research_quality']['scenario_fingerprint'] != effective['fingerprint']:
                         raise ValueError('CN quality scenario mismatch')
+            # Calendar identity must come from the scenario, not from an importer-invented name,
+            # otherwise the same data looks incomparable across engines.
+            scenario_calendar = evidence['cn_scenario'].get('calendar_id')
+            if scenario_calendar:
+                for entry in series:
+                    entry['calendar_id'] = scenario_calendar
+                calendar_id = scenario_calendar
         evidence["data_nature"] = data_nature(synthetic, effective)
         if effective:
             evidence["comparison"] = comparison_context(effective)
+        raw_title = (external.data.tags.get("mlflow.runName") or "").strip()
+        created_at = _utc_ms(external.info.start_time)
+        if not raw_title or raw_title in {"mlflow_recorder", "mlflow", "default"}:
+            # Engine defaults carry no meaning for a reader; compose a readable title once here
+            # so no client has to branch on engine names (ARC03).
+            raw_title = f"Qlib CN 回测 · {(created_at or '')[:10]}".strip(" ·")
         package = {
             "schema_version": 1,
-            "run": {"title": external.data.tags.get("mlflow.runName", f"Qlib {external_id[:8]}"),
+            "run": {"title": raw_title,
                     "kind": "workflow", "status": status,
-                    "created_at": _utc_ms(external.info.start_time),
-                    "started_at": None if status == "queued" else _utc_ms(external.info.start_time),
+                    "created_at": created_at,
+                    "started_at": None if status == "queued" else created_at,
                     "ended_at": _utc_ms(external.info.end_time),
                     "engine": {"id": "qlib", "version": None},
                     "dataset": {"id": dataset_id, "version": dataset_version},

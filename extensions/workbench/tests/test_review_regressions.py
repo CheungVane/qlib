@@ -19,7 +19,7 @@ from quant_workbench.storage import LocalResultRepository
 from quant_workbench.metrics import equity_drawdown
 from quant_workbench.research import review_result, ResearchSnapshots
 from quant_workbench.source_safety import SourceConflict, data_nature
-from quant_workbench.cn_market import load_profile, validate
+from quant_workbench.cn_market import load_profile, scenario_fingerprint, validate
 from quant_workbench.adapters.mlflow_readonly import isolated_mlflow_client
 
 ROOT=Path(__file__).resolve().parents[3]
@@ -187,7 +187,7 @@ class ExportRegressionTests(unittest.TestCase):
         if effective:
             bundle=load_profile(ROOT/'configs/cn/profile.json')
             bundle['account']['assumptions']+=['audit-placeholder-credential']
-            bundle['fingerprint']=hashlib.sha256(json.dumps({k:v for k,v in bundle.items() if k!='fingerprint'},sort_keys=True,separators=(',',':')).encode()).hexdigest()
+            bundle['fingerprint']=scenario_fingerprint(bundle)
             (ws/'effective.json').write_text(json.dumps(bundle))
         obj=types.SimpleNamespace(result=pd.Series({'IC':.1+second/100}),sub_tasks=[types.SimpleNamespace(factor_name=f'factor{second}')],
             sub_workspace_list=[],experiment_workspace=types.SimpleNamespace(workspace_path=str(ws)))

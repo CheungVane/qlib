@@ -1,5 +1,7 @@
+import os
 import json
 import shutil
+import signal
 import sqlite3
 import subprocess
 import sys
@@ -131,11 +133,24 @@ class ExecutionTests(unittest.TestCase):
         for executor in [self.executor, *self.extra_executors]:
             for process in list(executor._processes.values()):
                 try:
-                    process.kill()
+                    # Stub attempts run /bin/sh -c "sleep N"; kill the whole process group so no
+                    # child keeps the attempt workspace busy while the temp dir is removed.
+                    os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                except (OSError, ProcessLookupError):
+                    try:
+                        process.kill()
+                    except OSError:
+                        pass
+                try:
                     process.wait(timeout=5)
                 except (OSError, subprocess.TimeoutExpired):
                     pass
-        self.temp.cleanup()
+        for _ in range(5):
+            try:
+                self.temp.cleanup()
+                break
+            except OSError:
+                time.sleep(0.2)
 
     def submit(self, kind="stub.sleep", params=None, key=None):
         result = self.execution.submit(kind, params or {"seconds": "30"}, key or f"key-{time.time_ns()}", "req-1")

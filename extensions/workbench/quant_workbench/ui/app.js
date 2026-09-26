@@ -199,7 +199,7 @@ function renderRuns(){
   const box=document.getElementById('run-list');
   const visible=state.runs.filter(item=>`${item.run.title} ${item.run.engine.id} ${item.external_id}`.toLocaleLowerCase().includes(state.search));
   const shown=foldRows(visible,state.runsExpanded,HISTORY_PREVIEW);
-  box.innerHTML=visible.length?shown.map(item=>`<button class="run-item ${item.run_id===state.selected?'selected':''}" data-run="${esc(item.run_id)}"><b>${esc(item.run.title==='mlflow_recorder'?'Qlib 回测 · '+item.run.created_at.slice(0,16).replace('T',' '):item.run.title)}</b><small>${sample(item.run)}${esc(item.run.engine.id)} · ${esc(item.run.status)}</small></button>`).join(''):empty(state.runs.length?'没有匹配的运行':'还没有导入运行结果');
+  box.innerHTML=visible.length?shown.map(item=>`<button class="run-item ${item.run_id===state.selected?'selected':''}" data-run="${esc(item.run_id)}"><b>${esc(item.display_title||item.run.title)}</b><small>${sample(item.run)}${esc(item.run.engine.id)} · ${esc(item.run.status)}</small></button>`).join(''):empty(state.runs.length?'没有匹配的运行':'还没有导入运行结果');
   box.querySelectorAll('[data-run]').forEach(button=>button.onclick=()=>selectRun(button.dataset.run));
   const toggle=document.getElementById('run-list-toggle');
   if(toggle){
@@ -215,7 +215,7 @@ function renderWidget(widget,payload){
   if(payload.availability==='not_recorded'||payload.availability==='unsupported') body=empty(payload.reason||'尚未接入');
   else if(payload.availability==='empty') body=empty('暂无记录');
   else if(widget.query.id==='runs.latest'){
-    const rows=payload.data.items.map(item=>`<tr><td><button class="link-button" data-open-run="${esc(item.run_id)}">${esc(item.run.title)}</button> ${sample(item.run)}</td><td>${esc(item.run.engine.id)}</td><td>${statusLabel(item.run.status)}</td><td>${esc(item.run.created_at.slice(0,10))}</td></tr>`).join('');
+    const rows=payload.data.items.map(item=>`<tr><td><button class="link-button" data-open-run="${esc(item.run_id)}">${esc(item.display_title||item.run.title)}</button> ${sample(item.run)}</td><td>${esc(item.run.engine.id)}</td><td>${statusLabel(item.run.status)}</td><td>${esc(item.run.created_at.slice(0,10))}</td></tr>`).join('');
     body=`<table class="table"><thead><tr><th>运行</th><th>引擎</th><th>状态</th><th>日期</th></tr></thead><tbody>${rows}</tbody></table>`;
   }else if(widget.query.id==='api.error_rate.5m'){body=`<div class="kpi">${payload.data.error_rate===null?'无样本':fmt(payload.data.error_rate*100)+'%'}<small> 5xx / 已完成请求</small></div><p class="panel-note">${payload.data.server_errors} / ${payload.data.completed_requests} 请求 · 覆盖 ${fmt(payload.data.coverage_seconds,0)} 秒（窗口300秒）</p>`;}else body=empty('暂无数据');
   const widgetHelp=widget.query.id==='api.error_rate.5m'?'system.observability':widget.query.id==='runs.latest'?'research.list':'';
@@ -266,7 +266,8 @@ async function selectedRevision(){
   if(!id)return null;
   const summary=state.runs.find(x=>x.run_id===id)||await api(`/v1/runs/${encodeURIComponent(id)}`);
   const detail=await api(`/v1/runs/${encodeURIComponent(id)}/revisions/${encodeURIComponent(state.revision||summary.revision_id)}`);
-  return {summary:{...summary,revision_id:detail.revision_id,run:{...detail.run,provenance:detail.provenance?.run}},detail};
+  return {summary:{...summary,display_title:detail.display_title||summary.display_title,
+                   revision_id:detail.revision_id,run:{...detail.run,provenance:detail.provenance?.run}},detail};
 }
 async function series(id,metric,revisionId=state.runs.find(x=>x.run_id===id)?.revision_id){
   const offset=state.seriesOffsets[seriesKey(id,metric,revisionId)]||0;
@@ -283,7 +284,7 @@ async function renderBacktest(){
   const dd=review.facts.max_observed_drawdown;
   const totalCost=review.facts.total_cost;
   const kpis=`<div class="metric-row"><div class="metric-box"><small>期末权益 ${originBadge(equity?.series?.provenance)}</small><strong>${fmt(last)} <small>${esc(equity?.series?.unit||'币种未记录')}</small></strong></div><div class="metric-box"><small>首末观测权益变化 ${badge('derived')}</small><strong>${typeof review.facts.observed_equity_change==='number'?fmt(review.facts.observed_equity_change*100)+'%':'未知'}</strong></div><div class="metric-box"><small>最大观测权益回撤 ${badge('derived')}</small><strong>${typeof dd==='number'?fmt(dd*100)+'%':'未知'}</strong></div><div class="metric-box"><small>引擎</small><strong>${esc(summary.run.engine.id)}</strong></div></div>`;
-  const heading=`<div class="heading-row"><div><h2>${esc(summary.run.title)}</h2><p class="panel-note">${statusLabel(summary.run.status)} ${sample(summary.run)} · 结果版本 ${esc(summary.revision_id.slice(0,12))} · 数据版本 ${esc(summary.run.dataset.version||'未知')}</p></div></div>`;
+  const heading=`<div class="heading-row"><div><h2>${esc(summary.display_title||summary.run.title)}</h2><p class="panel-note">${statusLabel(summary.run.status)} ${sample(summary.run)} · 结果版本 ${esc(summary.revision_id.slice(0,12))} · 数据版本 ${esc(summary.run.dataset.version||'未知')}</p></div></div>`;
   const misc=`<p class="panel-note">${originBadge(cost?.series?.provenance)} 累计费用（源报告末点）：${fmt(totalCost)} ${esc(cost?.series?.unit||'币种未记录')}（${availabilityLabel(cost?.series.availability)}）<br>换手序列：${availabilityLabel(turnover?.series.availability)} · 撮合与费用口径请查原运行配置。</p>`;
   document.getElementById('content').innerHTML=`<div class="stack">${card('运行概况',heading+kpis)}${provenancePanel(detail)}${reviewPanel(review,detail.evidence)}${card('权益曲线',seriesPanel(equity),equity?.series?.provenance?.source||'来源未核实')}${card('成本与换手',misc)}${card('来源证据',`<details><summary>展开原始证据</summary><pre class="panel-note">${esc(JSON.stringify(detail.evidence,null,2))}</pre></details>`,'未知事实保留为空')}</div>`;
 }
@@ -298,7 +299,7 @@ async function renderTraining(){
     rows.push(`<tr><td>${esc(metric.metric_id)} ${originBadge(metric.provenance)}${metric.axis==='step'&&metric.point_count<2?badge('limited'):''}</td><td>${esc(metric.axis)}</td><td>${esc(fmt(value,5))}</td><td>${esc(metric.unit)}</td><td>${availabilityLabel(metric.availability)}${metric.summary?.last_reason?' · '+esc(metric.summary.last_reason):''}</td></tr>`);
   }
   const stageText=summary.run.stages?.map(x=>`${esc(x.kind)}：${esc(x.status)}`).join(' · ')||'阶段信息未知';
-  document.getElementById('content').innerHTML=`<div class="stack">${card('训练运行',`<div class="heading-row"><h2>${esc(summary.run.title)}</h2>${sample(summary.run)}</div><p class="panel-note">${stageText}<br>引擎运行时版本：${esc(summary.run.engine.version||'未知')} · 数据版本：${esc(summary.run.dataset.version||'未知')}</p>`)}${provenancePanel(detail)}${reviewPanel(review,detail.evidence)}${card('训练与信号指标',rows.length?`<table class="table"><thead><tr><th>指标</th><th>轴</th><th>末点</th><th>单位</th><th>记录状态</th></tr></thead><tbody>${rows.join('')}</tbody></table>`:empty('该运行没有可显示的训练指标'))}</div>`;
+  document.getElementById('content').innerHTML=`<div class="stack">${card('训练运行',`<div class="heading-row"><h2>${esc(summary.display_title||summary.run.title)}</h2>${sample(summary.run)}</div><p class="panel-note">${stageText}<br>引擎运行时版本：${esc(summary.run.engine.version||'未知')} · 数据版本：${esc(summary.run.dataset.version||'未知')}</p>`)}${provenancePanel(detail)}${reviewPanel(review,detail.evidence)}${card('训练与信号指标',rows.length?`<table class="table"><thead><tr><th>指标</th><th>轴</th><th>末点</th><th>单位</th><th>记录状态</th></tr></thead><tbody>${rows.join('')}</tbody></table>`:empty('该运行没有可显示的训练指标'))}</div>`;
 }
 const compareReasons = {legacy_experiment_attribution_unverified:'旧版导出实验归属未复核',dataset_id_differs:'数据集身份不同',coverage_axis_differs:'有效观测坐标不同',missing_observations:'序列有缺测',step_kind_differs:'训练步定义未知或不同',evaluation_unknown_or_differs:'评估口径未知或不同',initial_equity_unknown_or_differs:'初始资金未知或不同',initial_equity_invalid:'缺少有效初始资金',cashflow_policy_unknown_or_differs:'现金流口径未知或不同',cashflow_not_supported:'尚不支持该现金流口径',price_basis_unknown_or_differs:'价格口径未知或不同',benchmark_id_unknown_or_differs:'基准未知或不同',handwritten_fixture_present:'包含手写演示样本，不支持研究排名',date_window_differs:'回测日期窗口不同',first_equity_differs:'首个观测权益不同',execution_scenario_unknown_or_differs:'执行/费用情景未知或不同',unit_differs:'单位不同',axis_differs:'序列轴不同',definition_id_differs:'指标定义不同',calendar_id_differs:'交易日历不同',currency_differs:'币种不同',synthetic_and_real_mixed:'模拟与真实数据混用',dataset_version_unknown_or_differs:'数据版本未知或不同',direction_not_registered:'该指标方向未登记，不做优劣判断',values_equal_or_incomplete:'数值相同或不全，无法判断优劣',values_within_tolerance:'极值差异在1e-9相对容差内，可能是数值噪声，标注优劣会失真',metric_unavailable:'该运行没有这个指标'};
 function compareCell(cell,row){
@@ -320,7 +321,7 @@ function compareTableHtml(table){
  return `<div class="table-scroll"><table class="table compare-table"><thead>${head}</thead><tbody>${body}</tbody></table></div><p class="panel-note">红=最优、绿=最劣（A股习惯），只在整行口径检查通过且方向已登记时着色；未着色的行写明原因，最优/最劣同时有文字标记，颜色不是唯一信息。</p>`;
 }
 async function renderCompare(){
-  const choices=state.runs.map(item=>`<label class="compare-choice"><input type="checkbox" data-compare-run="${esc(item.run_id)}" ${state.compareIds.includes(item.run_id)?'checked':''}><span><strong>${esc(item.run.title)}</strong><small>${esc(item.run.engine.id)} · ${esc(item.run.dataset.id)} · ${esc(item.run.dataset.version||'版本未知')} ${sample(item.run)}</small></span></label>`).join('');
+  const choices=state.runs.map(item=>`<label class="compare-choice"><input type="checkbox" data-compare-run="${esc(item.run_id)}" ${state.compareIds.includes(item.run_id)?'checked':''}><span><strong>${esc(item.display_title||item.run.title)}</strong><small>${esc(item.run.engine.id)} · ${esc(item.run.dataset.id)} · ${esc(item.run.dataset.version||'版本未知')} ${sample(item.run)}</small></span></label>`).join('');
   const picker=card('选择运行',`<p class="panel-note">选择 2 至 10 个运行。比较依据为平台标准指标，原生指标保留各自定义。</p><div class="compare-choices">${choices||empty('还没有导入运行')}</div>`);
   if(state.compareIds.length<2){document.getElementById('content').innerHTML=`<div class="stack">${picker}${card('比较结果',empty('请选择至少两个运行'))}</div>`;bindCompare();return;}
   const query=new URLSearchParams({metric_id:'platform.equity'});
@@ -330,8 +331,12 @@ async function renderCompare(){
   state.compareIds.forEach(id=>tableQuery.append('run_id',id));
   const table=await api(`/v1/compare/table?${tableQuery}`);
   const reasons=assessment.reasons.map(reason=>compareReasons[reason]||reason);
-  const tone=assessment.ranking_allowed?'assessment-ok':'assessment-caution';
-  const assessmentBody=`<div class="assessment ${tone}"><strong>${assessment.ranking_allowed?'可按统一口径比较':'仅供并列查看，暂不能排名'}</strong><p>${esc(reasons.length?reasons.join(' · '):'指标定义、单位、日历和数据版本一致')}</p></div><p class="panel-note">每个运行单独绘图，保留原始时间轴与数值。不同时间窗口或起始资金不自动归一化。</p>`;
+  const rankable=table.rows.filter(row=>row.ranking_allowed).length;
+  const tone=rankable?'assessment-ok':'assessment-caution';
+  const variables=table.experiment_variables||[];
+  const variableNote=variables.includes('experiment_id_differs')?'实验变量：研究配置不同（允许并已列出）':
+    variables.includes('experiment_id_unknown')?'研究配置身份未记录，无法确认实验变量':null;
+  const assessmentBody=`<div class="assessment ${tone}"><strong>${rankable} / ${table.rows.length} 行可按统一口径排名</strong><p>${esc(rankable?'逐行结果见下表；未着色的行在行内写明原因':'暂不能排名：'+(reasons.join(' · ')||'原因见下表各行'))}</p></div><p class="panel-note">表格逐行判定口径；顶部结论只是汇总。${variableNote?esc(variableNote)+'。':''}每个运行单独绘图，保留原始时间轴与数值。不同时间窗口或起始资金不自动归一化。</p>`;
   const panels=await Promise.all(state.compareIds.map(async id=>{
     const item=state.runs.find(x=>x.run_id===id);
     if(!item)return card('运行不存在',empty(id));
@@ -340,13 +345,13 @@ async function renderCompare(){
     const review=await api(`/v1/runs/${id}/review?revision_id=${revisionId}`);
     const detail=await api(`/v1/runs/${id}/revisions/${revisionId}`);
     const scenario=detail.evidence?.cn_scenario;
-    const selectedRun={...detail.run,provenance:detail.provenance?.run};
+    const selectedRun={...detail.run,provenance:detail.provenance?.run,display_title:detail.display_title};
     const first=review.facts.first_observed_equity,last=review.facts.ending_equity;
     const bounds=review.facts.equity_coverage;
     const heading=`<div class="heading-row"><p class="panel-note">${esc(selectedRun.engine.id)} · ${esc(selectedRun.dataset.id)} · ${sample(selectedRun)}</p><button class="link-button" data-open-run="${esc(id)}">查看详情</button></div>`;
     const facts=`<div class="metric-row"><div class="metric-box"><small>期末权益</small><strong>${fmt(last)} <small>${esc(result?.series.unit||'')}</small></strong></div><div class="metric-box"><small>首末观测权益变化 ${badge('derived')}</small><strong>${typeof review.facts.observed_equity_change==='number'?fmt(review.facts.observed_equity_change*100)+'%':'未知'}</strong></div><div class="metric-box"><small>数据版本</small><strong>${esc(selectedRun.dataset.version||'未知')}</strong></div></div>`;
     const context=`<dl class="context-grid"><dt>报告区间</dt><dd>${esc(bounds?.start||'未记录')} → ${esc(bounds?.end||'未记录')}</dd><dt>最大观测回撤 ${badge('derived')}</dt><dd>${typeof review.facts.max_observed_drawdown==='number'?fmt(review.facts.max_observed_drawdown*100)+'%':'未知'}</dd><dt>累计成本</dt><dd>${fmt(review.facts.total_cost)} CNY</dd><dt>质量</dt><dd>${badge(review.quality?'custom':'missing')} ${esc(review.quality?.status||'未记录')}</dd><dt>执行情景</dt><dd>${esc(scenario?.fingerprint?.slice(0,12)||'未知')}</dd><dt>佣金 / 最低费</dt><dd>${esc(scenario?.commission_both??'未知')} / ${esc(scenario?.minimum_commission??'未知')}</dd><dt>结果版本</dt><dd>${esc(revisionId.slice(0,12))}</dd></dl>`;
-    return card(selectedRun.title,heading+facts+context+seriesPanel(result),esc(selectedRun.created_at.slice(0,10)),'page.compare');
+    return card(selectedRun.display_title||selectedRun.title,heading+facts+context+seriesPanel(result),esc(selectedRun.created_at.slice(0,10)),'page.compare');
   }));
   const tableCard=card('比较表（一行一指标）',compareTableHtml(table),'红=最优，绿=最劣；只在该行口径允许时着色','compare.table');
   document.getElementById('content').innerHTML=`<div class="stack">${picker}${card('口径检查',assessmentBody)}${tableCard}<details class="compare-details"><summary>逐运行明细与曲线（${state.compareIds.length} 个运行）</summary><div class="compare-grid">${panels.join('')}</div></details></div>`;
@@ -404,7 +409,8 @@ function executionPanel(catalog,attempts){
  const form=`<form id="execution-form" class="toolbar"><label class="sr-only" for="execution-kind">执行入口</label><select id="execution-kind" aria-label="执行入口" ${available.length?'':'disabled'}>${options}</select><input id="execution-note" aria-label="备注" placeholder="可选备注（随 Attempt 保存）"><button class="action" id="execution-submit" ${available.length?'':'disabled'}>启动研究</button><small>启动请求期间复用同一幂等键（重复点击不会产生第二个进程）；启动成功或去重后自动换用新键，可再次启动新 Attempt。</small></form><p id="execution-feedback" class="panel-note">${entryFeedback(remembered)}</p>`;
  const entries=catalog.items.map(x=>{
   const meta=execEntryMeta(x.kind)||{};
-  const importer=x.kind.startsWith('qlib.')?'成功后自动入库':'需可信离线导出后入库';
+  const importer={auto_import:'成功后自动入库',manual_export_required:'需可信离线导出后入库',
+                  unknown:'结果去向未登记'}[x.result_destination]||'结果去向未登记';
   return `<details class="execution-entry" ${x.available?'':'open'}><summary><span class="entry-title">${esc(x.label)} ${x.probe?badge('limited'):''} ${x.available?badge('measured'):badge('unsupported')}${help('exec.kind.'+x.kind,x.label)}</span><small class="block muted">${esc(meta.summary||x.description||'')}</small></summary><p class="panel-note">执行器 <code>${esc(x.executor_id)}</code> · 数据性质 ${esc(x.data_nature||'未记录')} · 结果去向 ${esc(importer)}<br>${esc(x.description||'')}</p>${executionChecks(x)}</details>`;
  }).join('');
  return card('启动研究（隔离进程）',form+entries,'三种入口的用途、数据性质与结果去向都写在下面；点问号看完整说明');
@@ -556,7 +562,7 @@ async function renderAgent(){
  const toolbar=`<form id="research-search" class="toolbar"><input aria-label="搜索研究" id="research-query" placeholder="搜索因子名、日期、状态" value="${esc(state.researchQuery)}"><button class="action">搜索</button><button type="button" id="research-refresh" class="action secondary">刷新记录</button><small>共 ${list.total} 条</small></form><p class="panel-note">每条研究可查看结果、假设、生成代码和阶段记录。历史缺失信息会保留为未记录；完整指标可在统一比较页并列查看。</p>`;
  const pager=`<div class="toolbar"><button class="action secondary" id="research-prev" ${state.researchOffset===0?'disabled':''}>上一页</button><button class="action secondary" id="research-next" ${list.next_offset===null?'disabled':''}>下一页</button></div>`;
  const reasons=(runtime.execution?.reasons||[]).map(reasonLabel);
- const ready=`<details><summary>环境与执行能力</summary><p>聊天模型：${esc(runtime.chat?.model||'未连接')}；Embedding：${esc(runtime.embedding?.model||'未连接')}；Linux Docker：${runtime.runtime?.linux_container_available?'可用':'不可用'}。</p><p>界面可启动/取消隔离进程执行；被阻塞的入口会列出缺失条件${reasons.length?'（当前：'+esc(reasons.join('；'))+'）':''}。取消需执行器确认进程结束后才落终态。</p><p class="panel-note">同步已有历史产物：在 RD-Agent 目录执行 .venv/bin/python ../qlib/scripts/export_rdagent_research.py --trust-local-artifacts --synthetic；历史刷新只重新读取已导出的快照，不执行研究。</p></details>`;
+ const ready=`<details><summary>环境与执行能力</summary><p>聊天模型：${esc(runtime.chat?.model||'未连接')}；Embedding：${esc(runtime.embedding?.model||'未连接')}；Linux Docker：${runtime.runtime?.linux_container_available?'可用':'不可用'}。</p><p>界面可启动/取消隔离进程执行；被阻塞的入口会列出缺失条件${reasons.length?'（当前：'+esc(reasons.join('；'))+')':''}。取消需执行器确认进程结束后才落终态。</p><p class="panel-note">同步已有历史产物：在 RD-Agent 目录执行 .venv/bin/python ../qlib/scripts/export_rdagent_research.py --trust-local-artifacts --synthetic；历史刷新只重新读取已导出的快照，不执行研究。</p></details>`;
  const tab=state.historyTab==='research'?'research':'attempts';
  const shownAttempts=foldRows(attempts.items,state.historyExpanded,HISTORY_PREVIEW);
  const shownResearch=foldRows(list.items,state.historyExpanded,HISTORY_PREVIEW);

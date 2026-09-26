@@ -137,28 +137,27 @@ class CompareTableTests(unittest.TestCase):
         self.assertIsNone(row_value({"points": []}, "last"))
 
     def test_comparison_context_carries_the_evaluation_scope(self):
-        context = comparison_context({"fingerprint": "fp-1", "account": {"initial_cash": 1000000},
+        from quant_workbench.cn_market import load_profile
+        scenario = load_profile(ROOT / "configs/cn/profile.json")
+        context = comparison_context(scenario)
+        self.assertEqual(context["execution_id"], scenario["execution_fingerprint"])
+        self.assertEqual(context["evaluation_id"], scenario["evaluation_fingerprint"])
+        self.assertEqual(context["experiment_id"], scenario["experiment_id"])
+        self.assertNotEqual(context["execution_id"], context["evaluation_id"])
+        self.assertNotEqual(context["execution_id"], context["experiment_id"])
+        partial = comparison_context({"fingerprint": "fp-1", "account": {"initial_cash": 1000000},
                                       "research": {"benchmark": "SH000905"}})
-        self.assertEqual(context["evaluation_id"], "fp-1")
-        self.assertEqual(context["execution_id"], "fp-1")
+        self.assertIsNone(partial["execution_id"], "记录不完整时身份未知，不得编造")
+        self.assertIsNone(partial["evaluation_id"])
 
 
 class SnapshotContentTests(unittest.TestCase):
     def test_importer_records_currency_and_evaluation_scope(self):
         import pandas as pd
 
-        scenario = {
-            "research": {"mode": "current_rules_counterfactual", "synthetic": True, "benchmark": "SH000905",
-                         "execution": {"deal_price": "close", "volume_participation": "0.05",
-                                       "slippage_bps": "5", "forbid_all_trade_at_limit": True,
-                                       "require_factor": True}},
-            "rules": {"as_of": "2026-01-01", "fees": {}},
-            "calendar": {"id": "sse-sessions-20191001-20220110-v1"},
-            "account": {"commission_both": "0.0002", "minimum_commission": 5,
-                        "initial_cash": 1000000, "assumptions": []},
-        }
-        fingerprint = hashlib.sha256(json.dumps(scenario, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-        scenario["fingerprint"] = fingerprint
+        from quant_workbench.cn_market import load_profile
+        scenario = load_profile(ROOT / "configs/cn/profile.json")
+        fingerprint = scenario["fingerprint"]
         report = pd.DataFrame(
             {"account": [1000000.0, 1005000.0], "return": [0.0, 0.005], "bench": [0.0, 0.001],
              "total_cost": [0.0, 1200.0], "cost": [0.0, 0.0012], "total_turnover": [0.0, 5000.0],
@@ -218,8 +217,11 @@ class SnapshotContentTests(unittest.TestCase):
         self.assertEqual(series["native.qlib.total_turnover"]["currency"], "CNY")
         self.assertNotIn("currency", series["native.qlib.turnover"])
         comparison = package["evidence"]["comparison"]
-        self.assertEqual(comparison["evaluation_id"], fingerprint)
-        self.assertEqual(comparison["execution_id"], fingerprint)
+        self.assertEqual(comparison["execution_id"], scenario["execution_fingerprint"])
+        self.assertEqual(comparison["evaluation_id"], scenario["evaluation_fingerprint"])
+        self.assertEqual(comparison["experiment_id"], scenario["experiment_id"])
+        self.assertNotEqual(comparison["execution_id"], comparison["experiment_id"],
+                            "研究实验身份必须与执行口径身份分开")
         self.assertEqual(package["run"]["dataset"]["version"], "content-v1")
 
     def test_content_digest_is_stable_and_content_sensitive(self):

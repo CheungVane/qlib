@@ -8,7 +8,7 @@ from typing import Any
 
 from .telemetry import RequestTelemetry
 
-from .application import WorkbenchService
+from .application import WorkbenchService, display_run_title
 from .metrics import summarize
 
 
@@ -22,7 +22,7 @@ def create_app(service: WorkbenchService):
 
     from urllib.parse import urlsplit
 
-    from .dashboard import validate_dashboard
+    from .dashboard import QUERY_IDS, validate_dashboard
     from .execution import ExecutionError
 
     # ``from __future__ import annotations`` turns annotations into strings; FastAPI resolves
@@ -147,6 +147,9 @@ def create_app(service: WorkbenchService):
         if query_id == "api.error_rate.5m":
             stats=telemetry.snapshot()
             return {"query_id":query_id, "availability":stats['availability'], "data":stats}
+        if query_id in QUERY_IDS:
+            return {"query_id": query_id, "availability": "unsupported", "data": None,
+                    "reason": "该查询已在面板清单登记但尚未实现，界面不得显示为 0"}
         raise HTTPException(404, "query not registered")
 
     @app.get("/v1/runs")
@@ -161,10 +164,10 @@ def create_app(service: WorkbenchService):
         return result
 
     @app.get("/v1/runs/{run_id}/revisions")
-    def revisions(run_id: str):
+    def revisions(run_id: str, limit: int = Query(20, ge=1, le=100), cursor: str | None = None):
         if service.get_run(run_id) is None:
             raise HTTPException(404, "run not found")
-        return {"items": service.list_revisions(run_id)}
+        return service.list_revisions_page(run_id, limit, cursor)
 
     @app.get("/v1/runs/{run_id}/revisions/{revision_id}")
     def revision(run_id: str, revision_id: str):
@@ -173,6 +176,7 @@ def create_app(service: WorkbenchService):
             raise HTTPException(404, "revision not found")
         return {k: v for k, v in result.items() if k != "result"} | {
             "run": result["result"]["run"],
+            "display_title": display_run_title(result["result"]["run"]),
             "series": [{k: v for k, v in entry.items() if k != "points"} | {"point_count": len(entry["points"]), "summary": summarize(entry)}
                        for entry in result["result"]["series"]],
             "evidence": result["result"].get("evidence", {}),

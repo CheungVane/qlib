@@ -1,9 +1,25 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
 const {test}=require('node:test');
 const source=fs.readFileSync(require('node:path').join(__dirname,'../quant_workbench/ui/app.js'),'utf8').replace(/init\(\);\s*$/,'');
-function ui(fetch){
+// ids that exist in index.html; they are always resolvable, everything else must be rendered
+const STATIC_IDS=['content','notice','page-title','page-subtitle','page-help','source-legend-help','health-label',
+  'run-list','run-list-toggle','run-search','help-modal','help-modal-title','help-modal-body','help-modal-close'];
+function htmlIds(html){return [...String(html).matchAll(/id="([^"]+)"/g)].map(m=>m[1]);}
+function ui(fetch,options={}){
+  const strict=!!options.strict;
   const elements={};
-  const document={getElementById:id=>elements[id]??=( {innerHTML:'',textContent:''}),querySelectorAll:()=>[]};
+  const declared=new Set(STATIC_IDS);
+  const make=id=>{
+    const el={textContent:''};
+    let html='';
+    Object.defineProperty(el,'innerHTML',{get:()=>html,set:value=>{html=String(value);htmlIds(html).forEach(x=>declared.add(x));}});
+    return el;
+  };
+  const document={getElementById:id=>{
+    if(elements[id])return elements[id];
+    if(strict&&!declared.has(id))return null;
+    return elements[id]=make(id);
+  },querySelectorAll:()=>[],querySelector:()=>null};
   const context={URLSearchParams,URL,location:{search:'',hash:'',href:'http://localhost/'},Intl,fetch,document,crypto:require('node:crypto').webcrypto};
   vm.createContext(context);vm.runInContext(source,context);return {context,elements,run:code=>vm.runInContext(code,context)};
 }
@@ -202,11 +218,11 @@ test('U15: the research centre renders sub-tabs with a scrolling, folded pane',a
 
 const catalogFixture={items:[
   {kind:'qlib.cn_synthetic_backtest',executor_id:'qlib_subprocess',label:'Qlib CN 合成行情训练+回测',probe:false,
-   data_nature:'synthetic_current_rules_counterfactual',description:'编译独立工作目录并用 Qlib 运行',available:true,checks:[],reasons:[]},
+   data_nature:'synthetic_current_rules_counterfactual',result_destination:'auto_import',description:'编译独立工作目录并用 Qlib 运行',available:true,checks:[],reasons:[]},
   {kind:'rdagent.factor.baseline',executor_id:'rdagent_subprocess',label:'RD-Agent 因子基线（集成探针）',probe:true,
-   data_nature:'synthetic_scenario',description:'本地因子基线回测',available:true,checks:[],reasons:[]},
+   data_nature:'synthetic_scenario',result_destination:'manual_export_required',description:'本地因子基线回测',available:true,checks:[],reasons:[]},
   {kind:'rdagent.factor.loop',executor_id:'rdagent_subprocess',label:'RD-Agent 单轮因子循环（集成探针）',probe:true,
-   data_nature:'synthetic_scenario',description:'单轮因子演化循环',available:true,checks:[],reasons:[]},
+   data_nature:'synthetic_scenario',result_destination:'manual_export_required',description:'单轮因子演化循环',available:true,checks:[],reasons:[]},
 ]};
 
 test('U16: every execution entry explains itself and the choice survives a re-render',()=>{
@@ -284,4 +300,30 @@ test('U17: the comparison table marks best/worst with colour and text',()=>{
   assert.equal((html.match(/cell-worst/g)||[]).length,1);
   assert.match(html,/方向未登记/);
   assert.match(html,/暂无观测|未知/);
+});
+
+test('U16b: strict DOM mode fails on missing-element bindings',async()=>{
+  const attempts=[{attempt_id:'attempt-0001-1111-2222-333333333333',kind:'qlib.cn_synthetic_backtest',label:'回测',
+    probe:false,status:'succeeded',has_log:true,cancel_pending:false,exit_code:0,started_at:'2026-09-26T00:00:00Z',
+    created_at:'2026-09-26T00:00:00Z',ended_at:'2026-09-26T00:01:00Z',outcome:null,error_code:null,
+    error_message:null,config_fingerprint:'f'.repeat(64),workspace_label:'ws'}];
+  const research=Array.from({length:3},(_,i)=>({id:`research-${i}`,title:`研究 ${i}`,session:'Loop_0',
+    status:'result_available',factor_count:1,synthetic:true,facts:{},metrics:{}}));
+  const x=ui(async path=>{
+    if(path.startsWith('/v1/research?'))return response({items:research,total:3,next_offset:null});
+    if(path.startsWith('/v1/agents/'))return response({chat:{},embedding:{},runtime:{},execution:{reasons:[]}});
+    if(path==='/v1/executions/catalog')return response({items:[]});
+    if(path.startsWith('/v1/executions'))return response({items:attempts,next_cursor:null});
+    return response({items:[]});
+  },{strict:true});
+  // attempts tab: the research toolbar is not rendered, so binding it would throw in strict mode
+  await x.run("state.view='agent';state.historyTab='attempts';renderAgent()");
+  const attemptsHtml=x.elements['content'].innerHTML;
+  assert.match(attemptsHtml,/class="history-scroll"/);
+  assert.ok(!/id="research-search"/.test(attemptsHtml),'执行tab不渲染研究工具栏');
+  // research tab: the toolbar is rendered and must be resolvable
+  await x.run("state.historyTab='research';renderAgent()");
+  const researchHtml=x.elements['content'].innerHTML;
+  assert.match(researchHtml,/id="research-search"/);
+  assert.equal(typeof x.elements['research-search'].onsubmit,'function');
 });
