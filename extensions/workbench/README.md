@@ -42,6 +42,14 @@ extensions/workbench/.venv/bin/qwb attempt-stats --window-seconds 86400
 
 RD-Agent 入口的结果是研究快照，仍按“可信离线导出后再入库”的路子处理，不会自动当成回测结果发布。
 
+交付门禁（路由覆盖、核心DTO键集合与全部回归）：
+
+```bash
+bash scripts/workbench_gate.sh
+```
+
+脚本依次运行工作台 Python 与 JavaScript 套件，其中 `tests/test_contracts.py` 冻结 `/v1` 路由与核心只读 DTO 的键集合；改 DTO 必须同时改契约测试。这是本地/代理门禁，不是外部 CI 服务。
+
 常用查询：
 
 ```bash

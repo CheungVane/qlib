@@ -23,7 +23,7 @@
 | drawdown定义 | observed_equity.v1只从首个观测权益起；initial_equity.v1须有初始权益证据。两者均为工作台派生；旧错误definition名称保持历史对象并给限制注解 |
 | provenance / data_nature | 来源与真实/模拟性质分开；源证据冲突拒绝；旧无来源证明的声明不得变成认证 |
 
-当前运行时验证器为model.validate_package；全领域MetricDefinition/主体、freshness采集、JSON Schema/OpenAPI自动一致性仍为M0未完成项。本表约束当前切片，不以缺字段自动填造fresh/coverage。
+当前运行时验证器为model.validate_package；`/v1`路由覆盖与核心DTO键集合已由契约测试冻结（API03，`scripts/workbench_gate.sh`一键复核）。全领域MetricDefinition/主体、freshness采集与完整JSON Schema校验器仍为M0未完成项。本表约束当前切片，不以缺字段自动填造fresh/coverage。
 
 ## 执行结果自动入库（EXEC12）
 
