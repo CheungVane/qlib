@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Quant Workbench</title>
-  <link rel="stylesheet" href="/ui/style.css?v=7">
-  <script src="/ui/app.js?v=14" defer></script>
+  <link rel="stylesheet" href="/ui/style.css?v=8">
+  <script src="/ui/app.js?v=15" defer></script>
 </head>
 <body>
   <div class="shell">
@@ -28,12 +28,18 @@
       <div class="sidebar-foot"><span class="status-dot"></span> 本地研究服务 <span id="health-label">检查中</span></div>
     </aside>
     <main class="main">
-      <header class="topbar"><div><div class="eyebrow">RESEARCH / WORKBENCH</div><h1 id="page-title">总览</h1><p id="page-subtitle">研究运行、数据状态与系统观察</p></div><div class="top-actions"><span class="pill">中国市场</span><span class="pill ghost">本地可写 · 同源校验</span></div></header>
-      <div class="source-legend">来源标记：<span class="origin origin-native">引擎原始记录</span><span class="origin origin-derived">工作台计算</span><span class="origin origin-custom">定制检查</span><span class="origin origin-opinion">Agent生成意见</span><span class="origin origin-fixture">手写演示样本</span><span class="origin origin-limited">能力受限</span><span class="origin origin-unsupported">未接入</span><p>来源与真实性不同：原始引擎输出也可基于模拟行情；未记录值不补零。</p></div>
+      <header class="topbar"><div><div class="eyebrow">RESEARCH / WORKBENCH</div><h1 id="page-title">总览</h1><p id="page-subtitle">研究运行、数据状态与系统观察</p></div><div class="top-actions"><span class="pill">中国市场</span><span class="pill ghost">本地可写 · 同源校验</span><span id="page-help"></span></div></header>
+      <div class="source-legend"><span id="source-legend-help"></span> 来源标记：<span class="origin origin-native">引擎原始记录</span><span class="origin origin-derived">工作台计算</span><span class="origin origin-custom">定制检查</span><span class="origin origin-opinion">Agent生成意见</span><span class="origin origin-fixture">手写演示样本</span><span class="origin origin-limited">能力受限</span><span class="origin origin-unsupported">未接入</span><p>来源与真实性不同：原始引擎输出也可基于模拟行情；未记录值不补零。</p></div>
       <div id="notice" role="status" aria-live="polite"></div>
       <div id="content" class="content"><div class="loading">正在加载工作台…</div></div>
       <footer>结果保留来源与口径 · 模拟数据会明确标记 · 未接入的数据不会显示为零</footer>
     </main>
+  </div>
+  <div id="help-modal" class="modal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="help-modal-title">
+      <div class="modal-head"><span class="help-badge" aria-hidden="true">?</span><h2 id="help-modal-title">说明</h2><button type="button" class="modal-close" id="help-modal-close" aria-label="关闭说明">关闭</button></div>
+      <div id="help-modal-body" class="modal-body"></div>
+    </div>
   </div>
 </body>
 </html>

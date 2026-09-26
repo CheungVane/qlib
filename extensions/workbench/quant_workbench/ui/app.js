@@ -1,7 +1,78 @@
 const initialQuery = new URLSearchParams(location.search);
 const hasCompareQuery = initialQuery.has('compare');
-const state = {renderGeneration:0, revision: initialQuery.get("revision"), seriesOffsets:{}, runs: [], selected: initialQuery.get('run'), compareIds: (initialQuery.get('compare') || '').split(',').filter(Boolean), researchId: initialQuery.get('research'), researchOffset:0, researchQuery:'', search: '', executionKey:null, view: location.hash.slice(1) || 'overview'};
+const state = {renderGeneration:0, revision: initialQuery.get("revision"), seriesOffsets:{}, runs: [], selected: initialQuery.get('run'), compareIds: (initialQuery.get('compare') || '').split(',').filter(Boolean), researchId: initialQuery.get('research'), researchOffset:0, researchQuery:'', search: '', executionKey:null, helpTrigger:null, helpBound:false, view: location.hash.slice(1) || 'overview'};
 const titles = {overview:['总览','研究运行、数据状态与系统观察'],backtest:['回测','权益、回撤、费用与来源证据'],training:['训练','指标曲线、阶段状态与来源证据'],compare:['比较','并列查看运行，先核对数据与指标口径'],agent:['研究中心','研究结果、因子内容、过程追踪与下一步'],live:['实时','行情连接与数据新鲜度'],data:['数据','数据集来源、覆盖与质量'],system:['系统','任务状态、请求与错误观察']};
+const HELP = {
+ 'page.overview':{title:'总览怎么读',summary:'先看来源与能力边界，再看最近研究与已采集的观察指标。',ref:'UI01 / ARC08',
+  body:['总览把最近运行、研究记录和当前真正采集到的指标放在同一页。','未接入的指标显示“未接入/未记录”，不用 0 代替；模拟行情始终带标记。'],
+  points:['左侧“最近运行”可直接跳到回测或训练详情。','每个卡片右上角的问号给出该卡片的口径与限制。']},
+ 'page.backtest':{title:'回测页怎么读',summary:'权益、回撤、费用按来源分别标注，先核对口径再看数值。',ref:'UI01 / COMPARE01',
+  body:['页面按“运行概况 → 来源核查 → 规则摘要 → 权益曲线 → 成本与换手 → 原始证据”的顺序排列，逐层深入。','曲线按原始时间轴绘制，缺测处断线而不是补零；分页显示当前点位区间与是否降采样。'],
+  points:['权益、回撤等派生指标标注“工作台计算”，引擎原始值标注“引擎原始记录”。','费用与换手请回到原运行配置核对撮合口径。']},
+ 'page.training':{title:'训练页怎么读',summary:'这里只显示已记录的指标与阶段状态，单点 loss 不等于完整学习曲线。',ref:'UI01 / ARC06',
+  body:['训练页展示引擎记录的训练/验证指标与阶段状态。','指标只有单点记录时会标注“能力受限”，不能据此判断完整学习过程。']},
+ 'page.compare':{title:'比较页怎么读',summary:'并排查看总是允许；叠图与排名要通过口径检查。',ref:'COMPARE01',
+  body:['比较分三级：①并排查看；②叠图需要单位与轴一致；③排名需要口径检查通过。','检查不通过时只做并列查看，并列出原因，例如日期窗口、初始资金或数据版本不同。'],
+  points:['模拟与真实结果不会静默混入同一排名。','每个运行单独绘图，保留各自时间轴，不按点位硬叠加。']},
+ 'page.agent':{title:'研究中心怎么读',summary:'上半区是执行（真实进程），下半区是研究记录与过程快照。',ref:'EXECUTION.md / RESEARCH_WORKBENCH.md',
+  body:['研究中心可以启动、取消隔离进程执行，并查看每次 Attempt 的状态、退出码、结果摘要与脱敏日志尾部。','研究记录来自已导出的过程快照；执行成功不等于结果已入库。'],
+  points:['执行成功仍需显式导入结果库，来源标记与情景指纹照旧。','标记“集成探针”的入口用于验证链路，不代表研究成果。']},
+ 'page.live':{title:'实时页为什么是空的',summary:'行情流尚未接入，没有连接记录时不显示 0。',ref:'LIVE01 / UI01',
+  body:['实时行情、延迟与缺口能力属于后续阶段；当前没有数据流会话或采集记录。','按规范，无采集样本时不显示 0%，而是明确说明未接入。']},
+ 'page.data':{title:'数据页怎么读',summary:'这里展示当前结果的来源与情景证据，不是供应商数据目录。',ref:'ARC06 / DATA01—05',
+  body:['数据页显示选中运行的数据集身份、内容版本、日历与执行情景指纹。','情景指纹描述配置，不能代替行情内容版本；供应商数据目录与真实 PIT 校验尚未接入。']},
+ 'page.system':{title:'系统页怎么读',summary:'这里只有工作台 HTTP 服务的实测遥测，不代表引擎错误率。',ref:'OBS01 / OBS02',
+  body:['系统页展示本工作台服务的请求错误率、请求数量与响应耗时，并给出分母、窗口与采集覆盖。','任务失败率、引擎错误率与 Attempt 失败率是不同指标；本页不代替它们。']},
+ 'source.legend':{title:'来源标记怎么读',summary:'来源回答“数值从哪来”，与行情是否真实、能力是否具备是三件事。',ref:'PROVENANCE_AUDIT.md / ARC04 / ARC08',
+  body:['引擎原始记录：数值来自引擎产物；工作台计算：由平台按明示公式派生；定制检查：本项目的规则检查结果；Agent生成意见：模型文本，非平台结论；手写演示样本：人工整理，禁止用于研究排名。','能力受限与未接入表示该项能力或数据通道当前不具备，界面保留位置但不造假数据。','未记录与真实零值必须区分：未记录显示为“未记录/未获取”，不补 0。']},
+ 'provenance.panel':{title:'来源核查怎么看',summary:'逐字段列出依据与限制，原始记录不等于行情真实。',ref:'ARC04 / ARC06',
+  body:['面板把每个字段的来源类型、依据与限制列出来，用来判断一个数值能不能用于决策。','“引擎原始记录”只说明数值来自引擎产物，不说明行情真实，也不说明使用了未修改的上游执行器。']},
+ 'review.panel':{title:'规则摘要与待验证事项',summary:'这是工作台固定规则提示，不是引擎结论，也没有额外调用模型。',ref:'RESEARCH_WORKBENCH.md',
+  body:['结论、数据依据与缺口、规则建议都由固定规则生成，可复现且不发聊天请求。','“规则建议（需自行验证）”是提示项，不是平台给出的投资建议。']},
+ 'metric.overview':{title:'运行概况里的指标',summary:'四个指标分别来自何方、各自的边界在哪里。',ref:'RESULT_CONTRACT.md',
+  body:['期末权益：报告区间最后一个有效观测点的权益，不推算缺失区间；币种未记录时显示“币种未记录”，不默认人民币。','首末观测权益变化：（末点 − 首点）/ 首点，由工作台派生，只覆盖首末之间的观测，不等于完整区间收益。','最大观测权益回撤：在已记录观测点上取值，命名强调“观测”；观测间距越大越可能低估真实回撤。','引擎：显示引擎标识，运行时版本缺失就显示未知，不用当前环境版本回填。']},
+ 'metric.engine':{title:'引擎与运行时版本',summary:'引擎标识与版本分开显示；版本未知即显示未知。',ref:'ARC06',
+  body:['不同引擎的结果可以并排查看，但含义、阶段与指标定义各自保留。','缺失的运行时版本不会用当前环境版本回填。']},
+ 'metric.table.native':{title:'原生指标表怎么读',summary:'保留引擎自己的定义与单位，空值不填零。',ref:'RESULT_CONTRACT.md',
+  body:['原生指标按引擎命名与单位展示，平台不强行统一口径。','跨运行比较这些指标前，先到比较页做口径检查。']},
+ 'series.coverage':{title:'曲线覆盖与分页',summary:'显示当前点位区间、总点数与是否降采样。',ref:'ARC07',
+  body:['大序列分页返回，每页有点数上限，界面显示当前区间与总量。','缺测点断线显示并列出原因；降采样会显式标注。']},
+ 'cost.turnover':{title:'费用与换手',summary:'费用按分项口径记录；换手序列不可用时会说明原因。',ref:'CN01—CN03',
+  body:['佣金、最低佣金、过户费、卖出税与滑点按当前生效情景分项计算。','费用序列缺失时显示“未记录/不支持”，不以 0 表示免费。']},
+ 'compare.rules':{title:'比较口径检查',summary:'能不能排名由检查结果决定，不由界面外观决定。',ref:'COMPARE01',
+  body:['检查输出 comparable / partial / incompatible 及原因，例如数据版本、日历、初始资金或费用情景不同。','模拟与真实结果、手写样本不参与排名。']},
+ 'exec.launch':{title:'启动研究（隔离进程）',summary:'每次启动都是一次独立进程，有独立工作目录与日志。',ref:'EXECUTION.md EXEC03 / EXEC04',
+  body:['执行入口按 kind 选择；提交前会逐项检查前置条件，缺任一项就拒绝启动且不产生 Attempt。','同一提交期间复用同一幂等键以吸收重复点击；启动成功或去重后自动换新键，可以再次启动。']},
+ 'exec.preconditions':{title:'前置条件怎么读',summary:'每项检查都给出状态与依据；阻塞项会阻止启动。',ref:'EXECUTION.md EXEC06',
+  body:['检查覆盖引擎运行时、聊天与 embedding 可达性、数据快照指纹、日历、费用情景、容器资源与 Attempt 存储。','标“该入口非必需”的项目不影响这个入口；标“阻塞启动”的必须解决。']},
+ 'exec.attempts':{title:'执行记录怎么读',summary:'一行是一次真实进程；执行状态与是否入库是两件事。',ref:'EXECUTION.md EXEC02 / EXEC08',
+  body:['状态为平台执行状态：排队、运行中、成功、失败、已取消、中断。','“结果需显式导入”表示执行成功但结果还没进入结果库；退出码未知表示没有退出证据，不推断成功。']},
+ 'exec.status':{title:'执行状态含义',summary:'只有执行器证据能让 Attempt 落终态。',ref:'EXECUTION.md EXEC02',
+  body:['成功：退出码为 0；失败：退出码非 0；已取消：用户请求且确认进程结束；中断：进程失联且没有退出证据。','取消请求中表示已记录请求但尚未确认进程结束，与已取消不同。']},
+ 'exec.cancel':{title:'取消为什么需要确认',summary:'只有确认进程结束才落“已取消”，否则保持运行中。',ref:'EXECUTION.md EXEC05',
+  body:['取消先记录请求，再终止进程组（先 SIGTERM，超时后 SIGKILL）。','若进程已产生真实终态证据（例如退出码 0），保留真实终态并说明取消未被采纳。']},
+ 'exec.log':{title:'日志尾部读取',summary:'有界尾部，不是实时流；内容已脱敏。',ref:'EXECUTION.md EXEC07 / EXEC08',
+  body:['接口有行数与字节上限，只读取尾部，因此不能当作完整日志或实时进度。','返回内容会替换密钥与服务端绝对路径；工作目录只以标签显示。']},
+ 'exec.outcome':{title:'结果与证据摘要',summary:'终态后核对的产物摘要，不是研究结论。',ref:'EXECUTION.md',
+  body:['摘要包含质量检查、指标数量、MLflow run id、研究会话数量等可核对信息。','摘要收集失败时显示“摘要收集受限”，不清理已有执行结果。']},
+ 'research.list':{title:'研究记录怎么读',summary:'一行一次研究过程；过程不完整不等于研究失败。',ref:'RESEARCH_WORKBENCH.md',
+  body:['研究记录来自已导出的快照，包含结果状态、因子数量与部分原生指标。','点击研究标题可查看结果、假设、生成代码与阶段过程。']},
+ 'research.detail.metrics':{title:'研究指标',summary:'原生指标保留源口径，未记录不填零。',ref:'RESEARCH_WORKBENCH.md',
+  body:['指标直接来自研究产物，未做平台归一化。','与平台标准指标的名称、单位不同，跨运行比较请使用比较页。']},
+ 'research.detail.factors':{title:'因子与实现',summary:'Agent 生成的定义与代码；可执行不等于因子有效。',ref:'RDAGENT_INTEGRATION.md / ARC09',
+  body:['因子公式、变量与代码由 Agent 生成，属于意见类内容，不是平台结论。','未独立验证前，不能声称因子无未来信息或具备超额收益。']},
+ 'research.detail.feedback':{title:'Agent 评审意见',summary:'模型原文，可能包含错误解释，与数值记录分开看。',ref:'ARC09',
+  body:['这里展示模型的研究反馈原文，用于理解它的推理过程。','它不构成平台的实盘建议，也不代表已核对的数值事实。']},
+ 'research.detail.timeline':{title:'过程时间线',summary:'离线历史摘录，不是实时进度；长内容可能截断。',ref:'RESEARCH_WORKBENCH.md',
+  body:['阶段按快照记录展示，最多 300 条；长日志与代码可能被截断，未展示完整提示词。','缺失阶段保留为未记录，界面不伪造进度。']},
+ 'system.observability':{title:'API 运行观测',summary:'只有本工作台 HTTP 服务的实测，包含分母与窗口。',ref:'OBS01 / OBS02',
+  body:['错误率定义为窗口内 HTTP 5xx / 已完成请求，4xx 单列；静态资源与健康轮询默认排除。','无样本时显示“无样本”，不显示 0%；采集覆盖不足会明确标注。']},
+ 'system.storage':{title:'存储与任务',summary:'健康接口区分进程存活与存储可用。',ref:'OBS02 / EXEC01',
+  body:['健康状态只反映本地结果库可用性与数据库 schema 版本。','执行任务的真实状态请到研究中心的执行记录查看，本页统计不代替任务失败率。']},
+ 'data.evidence':{title:'数据证据怎么读',summary:'展示结果对应的数据集身份与执行情景，不是数据目录。',ref:'ARC06 / DATA01—05',
+  body:['数据集身份、内容版本、日历与情景指纹共同描述这次结果用了什么输入。','供应商目录、覆盖报告与真实 PIT 校验接入后，本页才会显示这些内容。']},
+};
+const helpKeys = Object.keys(HELP);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = (n, digits=2) => typeof n === 'number' ? new Intl.NumberFormat('zh-CN',{maximumFractionDigits:digits}).format(n) : '未知';
 const sample = run => (run?.synthetic && run?.provenance?.kind!=='fixture' ? '<span class="sample">模拟行情</span>' : '') + (run?.provenance?originBadge(run.provenance):'');
@@ -9,6 +80,58 @@ const sample = run => (run?.synthetic && run?.provenance?.kind!=='fixture' ? '<s
 const originLabels={native:'引擎原始记录',derived:'工作台计算',custom:'定制检查',opinion:'Agent生成意见',rule:'工作台规则提示',fixture:'手写演示样本',measured:'工作台实测',unknown:'来源未核实',unsupported:'未接入',limited:'能力受限',missing:'未记录'};
 function originBadge(p){if(!p)return '';return `<span class="origin origin-${esc(p.kind)}" title="${esc([p.source,...(p.limitations||[])].join('；'))}">${esc(p.label||originLabels[p.kind]||p.kind)}</span>`;}
 function badge(kind){return originBadge({kind});}
+function help(key,label=''){
+ const item=HELP[key];
+ if(!item)return '';
+ const name=label||item.title;
+ return `<span class="help-wrap"><button type="button" class="help" data-help="${esc(key)}" aria-haspopup="dialog" aria-expanded="false" aria-label="说明：${esc(name)}${item.summary?'。'+esc(item.summary):''}">?</button><span class="help-tip" role="tooltip">${esc(item.summary)}<small>点击查看完整说明</small></span></span>`;
+}
+function openHelp(key,trigger){
+ const item=HELP[key];
+ const modal=document.getElementById('help-modal');
+ if(!item||!modal)return false;
+ state.helpTrigger=trigger||null;
+ document.getElementById('help-modal-title').textContent=item.title;
+ const points=(item.points||[]).map(x=>`<li>${esc(x)}</li>`).join('');
+ document.getElementById('help-modal-body').innerHTML=`${(item.body||[]).map(x=>`<p>${esc(x)}</p>`).join('')}${points?`<ul>${points}</ul>`:''}${item.ref?`<p class="panel-note">规范依据：${esc(item.ref)}</p>`:''}`;
+ modal.hidden=false;
+ if(trigger&&trigger.setAttribute)trigger.setAttribute('aria-expanded','true');
+ const close=document.getElementById('help-modal-close');
+ if(close&&close.focus)close.focus();
+ return true;
+}
+function closeHelp(){
+ const modal=document.getElementById('help-modal');
+ const trigger=state.helpTrigger;
+ if(modal)modal.hidden=true;
+ if(trigger&&trigger.setAttribute)trigger.setAttribute('aria-expanded','false');
+ if(trigger&&trigger.focus)trigger.focus();
+ state.helpTrigger=null;
+}
+function placeHelpTip(button){
+ const wrap=button.parentElement;
+ const tip=wrap&&wrap.querySelector?wrap.querySelector('.help-tip'):null;
+ if(!tip||!tip.style||typeof button.getBoundingClientRect!=='function')return;
+ const rect=button.getBoundingClientRect();
+ const width=252;
+ const viewport=(typeof window!=='undefined'&&window.innerWidth)?window.innerWidth:rect.left+width+16;
+ tip.style.top=`${Math.round(rect.bottom+8)}px`;
+ tip.style.left=`${Math.round(Math.max(8,Math.min(rect.left,viewport-width-12)))}px`;
+}
+function bindHelp(){
+ document.querySelectorAll('[data-help]').forEach(button=>{
+  button.onclick=event=>{event.preventDefault();openHelp(button.dataset.help,button);};
+  button.onmouseenter=()=>placeHelpTip(button);
+  button.onfocus=()=>placeHelpTip(button);
+ });
+ if(state.helpBound)return;
+ state.helpBound=true;
+ const modal=document.getElementById('help-modal');
+ const close=document.getElementById('help-modal-close');
+ if(close)close.onclick=()=>closeHelp();
+ if(modal)modal.onclick=event=>{const target=event.target;const inCard=target&&target.closest&&target.closest('.modal-card');if(!inCard)closeHelp();};
+ if(document.addEventListener)document.addEventListener('keydown',event=>{const target=document.getElementById('help-modal');if(event.key==='Escape'&&target&&!target.hidden)closeHelp();});
+}
 function provenancePanel(detail){
  const audit=detail.provenance;if(!audit)return card('来源核查',badge('unknown')+' 当前结果未登记来源映射');
  return card('数据来源与能力标记',`${originBadge(audit.run)} ${audit.data_nature==='synthetic'?'<span class="sample">模拟行情</span>':''}<p class="panel-note">原始记录只表示数值来自引擎产物，不表示行情真实，也不表示使用未经修改的上游执行器。下表区分字段来源与计算范围。</p><details><summary>逐项查看字段来源、公式与限制</summary><div class="table-scroll"><table class="table"><thead><tr><th>字段</th><th>来源类型</th><th>依据与限制</th></tr></thead><tbody>${audit.fields.map(x=>`<tr><td>${esc(x.field)}</td><td>${originBadge(x)}</td><td>${esc(x.source)}<br><span class="warning">${esc(x.limitations.join('；'))}</span></td></tr>`).join('')}</tbody></table></div></details>`);
@@ -29,7 +152,17 @@ async function api(path) {
   return body;
 }
 function empty(message){return `<div class="empty">${esc(message)}</div>`;}
-function card(title,body,meta=''){return `<section class="card"><div class="card-head"><h2>${esc(title)}</h2><small>${esc(meta)}</small></div>${body}</section>`;}
+const cardHelp = {
+ '最近研究与待检查事项':'research.list','研究记录':'research.list','会话内实验':'research.list','研究结果':'research.list','产物缺口':'research.list',
+ '运行概况':'metric.overview','权益曲线':'series.coverage','成本与换手':'cost.turnover',
+ '来源证据':'provenance.panel','来源核查':'provenance.panel','数据来源与能力标记':'provenance.panel','能力边界与来源审计':'provenance.panel','来源与限制':'provenance.panel',
+ '规则摘要与待验证事项':'review.panel','训练运行':'metric.engine','训练与信号指标':'metric.table.native',
+ '选择运行':'compare.rules','口径检查':'compare.rules','比较结果':'compare.rules',
+ '启动研究（隔离进程）':'exec.launch','执行记录':'exec.attempts','运行环境':'exec.preconditions',
+ '结果指标':'research.detail.metrics','因子与实现':'research.detail.factors','Agent 评审意见':'research.detail.feedback','过程时间线':'research.detail.timeline',
+ 'API 运行观测':'system.observability','存储与任务':'system.storage','当前研究的数据证据':'data.evidence',
+};
+function card(title,body,meta='',helpKey=''){const key=helpKey||cardHelp[title]||'';return `<section class="card"><div class="card-head"><div class="card-title"><h2>${esc(title)}</h2>${key?help(key,title):''}</div><small>${esc(meta)}</small></div>${body}</section>`;}
 function statusLabel(status){const text={succeeded:'成功',failed:'失败',running:'运行中',queued:'排队中',cancelled:'已取消',interrupted:'中断',unknown:'未知'}[status]||status;return `<span class="status ${status==='failed'?'failed':status==='unknown'?'unknown':''}">${esc(text)}</span>`;}
 function setNotice(message=''){document.getElementById('notice').textContent=message;}
 function setView(view){
@@ -37,6 +170,7 @@ function setView(view){
   document.querySelectorAll('.nav').forEach(button=>button.classList.toggle('active',button.dataset.view===state.view));
   document.getElementById('page-title').textContent=titles[state.view][0];
   document.getElementById('page-subtitle').textContent=titles[state.view][1];
+  document.getElementById('page-help').innerHTML=help(`page.${state.view}`);
   render();
 }
 function selectRun(id,revision=null){state.selected=id;state.revision=revision;const url=new URL(location.href);url.searchParams.set('run',id);if(revision)url.searchParams.set('revision',revision);else url.searchParams.delete('revision');history.replaceState(null,'',url);renderRuns();render();}
@@ -54,7 +188,8 @@ function renderWidget(widget,payload){
     const rows=payload.data.items.map(item=>`<tr><td><button class="link-button" data-open-run="${esc(item.run_id)}">${esc(item.run.title)}</button> ${sample(item.run)}</td><td>${esc(item.run.engine.id)}</td><td>${statusLabel(item.run.status)}</td><td>${esc(item.run.created_at.slice(0,10))}</td></tr>`).join('');
     body=`<table class="table"><thead><tr><th>运行</th><th>引擎</th><th>状态</th><th>日期</th></tr></thead><tbody>${rows}</tbody></table>`;
   }else if(widget.query.id==='api.error_rate.5m'){body=`<div class="kpi">${payload.data.error_rate===null?'无样本':fmt(payload.data.error_rate*100)+'%'}<small> 5xx / 已完成请求</small></div><p class="panel-note">${payload.data.server_errors} / ${payload.data.completed_requests} 请求 · 覆盖 ${fmt(payload.data.coverage_seconds,0)} 秒（窗口300秒）</p>`;}else body=empty('暂无数据');
-  return `<section class="card" style="grid-column:span ${widget.layout.w}"><div class="card-head"><h2>${esc(widget.title)}</h2><small>${esc(payload.availability)}</small></div>${body}</section>`;
+  const widgetHelp=widget.query.id==='api.error_rate.5m'?'system.observability':widget.query.id==='runs.latest'?'research.list':'';
+  return `<section class="card" style="grid-column:span ${widget.layout.w}"><div class="card-head"><div class="card-title"><h2>${esc(widget.title)}</h2>${widgetHelp?help(widgetHelp,widget.title):''}</div><small>${esc(payload.availability)}</small></div>${body}</section>`;
 }
 async function renderOverview(){
   const manifest=await api('/v1/dashboards/overview');
@@ -156,7 +291,7 @@ async function renderCompare(){
     const heading=`<div class="heading-row"><p class="panel-note">${esc(selectedRun.engine.id)} · ${esc(selectedRun.dataset.id)} · ${sample(selectedRun)}</p><button class="link-button" data-open-run="${esc(id)}">查看详情</button></div>`;
     const facts=`<div class="metric-row"><div class="metric-box"><small>期末权益</small><strong>${fmt(last)} <small>${esc(result?.series.unit||'')}</small></strong></div><div class="metric-box"><small>首末观测权益变化 ${badge('derived')}</small><strong>${typeof review.facts.observed_equity_change==='number'?fmt(review.facts.observed_equity_change*100)+'%':'未知'}</strong></div><div class="metric-box"><small>数据版本</small><strong>${esc(selectedRun.dataset.version||'未知')}</strong></div></div>`;
     const context=`<dl class="context-grid"><dt>报告区间</dt><dd>${esc(bounds?.start||'未记录')} → ${esc(bounds?.end||'未记录')}</dd><dt>最大观测回撤 ${badge('derived')}</dt><dd>${typeof review.facts.max_observed_drawdown==='number'?fmt(review.facts.max_observed_drawdown*100)+'%':'未知'}</dd><dt>累计成本</dt><dd>${fmt(review.facts.total_cost)} CNY</dd><dt>质量</dt><dd>${badge(review.quality?'custom':'missing')} ${esc(review.quality?.status||'未记录')}</dd><dt>执行情景</dt><dd>${esc(scenario?.fingerprint?.slice(0,12)||'未知')}</dd><dt>佣金 / 最低费</dt><dd>${esc(scenario?.commission_both??'未知')} / ${esc(scenario?.minimum_commission??'未知')}</dd><dt>结果版本</dt><dd>${esc(revisionId.slice(0,12))}</dd></dl>`;
-    return card(selectedRun.title,heading+facts+context+seriesPanel(result),esc(selectedRun.created_at.slice(0,10)));
+    return card(selectedRun.title,heading+facts+context+seriesPanel(result),esc(selectedRun.created_at.slice(0,10)),'page.compare');
   }));
   document.getElementById('content').innerHTML=`<div class="stack">${picker}${card('口径检查',assessmentBody)}<div class="compare-grid">${panels.join('')}</div></div>`;
   bindCompare();
@@ -211,7 +346,7 @@ function attemptTable(attempts){
   const exitCode=(a.exit_code===null||a.exit_code===undefined)?'未知':esc(a.exit_code);
   return `<tr><td><code>${esc(a.attempt_id.slice(0,8))}</code><br><small>${esc(a.label)}${a.probe?' · 集成探针':''}</small></td><td>${statusLabel(a.status)}${a.cancel_pending?'<br><small class="warning">取消请求中</small>':''}</td><td><small>${esc(started)}<br>${esc(ended)}</small></td><td>${exitCode}${a.error_code?`<br><small class="warning">${esc(a.error_code)}</small>`:''}</td><td>${esc(outcomeSummary(a.outcome))}${a.error_message?`<br><small class="warning">${esc(a.error_message)}</small>`:''}<br><small>指纹 ${esc((a.config_fingerprint||'未知').slice(0,10))} · 工作目录 ${esc(a.workspace_label||'未记录')}</small></td><td>${actions.join(' ')||'—'}</td></tr>`;
  }).join('');
- return `<div class="table-scroll"><table class="table"><thead><tr><th>Attempt</th><th>状态</th><th>时间</th><th>退出码</th><th>结果与证据</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table></div><div id="attempt-log"></div>`;
+ return `<div class="table-scroll"><table class="table"><thead><tr><th>Attempt</th><th>状态 ${help('exec.status')}</th><th>时间</th><th>退出码</th><th>结果与证据 ${help('exec.outcome')}</th><th>操作 ${help('exec.cancel',"执行操作")}</th></tr></thead><tbody>${rows}</tbody></table></div><div id="attempt-log"></div>`;
 }
 function bindExecution(catalog){
  const form=document.getElementById('execution-form');
@@ -253,7 +388,7 @@ function bindExecution(catalog){
    const response=await fetch(`/v1/executions/${encodeURIComponent(button.dataset.attemptLog)}/log?tail=80`);
    const body=await response.json().catch(()=>({}));
    if(!response.ok)throw new Error(body.message||'日志读取失败');
-   target.innerHTML=`<details open><summary>日志尾部（脱敏；最多80行，${body.truncated?'已截断':'未截断'}）</summary><pre>${esc((body.lines||[]).join('\n'))}</pre></details>`;
+   target.innerHTML=`<details open><summary>日志尾部 ${help('exec.log')}（脱敏；最多80行，${body.truncated?'已截断':'未截断'}）</summary><pre>${esc((body.lines||[]).join('\n'))}</pre></details>`;
   }catch(error){target.innerHTML=`<p class="warning">${esc(error.message)}</p>`;}
  });
 }
@@ -330,7 +465,7 @@ async function renderDataEvidence(){
 }
 function renderUnavailable(view){
   const info={live:['实时数据尚未接入','目前没有行情流会话或延迟记录。上线前需要数据供应商、交易日历、重连与缺口策略。'],data:['数据目录尚未接入','当前运行可查看结果来源，数据快照与质量报告将在数据层实施后出现。'],system:['系统遥测尚未接入','API和任务错误率没有采集样本，当前不显示0%。健康接口仅反映本地结果库可用性。']}[view];
-  document.getElementById('content').innerHTML=`<div class="grid">${card(info[0],badge('unsupported')+empty(info[1]))}</div>`;
+  document.getElementById('content').innerHTML=`<div class="grid">${card(info[0],badge('unsupported')+empty(info[1]),'',`page.${view}`)}</div>`;
 }
 async function render(){
   const generation=++state.renderGeneration;
@@ -345,10 +480,12 @@ async function render(){
     else if(state.view==='data')await renderDataEvidence();
     else renderUnavailable(state.view);
     bindSeriesPages();
+    bindHelp();
   }catch(error){if(generation!==state.renderGeneration||error.name==='StaleRender')return;setNotice(error.message);document.getElementById('content').innerHTML=empty('页面加载失败，请重试。')+'<button class="action" id="retry-page">重试</button>';document.getElementById('retry-page').onclick=()=>render();}
 }
 async function init(){
   document.querySelectorAll('.nav').forEach(button=>button.onclick=()=>setView(button.dataset.view));
+  document.getElementById('source-legend-help').innerHTML=help('source.legend');
   document.getElementById('run-search').oninput=event=>{state.search=event.target.value.toLocaleLowerCase().trim();renderRuns();};
   window.addEventListener('hashchange',()=>{const view=location.hash.slice(1)||'overview';if(view!==state.view)setView(view);});
   try{

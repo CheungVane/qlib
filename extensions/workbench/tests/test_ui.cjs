@@ -93,3 +93,61 @@ test('EXEC09: a successful launch rotates the idempotency key so the same entry 
   assert.equal(posts[1].idempotency_key,rotated);
   assert.notEqual(posts[1].idempotency_key,posts[0].idempotency_key);
 });
+
+const helpFixture={
+  catalog:{items:[{kind:'stub.kind',executor_id:'stub',label:'桩入口',probe:false,data_nature:'test',
+    description:'测试入口',available:true,reasons:[],
+    checks:[{id:'stub.ready',status:'ok',detail:'就绪',required_for:['stub.kind']}]}]},
+  attempts:[{attempt_id:'abcdefgh-0000-1111-2222-333333333333',kind:'stub.kind',label:'桩入口',probe:false,
+    status:'running',has_log:true,cancel_pending:false,exit_code:null,started_at:'2026-09-26T00:00:00Z',
+    created_at:'2026-09-26T00:00:00Z',ended_at:null,outcome:null,error_code:null,error_message:null,
+    config_fingerprint:'f'.repeat(64),workspace_label:'ws'}],
+};
+
+test('U14: every rendered help icon resolves to a registry entry',()=>{
+  const x=ui(async()=>response({items:[]}));
+  const used=(html)=>[...html.matchAll(/data-help="([^"]+)"/g)].map(match=>match[1]);
+  const keys=x.run('helpKeys');
+  assert.ok(keys.length>=20);
+
+  const panels=x.run(`executionPanel(${JSON.stringify(helpFixture.catalog)},${JSON.stringify(helpFixture.attempts)})`)
+    +x.run(`attemptTable(${JSON.stringify(helpFixture.attempts)})`);
+  const panelKeys=used(panels);
+  assert.ok(panelKeys.length>=4,'execution surfaces must expose help entries');
+  panelKeys.forEach(key=>assert.ok(keys.includes(key),`unknown help key rendered: ${key}`));
+  assert.match(panels,/help-tip/);
+
+  const misc=used(x.run("help('page.overview')+help('source.legend')+card('权益曲线','x','',null)"));
+  misc.forEach(key=>assert.ok(keys.includes(key),`unknown help key rendered: ${key}`));
+
+  const missingPages=x.run("['overview','backtest','training','compare','agent','live','data','system'].filter(v=>!HELP['page.'+v])");
+  assert.deepEqual([...missingPages],[]);
+  const orphanCards=x.run('Object.entries(cardHelp).filter(([,k])=>!HELP[k]).map(([t,k])=>`${t} → ${k}`)');
+  assert.deepEqual([...orphanCards],[]);
+  const incomplete=x.run('helpKeys.filter(k=>{const i=HELP[k];return !i.title||!i.summary||!(i.body&&i.body.length)||!i.ref})');
+  assert.deepEqual([...incomplete],[],'每个说明必须有标题、摘要、正文与规范依据');
+  assert.equal(x.run("help('not.a.key')"),'');
+});
+
+test('U14: hover summary and click dialog share one registry entry',()=>{
+  const x=ui();
+  const tip=x.run("help('exec.status')");
+  assert.match(tip,/class="help" data-help="exec.status"/);
+  assert.match(tip,/class="help-tip" role="tooltip"/);
+  assert.match(tip,/aria-label="说明：执行状态含义/);
+  assert.match(tip,/点击查看完整说明/);
+
+  const button={dataset:{help:'exec.status'},attrs:{},setAttribute(name,value){this.attrs[name]=value;},focus(){this.focused=true;}};
+  x.context.helpButton=button;
+  assert.equal(x.run("openHelp('not.a.key', helpButton)"),false);
+  assert.equal(x.elements['help-modal'].hidden,undefined);
+  assert.equal(x.run("openHelp('exec.status', helpButton)"),true);
+  assert.equal(x.elements['help-modal'].hidden,false);
+  assert.equal(x.elements['help-modal-title'].textContent,'执行状态含义');
+  assert.match(x.elements['help-modal-body'].innerHTML,/规范依据：EXECUTION\.md EXEC02/);
+  assert.equal(button.attrs['aria-expanded'],'true');
+  x.run('closeHelp()');
+  assert.equal(x.elements['help-modal'].hidden,true);
+  assert.equal(button.attrs['aria-expanded'],'false');
+  assert.equal(button.focused,true);
+});
