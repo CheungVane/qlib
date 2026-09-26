@@ -1,7 +1,7 @@
 # 执行层：Attempt、执行器与取消语义
 
-状态：生效。版本：1。生效日期：2026-09-26。
-关联需求：U03、U04、U09、U11、U12；上游要求 ID：ARC02、ARC04、ARC05、RUN01—RUN03、API02、AGENT04、OPS01、OBS01—OBS02。验收：IMPLEMENTATION 阶段 M3 的 A18、A19。
+状态：生效。版本：2（设计刷新，新增合同待实现）。生效日期：2026-09-26。
+关联需求：U03、U04、U09、U11、U12、U13、U23；上游要求 ID：ARC02、ARC04、ARC05、RUN01—RUN03、API02、AGENT04、OPS01、OBS01—OBS02。验收：IMPLEMENTATION 阶段 M3 的 A18、A19。
 
 本文是"工作台从只读看板变成研究平台"的执行合同。它不改变结果语义专题（[RESULT_CONTRACT.md](RESULT_CONTRACT.md)）与来源专题（[PROVENANCE_AUDIT.md](PROVENANCE_AUDIT.md)）；执行成功不等于研究有效，Attempt 成功也不自动等于结果已可信入库。
 
@@ -17,13 +17,13 @@
 
 范围内：执行入口与 Attempt 生命周期，以及**由执行结果触发的自动入库**（EXEC12）：执行器声明导入候选、平台按导入适配器发布结果并记录 ImportReceipt。
 
-不在范围内：任务队列与调度、资源配额/并发上限、远程或云执行器、券商下单、子进程内存/CPU 硬限制、日志流式推送。以上缺口必须在 UI 与实施文档中保持可见，不能以按钮存在代替能力。
+当前实现未覆盖：任务队列与调度、资源配额/并发上限、远程或云执行器、子进程内存/CPU硬限制、日志流式推送。LIFE06将并发/超时/Agent预算列为后续个人研究执行要求，AGENT04的资源上限要求继续有效；资源下限检查不构成上限验收。券商下单属于独立交易领域（见TRADING_BOUNDARY），不复用研究Attempt状态机。以上缺口必须保持可见，不能以按钮存在代替能力。
 
 执行产生的原始产物（MLflow 目录、RD-Agent 会话目录、费用台账、质量 JSON）保留在其工作目录；自动入库只发布执行器产出且通过校验的产物，无法导入时保留 `manual_import_required` 或 `failed` 并给出原因，且两者都继续遵循来源标记与手写样本规则。
 
 ## 2. Attempt 领域模型
 
-Attempt 是平台对"某次真实进程执行"的记录，不是研究结论，也不是结果版本。
+Attempt 是平台对"某次真实进程执行"的记录，不是研究结论，也不是结果版本。与实验定义/Run/Stage的关联及重试和修改参数的区别见LIFE01；当前字段尚未完整表达该关联，旧记录不补造。
 
 | 字段 | 语义 |
 | --- | --- |
@@ -86,7 +86,7 @@ EXEC06（前置条件，AGENT04）：提交前必须执行 `preflight()` 并逐�
 - 聊天与 embedding 服务可达（RD-Agent `loop` 模式必需；只检查可达性，不读取或返回密钥）；
 - 数据快照与 `configs/cn/profile.json` 情景指纹一致；
 - 交易日历与费用情景来自当前生效配置；
-- 容器/运行时可用性与资源下限（Linux Docker 引擎、CPU/内存下限）；
+- 容器/运行时可用性与资源下限（Linux Docker引擎、CPU/内存下限），以及实际生效的资源上限/并发/超时/Agent预算；上限和预算检查尚未实现，当前探针证据不满足完整AGENT04/EXEC06；
 - 平台侧 Attempt 持久化可用（数据库 schema 就绪）；
 - 终态证据通道可用（工作目录可写、退出标记与日志路径可用）。
 
@@ -125,7 +125,7 @@ EXEC12（执行结果自动入库，U15）：自动入库是执行链路的一�
 - 触发：Attempt 落 `succeeded` 终态后，由执行器给出导入候选（例如 Qlib 私有跟踪库中的 run id、数据集身份、配置路径、模拟/真实性质）；平台调用导入适配器发布结果，并写入 ImportReceipt。
 - Attempt 的 `outcome.result_import` 状态取值：`imported`（含 `run_id`、`revision_id`、`receipt_id`、`adapter_version`、`imported_at`）、`reused`（同内容已有 revision）、`failed`（含原因）、`manual_import_required`（没有可用导入候选或该入口尚未提供导入器）。
 - 只有引擎产出的产物可作为自动入库输入；导入必须复用显式导入的校验（来源冲突拒绝、脱敏、指纹核验、只读访问源库）。任何一项不通过即 `failed`，不得降低校验以让执行“看起来成功”。
-- 自动入库不得改写历史 revision 或既有 Attempt；重复核对同一 Attempt 不得重复发布（内容哈希相同即复用）。
+- 自动入库不得改写历史revision或Attempt执行事实；可更新该Attempt的入库状态投影并追加ImportReceipt。重复核对同一Attempt不得重复发布（内容哈希相同即复用）。
 - 提供显式重试入口（CLI 与 HTTP 写接口，走同一服务）：仅对没有 `imported/reused` 回执的 Attempt 执行；重试失败保留最后一次原因。
 - 执行成功、结果入库与结果可信是三件事：`succeeded` 不保证 `imported`，`imported` 也不等于研究有效。
 
