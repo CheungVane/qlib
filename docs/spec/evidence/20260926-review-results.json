@@ -1,0 +1,64 @@
+{
+  "reviewed_commit": "89a3eb7da1a682c6b32dbc057633a9c00c5077cf",
+  "date": "2026-09-26",
+  "scope": "isolated adversarial fixtures; not an assertion of corruption or credential exposure in historical runs",
+  "python": {
+    "empty_series": "UnboundLocalError",
+    "chronological_offsets": "platform.equity points must be strictly ordered",
+    "missing_last_equity_reported_as_ending": 1001200,
+    "different_datasets_missing_currency_and_point": {
+      "status": "comparable",
+      "overlay_allowed": true,
+      "ranking_allowed": true,
+      "reasons": [],
+      "revisions": {
+        "64031904-8a44-59bc-b6a2-a51180b9f1ac": "8bcc50162a21f8b60d391cf436039286",
+        "b41a48ac-5979-5a61-8ea4-bd0a6652647d": "d3465b43ff8bd10e08a8c5791e0f83bf"
+      }
+    },
+    "unknown_nested_fee": "accepted",
+    "multi_iteration_export": {
+      "factor": "factor1",
+      "ic": 0.2,
+      "equity": 110.0,
+      "warnings": []
+    },
+    "synthetic_source_exported_as_real": {
+      "source_synthetic": true,
+      "exported_synthetic": false
+    },
+    "scrub_timing": {
+      "snapshot_contains_placeholder": false,
+      "published_package_contains_placeholder": true
+    }
+  },
+  "ui_vm": {
+    "series_error_swallowed": true,
+    "pagination": {
+      "requests": 1,
+      "next_offset": 2000,
+      "shown_ending_equity": 2000
+    },
+    "gap_chart": {
+      "polylines": 1,
+      "claims_two_points": true,
+      "connects_across_gap": true
+    }
+  },
+  "mlflow_copy": {
+    "copy_schema_before": "7d34483879f0",
+    "copy_schema_after_read": "b7e2c1a4d9f3",
+    "source_sha256_unchanged": true
+  },
+  "existing_tests": {
+    "workbench": {
+      "run": 25,
+      "passed": 24,
+      "skipped": 1
+    },
+    "qlib_cn": {
+      "run": 6,
+      "passed": 6
+    }
+  }
+}
