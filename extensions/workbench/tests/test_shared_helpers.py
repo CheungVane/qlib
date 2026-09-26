@@ -10,6 +10,7 @@ from unittest.mock import patch
 import numpy as np
 
 from quant_workbench import dto, numeric, series_view
+from quant_workbench.storage import LocalObjectStore
 
 ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = ROOT / "extensions/workbench/examples/generic-result.json"
@@ -106,3 +107,36 @@ class SeriesViewTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ObjectStoreTests(unittest.TestCase):
+    """C4: the object store is injectable and keeps its integrity checks after the split."""
+
+    def test_write_read_roundtrip_and_digest_check(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as folder:
+            store = LocalObjectStore(Path(folder) / "objects")
+            payload = b'{"a": 1}'
+            digest = hashlib.sha256(payload).hexdigest()
+            key = store.write(digest, payload)
+            self.assertTrue(key.endswith(f"{digest}.json"))
+            self.assertEqual(store.read(key), payload)
+            self.assertEqual(store.write(digest, payload), key, "同内容重复写入必须复用对象")
+            target = store.root / key
+            target.write_bytes(b'{"a": 2}')
+            with self.assertRaises(RuntimeError) as caught:
+                store.read(key)
+            self.assertIn("digest mismatch", str(caught.exception))
+            with self.assertRaises(RuntimeError):
+                store.read("../../etc/passwd")
+            with self.assertRaises(FileNotFoundError):
+                store.read("ab/" + "c" * 64 + ".json")
+
+    def test_repository_accepts_an_injected_store(self):
+        from quant_workbench.storage import LocalResultRepository
+        with tempfile.TemporaryDirectory() as folder:
+            store = LocalObjectStore(Path(folder) / "elsewhere")
+            repo = LocalResultRepository(Path(folder) / "store", object_store=store)
+            self.assertIs(repo.object_store, store)
+            self.assertEqual(repo.objects, store.root)
+            self.assertTrue((Path(folder) / "store" / "workbench.sqlite3").is_file())

@@ -2,6 +2,14 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-26 — 第三轮重构（二）：存储拆分为基础层 + 三个域 mixin（C4）
+
+- 来源：用户确认继续按审查顺序做代码优化，并强调测试同步。
+- 实现：`storage.py`（630 行）拆成 `storage_base.py`（schema 常量与迁移、连接、`SqliteStore` 基类、`LocalObjectStore` 内容寻址对象存储、`_write_object`/`_read_object` 委托）与三个域 mixin——`storage_results.py`（runs/revisions 发布与读取）、`storage_attempts.py`（Attempt 生命周期、导入回执、Attempt 统计）、`storage_factors.py`（因子实体与面板）；`storage.py` 变成 18 行组合门面并再导出常量/错误/基类，`LocalResultRepository` 的公开面（`_connect`、`objects`、schema 常量、各域方法）保持不变。
+- 对象存储可注入：构造器新增 `object_store=`，默认 `LocalObjectStore(root/objects)`；换云端对象存储只需实现 `write(content_hash, data)` 与 `read(key)`，`objects` 属性指向该存储根，现有调用与测试无需改动。
+- 验证：Python 118项测试117通过、1项环境隔离跳过（新增 `test_shared_helpers.py::ObjectStoreTests` 2项：写入-读取往返与同内容复用、篡改检测与路径穿越拒绝、以及门面接受注入存储后仍能建库）；JS回归16项通过；门禁脚本通过。拆分前后全量测试结果一致。
+- 限制：SQLite 侧仍共用同一连接助手（`_connect`），按域拆连接未做；`storage_*` 模块用 `import *` 继承原作用域（含一处显式私有导入），后续可改为显式导入清单。对象存储的清理/迁移工具未实现。
+
 ## 2026-09-26 — 第三轮重构：共享数值/DTO/序列视图（C2/C3/C9）
 
 - 来源：用户确认"代码优化"并强调测试同步；按第三轮审查顺序处理 C2 第一批、C3、C9。
