@@ -36,6 +36,7 @@ examples/rl_order_execution/outputs/
 test-output.xml
 .output
 .data
+.venv/
 
 # special software
 mlruns/

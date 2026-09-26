@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "commission_both": "0.0002",
+  "minimum_commission": "5.00",
+  "commission_includes_regulatory_fees": true,
+  "commission_includes_transfer_fee": false,
+  "initial_cash": 1000000,
+  "assumptions": [
+    "双向万二是用户指定；最低5元、含规费但不含过户费暂沿用研究假设，待券商合同确认。",
+    "费用按模拟订单单次成交计，不代表券商多笔成交合并计费规则。"
+  ]
+}

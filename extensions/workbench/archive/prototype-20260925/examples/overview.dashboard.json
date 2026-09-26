@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "dashboard_id": "overview",
+  "title": "总览",
+  "widgets": [
+    {"id": "data_freshness", "kind": "status", "title": "数据新鲜度", "query": "data.freshness", "refresh_seconds": 60, "layout": {"x": 0, "y": 0, "w": 3, "h": 2}},
+    {"id": "run_success", "kind": "metric", "title": "任务成功率（24小时）", "query": "runs.success_rate.24h", "refresh_seconds": 60, "layout": {"x": 3, "y": 0, "w": 3, "h": 2}},
+    {"id": "api_errors", "kind": "metric", "title": "API 错误率（5分钟）", "query": "api.error_rate.5m", "refresh_seconds": 30, "layout": {"x": 6, "y": 0, "w": 3, "h": 2}},
+    {"id": "latest_runs", "kind": "table", "title": "最近运行", "query": "runs.latest", "refresh_seconds": 30, "layout": {"x": 0, "y": 2, "w": 6, "h": 4}},
+    {"id": "alerts", "kind": "log", "title": "当前异常", "query": "events.active", "refresh_seconds": 15, "layout": {"x": 6, "y": 2, "w": 3, "h": 4}}
+  ]
+}

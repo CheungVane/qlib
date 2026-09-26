@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.quant-workbench/contracts/dashboard.v1.schema.json",
+  "title": "Quant Workbench Dashboard v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "dashboard_id", "title", "widgets"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "dashboard_id": {"type": "string", "minLength": 1},
+    "title": {"type": "string", "minLength": 1},
+    "widgets": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "kind", "title", "query", "layout"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "kind": {"enum": ["metric", "line", "table", "status", "log"]},
+          "title": {"type": "string", "minLength": 1},
+          "query": {"type": "string", "minLength": 1},
+          "refresh_seconds": {"type": "integer", "minimum": 0},
+          "layout": {
+            "type": "object", "additionalProperties": false,
+            "required": ["x", "y", "w", "h"],
+            "properties": {
+              "x": {"type": "integer", "minimum": 0},
+              "y": {"type": "integer", "minimum": 0},
+              "w": {"type": "integer", "minimum": 1},
+              "h": {"type": "integer", "minimum": 1}
+            }
+          }
+        }
+      }
+    }
+  }
+}

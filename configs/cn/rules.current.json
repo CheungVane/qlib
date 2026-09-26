@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "id": "cn-cash-equity-20260926",
+  "as_of": "2026-09-26",
+  "effective_from": "2026-07-06",
+  "timezone": "Asia/Shanghai",
+  "scope": "cash_equity_regular_auction",
+  "tick_size": "0.01",
+  "share_settlement_days": 1,
+  "fees": {
+    "stamp_sell": "0.0005",
+    "transfer_both": "0.00001",
+    "rounding_unit": "0.01"
+  },
+  "boards": {
+    "sse_main": {
+      "limit": "0.10",
+      "st_limit": "0.10",
+      "buy_min": 100,
+      "step": 100,
+      "max_order": 1000000
+    },
+    "szse_main": {
+      "limit": "0.10",
+      "st_limit": "0.10",
+      "buy_min": 100,
+      "step": 100,
+      "max_order": 1000000
+    },
+    "star": {
+      "limit": "0.20",
+      "st_limit": "0.20",
+      "buy_min": 200,
+      "step": 1,
+      "max_order": 100000
+    },
+    "chinext": {
+      "limit": "0.20",
+      "st_limit": "0.20",
+      "buy_min": 100,
+      "step": 100,
+      "max_order": 300000
+    },
+    "bse": {
+      "limit": "0.30",
+      "st_limit": "0.30",
+      "buy_min": 100,
+      "step": 1,
+      "max_order": 1000000
+    }
+  },
+  "sources": [
+    "https://www.sse.com.cn/lawandrules/sselawsrules2025/stocks/exchange/c/c_20260424_10816482.shtml",
+    "https://docs.static.szse.cn/www/lawrules/rule/trade/W020260424690713155663.pdf",
+    "https://www.bse.cn/jygl_list/200010919.html",
+    "https://shanxi.chinatax.gov.cn/web/detail/sx-11400-545-1780448",
+    "https://www.chinaclear.cn/zdjs/gszb/202204/f89e788c65a241e88e7f0d0348de586f.shtml"
+  ],
+  "verification_notes": [
+    "北交所规则仅检索索引核对；执行场景默认不启用北交所。",
+    "不支持IPO无限制期、退市整理、盘后固定价格、市价申报、融资融券。"
+  ]
+}

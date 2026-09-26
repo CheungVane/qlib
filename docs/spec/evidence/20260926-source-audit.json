@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "audit_date": "2026-09-26",
+  "scope": "Eight imported runs in the local workbench at audit time; not a continuing certification.",
+  "input_nature": "synthetic market data plus one handwritten fixture",
+  "method": "Compare reported equity, costs, turnover, return and scalar metrics against trusted local Qlib/RD-Agent artifacts; missing-value equality retained.",
+  "limitations": [
+    "Training step histories not fully checked in this audit.",
+    "No claim of market-data authenticity, alpha validity, or live readiness.",
+    "Local run IDs may not exist on another checkout."
+  ],
+  "source_summary_sha256": "52ed250484b222e6c1a0bdd48e384d82eb2cafd542f68f1a60126a0bcc188ea6",
+  "engine_runs_checked": 7,
+  "handwritten_fixtures": 1,
+  "checked_entries": 6288,
+  "mismatches": 0,
+  "records": [
+    {
+      "run_id": "be3194f9-29b9-52b1-8443-50a1f396889a",
+      "revision_id": "65cf13791642c7ca155534e8d4519268",
+      "source": "signed log/Quantitative Backtesting Chart",
+      "kind": "recorded_engine_output_on_synthetic_data",
+      "checked_values": 861,
+      "mismatches": []
+    },
+    {
+      "run_id": "0029ca6d-5593-5512-8392-ccb84000101f",
+      "revision_id": "0c5ba9b855dd35430b82f81a01b9f986",
+      "source": "portfolio_analysis/report_normal_1day.pkl",
+      "kind": "recorded_engine_output_on_synthetic_data",
+      "checked_values": 878,
+      "mismatches": []
+    },
+    {
+      "run_id": "ddcc1486-a0c4-564b-abd8-a4a4f0261391",
+      "revision_id": "e87b22a49eb9cb15f0fad0ebab4ace12",
+      "source": "runner result -> ret.parquet / qlib_res.csv",
+      "kind": "recorded_engine_output_on_synthetic_data",
+      "checked_values": 880,
+      "mismatches": []
+    },
+    {
+      "run_id": "8f876384-f37c-5464-821f-3781b144bc01",
+      "revision_id": "c2b25f55fe22ee3351ef3207816c1df0",
+      "source": "signed log/Quantitative Backtesting Chart",
+      "kind": "recorded_engine_output_on_synthetic_data",
+      "checked_values": 861,
+      "mismatches": []
+    },
+    {
+      "run_id": "08483b5d-3d13-5fca-851f-41ed92892b5f",
+      "revision_id": "5e08402632a09bf59b09b9bfd0395c3e",
+      "source": "runner result -> ret.parquet / qlib_res.csv",
+      "kind": "recorded_engine_output_on_synthetic_data",
+      "checked_values": 943,
+      "mismatches": []
+    },
+    {
+      "run_id": "b48d37f8-1785-5ee5-a6ff-ac56eedc2724",
+      "revision_id": "f296371cf581f3b264c0f064c0f3471a",
+      "source": "signed log/Quantitative Backtesting Chart",
+      "kind": "recorded_engine_output_on_synthetic_data",
+      "checked_values": 924,
+      "mismatches": []
+    },
+    {
+      "run_id": "80aaede5-3c2d-509d-b510-18c6a4d3c6f2",
+      "revision_id": "bebba141e1cf72f7aeb252cbcb8a203d",
+      "source": "portfolio_analysis/report_normal_1day.pkl",
+      "kind": "recorded_engine_output_on_synthetic_data",
+      "checked_values": 941,
+      "mismatches": []
+    },
+    {
+      "run_id": "ed2343e8-b23a-54a3-af2a-3c99b3265a6b",
+      "kind": "handwritten_fixture",
+      "checked_values": 0
+    }
+  ]
+}

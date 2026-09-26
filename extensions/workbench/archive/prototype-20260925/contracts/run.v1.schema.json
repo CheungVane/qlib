@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.quant-workbench/contracts/run.v1.schema.json",
+  "title": "Quant Workbench Run v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "kind", "status", "engine", "dataset", "started_at", "config_hash"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "kind": {"enum": ["training", "backtest", "live_monitor"]},
+    "status": {"enum": ["queued", "running", "succeeded", "failed", "cancelled"]},
+    "engine": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {"id": {"type": "string"}, "version": {"type": "string"}}
+    },
+    "dataset": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {"id": {"type": "string"}, "version": {"type": "string"}}
+    },
+    "started_at": {"type": "string", "format": "date-time"},
+    "ended_at": {"type": ["string", "null"], "format": "date-time"},
+    "config_hash": {"type": "string", "minLength": 1},
+    "parent_run_id": {"type": ["string", "null"]},
+    "tags": {"type": "object", "additionalProperties": {"type": "string"}},
+    "error": {
+      "type": ["object", "null"], "additionalProperties": false,
+      "required": ["category", "message"],
+      "properties": {
+        "category": {"enum": ["data", "engine", "platform", "user_config"]},
+        "message": {"type": "string"},
+        "trace_id": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

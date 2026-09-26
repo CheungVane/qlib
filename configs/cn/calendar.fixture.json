@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "id": "sse-sessions-20191001-20220110-v1",
+  "timezone": "Asia/Shanghai",
+  "coverage": [
+    "2019-10-01",
+    "2022-01-10"
+  ],
+  "weekdays": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "closed_ranges": [
+    [
+      "2019-10-01",
+      "2019-10-07"
+    ],
+    [
+      "2020-01-01",
+      "2020-01-01"
+    ],
+    [
+      "2020-01-24",
+      "2020-02-02"
+    ],
+    [
+      "2020-04-04",
+      "2020-04-06"
+    ],
+    [
+      "2020-05-01",
+      "2020-05-05"
+    ],
+    [
+      "2020-06-25",
+      "2020-06-27"
+    ],
+    [
+      "2020-10-01",
+      "2020-10-08"
+    ],
+    [
+      "2021-01-01",
+      "2021-01-03"
+    ],
+    [
+      "2021-02-11",
+      "2021-02-17"
+    ],
+    [
+      "2021-04-03",
+      "2021-04-05"
+    ],
+    [
+      "2021-05-01",
+      "2021-05-05"
+    ],
+    [
+      "2021-06-12",
+      "2021-06-14"
+    ],
+    [
+      "2021-09-19",
+      "2021-09-21"
+    ],
+    [
+      "2021-10-01",
+      "2021-10-07"
+    ],
+    [
+      "2022-01-01",
+      "2022-01-03"
+    ]
+  ],
+  "sessions": {
+    "opening_auction": [
+      "09:15",
+      "09:25"
+    ],
+    "continuous_am": [
+      "09:30",
+      "11:30"
+    ],
+    "continuous_pm": [
+      "13:00",
+      "14:57"
+    ],
+    "closing_auction": [
+      "14:57",
+      "15:00"
+    ]
+  },
+  "sources": [
+    "https://www.sse.com.cn/disclosure/announcement/general/c/c_20190919_4917419.shtml",
+    "https://www.sse.com.cn/disclosure/announcement/general/c/c_20191220_4969627.shtml",
+    "https://www.sse.com.cn/aboutus/mediacenter/hotandd/c/c_20200127_4991580.shtml",
+    "https://www.sse.com.cn/disclosure/announcement/general/c/c_20201224_5286949.shtml",
+    "https://www.sse.com.cn/disclosure/announcement/general/c/c_20211220_5662606.shtml"
+  ]
+}

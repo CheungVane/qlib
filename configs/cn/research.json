@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "mode": "current_rules_counterfactual",
+  "synthetic": true,
+  "enabled_boards": [
+    "sse_main",
+    "szse_main",
+    "star",
+    "chinext"
+  ],
+  "supported_status": [
+    "normal"
+  ],
+  "market": "csi500",
+  "benchmark": "SH000905",
+  "data_path": ".data/cn_current_demo",
+  "date_range": [
+    "2019-10-01",
+    "2022-01-10"
+  ],
+  "segments": {
+    "train": [
+      "2020-01-01",
+      "2020-12-31"
+    ],
+    "valid": [
+      "2021-01-01",
+      "2021-06-30"
+    ],
+    "test": [
+      "2021-07-01",
+      "2021-12-31"
+    ]
+  },
+  "label": {
+    "expression": "Ref($close, -2)/Ref($close, -1) - 1",
+    "future_bars": 2
+  },
+  "execution": {
+    "deal_price": "close",
+    "volume_participation": "0.05",
+    "slippage_bps": "5",
+    "forbid_all_trade_at_limit": true,
+    "require_factor": true
+  },
+  "strategy": {
+    "topk": 8,
+    "n_drop": 2,
+    "hold_thresh": 1,
+    "only_tradable": true
+  },
+  "model": {
+    "num_threads": 4,
+    "num_leaves": 20,
+    "learning_rate": 0.05,
+    "num_boost_round": 100,
+    "early_stopping_rounds": 20,
+    "lambda_l1": 0.0,
+    "lambda_l2": 1.0
+  },
+  "quality": {
+    "min_valid_ic_days": 20,
+    "min_trade_days": 2,
+    "min_cross_section": 5
+  },
+  "fixture": {
+    "seed": 20260925,
+    "stock_count": 16,
+    "stock_prefix": "SH600",
+    "board": "sse_main",
+    "factor": "1",
+    "debug_range": [
+      "2020-01-01",
+      "2020-03-31"
+    ]
+  },
+  "agent": {
+    "evolving_n": 1,
+    "coder_max_loop": 1
+  },
+  "annualization": {
+    "signal_days": 252,
+    "native_portfolio_days": 238
+  },
+  "unsupported": [
+    "live_broker",
+    "corporate_action_cash_tax",
+    "industry_constraints",
+    "PIT_source",
+    "IPO_delisting_states",
+    "intraday_order_book"
+  ]
+}

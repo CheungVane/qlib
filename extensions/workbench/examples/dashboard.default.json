@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "dashboard_id": "overview",
+  "title": "总览",
+  "widgets": [
+    {"id": "recent_runs", "kind": "table", "title": "最近运行", "query": {"id": "runs.latest"}, "refresh_seconds": 30, "layout": {"x": 0, "y": 0, "w": 6, "h": 4}},
+    {"id": "data_status", "kind": "status", "title": "数据状态", "query": {"id": "data.freshness"}, "refresh_seconds": 60, "layout": {"x": 6, "y": 0, "w": 3, "h": 2}},
+    {"id": "api_errors", "kind": "metric", "title": "API错误率", "query": {"id": "api.error_rate.5m"}, "refresh_seconds": 30, "layout": {"x": 9, "y": 0, "w": 3, "h": 2}}
+  ]
+}

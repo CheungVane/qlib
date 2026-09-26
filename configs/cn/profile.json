@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "rules": "rules.current.json",
+  "account": "account.json",
+  "calendar": "calendar.fixture.json",
+  "research": "research.json"
+}

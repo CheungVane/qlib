@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.quant-workbench/contracts/metric-series.v1.schema.json",
+  "title": "Quant Workbench Metric Series v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "metric_id", "run_id", "unit", "frequency", "definition_version", "points"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "metric_id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "unit": {"type": "string", "minLength": 1},
+    "frequency": {"enum": ["tick", "minute", "day", "run"]},
+    "definition_version": {"type": "string", "minLength": 1},
+    "currency": {"type": ["string", "null"]},
+    "dimensions": {"type": "object", "additionalProperties": {"type": "string"}},
+    "availability": {"enum": ["available", "unsupported", "not_recorded"]},
+    "points": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["time", "value"],
+        "properties": {
+          "time": {"type": "string", "format": "date-time"},
+          "value": {"type": ["number", "null"]},
+          "sample_count": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  }
+}
