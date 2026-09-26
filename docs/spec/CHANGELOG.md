@@ -2,6 +2,15 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-26 — U15：历史子tab内滚动与折叠、执行结果自动入库、Attempt 观测
+
+- 来源：用户反馈历史数据过多导致整页下滚，要求页面内嵌子tab、在tab内滚动并折叠历史记录；同时要求继续补全缺口（行情数据真实接入除外）。
+- 合同：[核心规范](WORKBENCH_SPEC.md)新增需求U15与UI05（子tab切换、面板内滚动、默认折叠、折叠不改事实、不放宽ARC07分页边界）；[执行层规范](EXECUTION.md)把结果自动入库纳入范围并新增EXEC12（触发条件、状态取值、不得降低校验、不得重复发布、显式重试），EXEC10细化为HTTP与Attempt两块及分母/窗口/单列语义，§4限制改为“只覆盖声明导入器的入口”；[结果合同](RESULT_CONTRACT.md)新增自动入库与ImportReceipt小节。
+- 实现：平台数据库schema 2→3显式迁移新增`imports`回执表（迁移前备份本机库，历史runs/revisions/attempts不改写）；`ExecutionService`注入导入端口并在成功终态触发自动发布，新增重试与统计接口；`adapters/attempt_import.py`复用`qlib_mlflow_v2`校验（来源冲突拒绝、脱敏、情景指纹核验、只读源库）；CLI新增`import-attempt`与`attempt-stats`，HTTP新增`POST /v1/executions/{id}/import`与`/v1/observability.attempts`；界面新增历史子tab+面板内滚动+默认折叠（侧栏最近运行同样只在自身区域滚动）、执行记录入库状态与“重试入库”、系统页Attempt观测卡。
+- 验证：Python 65项测试64通过、1项Qlib环境隔离跳过（新增：自动发布与回执、同内容复用、失败保留原因、无候选、RD-Agent导入缺口、重试幂等与来源403、统计单列与空窗口无样本、v2→v3迁移、观测双块）；JS回归10项通过（新增2项U15）；真实Qlib Attempt `74423ed7`退出码0后自动发布运行`1085b527`（revision`021705eb`、回执`568213c7`），重复`import-attempt`返回`already_imported`；浏览器实测面板内PageDown使`scrollTop`由0到618而`window.scrollY`保持569.5，研究子tab默认8行、展开20行并标注全库33条，系统页显示失败率0%（分母6）、已取消2、P95 209.2秒。
+- 限制：自动入库只覆盖Qlib CN合成行情入口；RD-Agent结果为研究快照，仍需可信离线导出后才入库；CN数据集身份暂用常量`cn-current-synthetic`并在代码与文档标注，正式数据目录接入后替换；无调度、并发上限与资源硬限制；实时回放、机器Schema/OpenAPI一致性与第二真实引擎仍未接入。
+- 兼容：`outcome.result_import`从字符串改为对象（状态、run/revision、回执、原因），历史Attempt保留原字符串投影不改写；`/v1/observability`保留既有HTTP字段并新增`attempts`块；新增`imports`表与同源校验的写接口；schema 3需要重启工作台服务加载。
+
 ## 2026-09-26 — U14：界面内说明（问号图标：悬浮摘要 + 点击弹窗）
 
 - 来源：用户反馈按钮与数据已经变多、界面不易上手，要求补充说明；同时明确不要把这些解释铺在页面上，改用小问号图标，悬浮给解释、点击弹窗给解释。

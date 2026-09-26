@@ -32,3 +32,18 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.65;
 .modal-body ul{margin:0 0 10px;padding-left:20px;font-size:13px;line-height:1.75;color:#33525f}
 .modal-body .panel-note{margin-bottom:0}
 @media(max-width:650px){.help-tip{width:196px}}
+
+.sidebar{height:100vh;position:sticky;top:0;overflow:hidden}
+.run-toggle{margin:6px 14px 0;background:#1d3b49;border:1px solid #355566;color:#cfe6e2;border-radius:7px;padding:7px 10px;font:inherit;font-size:11px;cursor:pointer}
+.run-toggle:hover,.run-toggle:focus-visible{border-color:#40d1b6;color:#fff;outline:none}
+.subtabs{display:flex;gap:6px;border-bottom:1px solid #e4ecee;margin-bottom:12px;flex-wrap:wrap}
+.subtab{background:none;border:0;border-bottom:2px solid transparent;color:#5d7d8a;font:inherit;font-size:13px;font-weight:600;padding:8px 12px;cursor:pointer}
+.subtab small{color:#8ba0a8;font-weight:400;margin-left:4px}
+.subtab:hover,.subtab:focus-visible{color:#197f70;outline:none}
+.subtab.active{color:#14655a;border-bottom-color:#19a98f}
+.history-scroll{max-height:46vh;min-height:140px;overflow:auto;overscroll-behavior:contain;border:1px solid #e6eef0;border-radius:9px;padding:4px 12px}
+.fold-row{display:flex;align-items:center;gap:10px;margin:10px 0 4px;flex-wrap:wrap}
+.fold-row small{color:#8299a2}
+.fold-toggle{background:#fff;border:1px solid #cfdee2;color:#197f70;border-radius:7px;padding:6px 11px;font:inherit;font-size:12px;cursor:pointer}
+.fold-toggle:hover,.fold-toggle:focus-visible{border-color:#19a98f;outline:none}
+@media(max-width:650px){.history-scroll{max-height:60vh}.sidebar{height:auto;position:static;overflow:visible}}

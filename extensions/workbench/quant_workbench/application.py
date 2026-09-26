@@ -67,6 +67,18 @@ class WorkbenchService:
             raise LookupError("execution service is not configured")
         return self.execution_service.log(attempt_id, tail)
 
+    def import_execution(self, attempt_id: str) -> dict[str, Any]:
+        if self.execution_service is None:
+            raise LookupError("execution service is not configured")
+        return self.execution_service.import_result(attempt_id)
+
+    def execution_stats(self, window_seconds: int | None = None) -> dict[str, Any]:
+        if self.execution_service is None:
+            return {"availability": "empty", "reason": "execution_not_configured", "total": 0,
+                    "window_seconds": window_seconds or 86400, "statuses": {}, "failure_rate": None,
+                    "failure_denominator": 0, "by_kind": []}
+        return self.execution_service.stats(window_seconds)
+
     def research_list(self, limit=20, offset=0, query=''):
         return self.research.listing(limit, offset, query) if self.research else {'items': [], 'total': 0, 'next_offset': None}
 

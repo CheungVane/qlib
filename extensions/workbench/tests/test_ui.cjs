@@ -151,3 +151,51 @@ test('U14: hover summary and click dialog share one registry entry',()=>{
   assert.equal(button.attrs['aria-expanded'],'false');
   assert.equal(button.focused,true);
 });
+
+test('U15: history folds long lists and keeps totals visible',()=>{
+  const x=ui();
+  assert.equal(x.run('foldRows([1,2,3,4,5],false,2).length'),2);
+  assert.equal(x.run('foldRows([1,2,3],true,2).length'),3);
+  assert.equal(x.run('foldRows([1,2,3],false,2)[0]'),1);
+  assert.match(x.run("foldToggle('history',20,8,false)"),/展开全部（共 20 条）/);
+  assert.match(x.run("foldToggle('history',20,20,true)"),/收起，只看最近 8 条/);
+  assert.match(x.run("foldToggle('history',20,8,false)"),/当前显示 8 \/ 20 条/);
+  assert.equal(x.run("foldToggle('history',5,5,false)"),'');
+});
+
+test('U15: the research centre renders sub-tabs with a scrolling, folded pane',async()=>{
+  const attempt=(index)=>({attempt_id:`attempt-${String(index).padStart(4,'0')}-1111-2222-333333333333`,
+    kind:'qlib.cn_synthetic_backtest',label:'Qlib 回测',probe:false,status:'succeeded',has_log:true,
+    cancel_pending:false,exit_code:0,started_at:'2026-09-26T00:00:00Z',created_at:'2026-09-26T00:00:00Z',
+    ended_at:'2026-09-26T00:01:00Z',outcome:{result_import:{status:'imported',run_id:'run-0001'}},
+    error_code:null,error_message:null,config_fingerprint:'f'.repeat(64),workspace_label:'ws'});
+  const attempts=Array.from({length:20},(_,index)=>attempt(index));
+  const research=Array.from({length:25},(_,index)=>({id:`research-${index}`,title:`研究 ${index}`,
+    session:'Loop_0',status:'result_available',factor_count:3,synthetic:true,facts:{},metrics:{}}));
+  const x=ui(async path=>{
+    if(path.startsWith('/v1/research?'))return response({items:research,total:25,next_offset:null});
+    if(path.startsWith('/v1/agents/'))return response({chat:{},embedding:{},runtime:{},execution:{reasons:[]}});
+    if(path==='/v1/executions/catalog')return response({items:[{kind:'stub.kind',executor_id:'stub',
+      label:'桩入口',probe:false,data_nature:'test',description:'入口',available:true,checks:[],reasons:[]}]});
+    if(path.startsWith('/v1/executions'))return response({items:attempts});
+    return response({items:[]});
+  });
+  await x.run("state.view='agent';state.historyTab='attempts';state.historyExpanded=false;renderAgent()");
+  let html=x.elements['content'].innerHTML;
+  assert.match(html,/class="history-scroll"/);
+  assert.match(html,/data-history-tab="attempts"/);
+  assert.match(html,/data-history-tab="research"/);
+  assert.equal((html.match(/<tr><td><code>/g)||[]).length,8,'默认只展开最近 8 条执行记录');
+  assert.match(html,/展开全部（共 20 条）/);
+  assert.match(html,/当前显示 8 \/ 20 条/);
+
+  await x.run("state.historyExpanded=true;renderAgent()");
+  html=x.elements['content'].innerHTML;
+  assert.equal((html.match(/<tr><td><code>/g)||[]).length,20,'展开后显示全部执行记录');
+
+  await x.run("state.historyTab='research';state.historyExpanded=false;renderAgent()");
+  html=x.elements['content'].innerHTML;
+  assert.equal((html.match(/data-research="/g)||[]).length,8,'研究记录同样默认折叠');
+  assert.match(html,/展开全部（共 25 条）/);
+  assert.match(html,/class="subtab active"[^>]*data-history-tab="research"|data-history-tab="research"[^>]*class="subtab active"|data-history-tab="research"/);
+});

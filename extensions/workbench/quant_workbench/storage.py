@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import sqlite3
 import tempfile
@@ -12,7 +13,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .model import validate_package, _instant
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 def instant_order(value):
     delta = _instant(value, "created_at") - datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -20,7 +21,7 @@ def instant_order(value):
 
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 ATTEMPT_TERMINAL_STATUSES = ("succeeded", "failed", "cancelled", "interrupted")
 ATTEMPT_OPEN_STATUSES = ("queued", "running")
 
@@ -83,6 +84,26 @@ ATTEMPT_MUTABLE_FIELDS = (
     "pid", "workspace", "log_path", "config_fingerprint", "error_code", "error_message", "outcome",
 )
 
+V3_IMPORT_SCHEMA = """
+CREATE TABLE IF NOT EXISTS imports (
+    receipt_id TEXT PRIMARY KEY,
+    attempt_id TEXT,
+    run_id TEXT,
+    revision_id TEXT,
+    source_instance_id TEXT NOT NULL,
+    external_id TEXT NOT NULL,
+    adapter_version TEXT NOT NULL,
+    status TEXT NOT NULL,
+    reason TEXT,
+    imported_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS imports_attempt ON imports(attempt_id, imported_at);
+CREATE INDEX IF NOT EXISTS imports_run ON imports(run_id, imported_at);
+PRAGMA user_version=3;
+"""
+
+IMPORT_STATUSES = ("imported", "reused", "failed")
+
 
 class SchemaVersionError(RuntimeError):
     pass
@@ -113,7 +134,7 @@ class LocalResultRepository:
         """
         with self._connect() as conn:
             version = conn.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1, SCHEMA_VERSION):
+            if version not in (0, 1, 2, SCHEMA_VERSION):
                 raise SchemaVersionError(
                     f"database schema {version}; supported versions are 0..{SCHEMA_VERSION}; refusing to modify")
             if version == 0 and any(row[0] != "sqlite_sequence" for row in conn.execute(
@@ -125,6 +146,9 @@ class LocalResultRepository:
                 version = 1
             if version == 1:
                 conn.executescript(V2_ATTEMPT_SCHEMA)
+                version = 2
+            if version == 2:
+                conn.executescript(V3_IMPORT_SCHEMA)
             conn.execute("PRAGMA journal_mode=WAL")
 
     def _write_object(self, content_hash: str, data: bytes) -> str:
@@ -359,3 +383,95 @@ class LocalResultRepository:
         with self._connect() as conn:
             conn.execute("SELECT 1").fetchone()
         return {"status": "ok", "schema_version": SCHEMA_VERSION}
+
+    # -- import receipts --------------------------------------------------
+    def record_import(self, record: dict[str, Any]) -> dict[str, Any]:
+        """Upsert one import receipt; the receipt is the platform fact for EXEC12."""
+        required = ("receipt_id", "source_instance_id", "external_id", "adapter_version", "status", "imported_at")
+        if not all(isinstance(record.get(key), str) and record[key].strip() for key in required):
+            raise ValueError(
+                "receipt_id, source_instance_id, external_id, adapter_version, status and imported_at are required")
+        if record["status"] not in IMPORT_STATUSES:
+            raise ValueError(f"unknown import status: {record['status']}")
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                """INSERT INTO imports(receipt_id,attempt_id,run_id,revision_id,source_instance_id,external_id,
+                   adapter_version,status,reason,imported_at) VALUES(?,?,?,?,?,?,?,?,?,?)
+                   ON CONFLICT(receipt_id) DO UPDATE SET run_id=excluded.run_id,revision_id=excluded.revision_id,
+                   status=excluded.status,reason=excluded.reason,imported_at=excluded.imported_at""",
+                (record["receipt_id"], record.get("attempt_id"), record.get("run_id"), record.get("revision_id"),
+                 record["source_instance_id"], record["external_id"], record["adapter_version"],
+                 record["status"], record.get("reason"), record["imported_at"]))
+            row = conn.execute("SELECT * FROM imports WHERE receipt_id=?", (record["receipt_id"],)).fetchone()
+        return dict(row)
+
+    def latest_import(self, attempt_id: str) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM imports WHERE attempt_id=? ORDER BY instant_order(imported_at) DESC LIMIT 1",
+                (attempt_id,)).fetchone()
+        return dict(row) if row else None
+
+    def list_imports(self, attempt_id: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 200:
+            raise ValueError("limit must be between 1 and 200")
+        query, params = "SELECT * FROM imports", []
+        if attempt_id:
+            query += " WHERE attempt_id=?"
+            params.append(attempt_id)
+        query += " ORDER BY instant_order(imported_at) DESC LIMIT ?"
+        params.append(limit)
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [dict(row) for row in rows]
+
+    def attempt_stats(self, window_seconds: int = 86400) -> dict[str, Any]:
+        """Attempt-level rates; cancelled and interrupted are counted apart from failures."""
+        if isinstance(window_seconds, bool) or not isinstance(window_seconds, int) or not 60 <= window_seconds <= 2592000:
+            raise ValueError("window_seconds must be between 60 and 2592000")
+        now = datetime.now(timezone.utc)
+        cutoff = (now - timedelta(seconds=window_seconds)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        with self._connect() as conn:
+            rows = conn.execute(
+                """SELECT kind, status, started_at, ended_at FROM attempts
+                   WHERE instant_order(created_at) >= instant_order(?)""", (cutoff,)).fetchall()
+            first = conn.execute(
+                "SELECT created_at FROM attempts ORDER BY instant_order(created_at) ASC LIMIT 1").fetchone()
+        statuses = {"queued": 0, "running": 0, "succeeded": 0, "failed": 0, "cancelled": 0, "interrupted": 0}
+        durations: list[float] = []
+        by_kind: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            status = row["status"] if row["status"] in statuses else "interrupted"
+            statuses[status] += 1
+            entry = by_kind.setdefault(row["kind"], {"kind": row["kind"], "total": 0, **{k: 0 for k in statuses}})
+            entry["total"] += 1
+            entry[status] += 1
+            if row["started_at"] and row["ended_at"]:
+                seconds = (_instant(row["ended_at"], "ended_at") - _instant(row["started_at"], "started_at")).total_seconds()
+                if seconds >= 0:
+                    durations.append(seconds)
+        durations.sort()
+        denominator = statuses["succeeded"] + statuses["failed"]
+        p95 = durations[min(len(durations) - 1, max(0, math.ceil(0.95 * len(durations)) - 1))] if durations else None
+        coverage = 0.0
+        if first and first["created_at"]:
+            coverage = max(0.0, (now - _instant(first["created_at"], "created_at")).total_seconds())
+        total = len(rows)
+        return {
+            "availability": "available" if total else "empty",
+            "window_seconds": window_seconds,
+            "total": total,
+            "statuses": statuses,
+            "failure_rate": (statuses["failed"] / denominator) if denominator else None,
+            "failure_denominator": denominator,
+            "cancelled": statuses["cancelled"],
+            "interrupted": statuses["interrupted"],
+            "terminal_p95_seconds": p95,
+            "by_kind": sorted(by_kind.values(), key=lambda item: (-item["total"], item["kind"])),
+            "collection_started_at": first["created_at"] if first else None,
+            "coverage_seconds": min(float(window_seconds), coverage),
+            "observed_at": now.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+            "scope": ("平台Attempt（本机工作台库）；窗口按Attempt创建时间；failure_rate=failed/(succeeded+failed)，"
+                      "cancelled与interrupted单列；不从日志推断额外语义。"),
+        }

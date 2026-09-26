@@ -6,6 +6,7 @@ No engine SDK, database SDK or UI imports belong here; executors are injected po
 from __future__ import annotations
 
 import json
+import hashlib
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -121,9 +122,13 @@ def attempt_dto(row: dict[str, Any]) -> dict[str, Any]:
 class ExecutionService:
     """Submit, inspect, reconcile and cancel attempts through injected executors."""
 
-    def __init__(self, repository, executors: list[ExecutorPort] | None = None):
+    def __init__(self, repository, executors: list[ExecutorPort] | None = None, importer=None,
+                 stats_window_seconds: int = 86400):
         self.repository = repository
         self.executors = list(executors or [])
+        # EXEC12: the importer is an injected port; the core never imports an engine SDK.
+        self.importer = importer
+        self.stats_window_seconds = stats_window_seconds
         self._by_kind: dict[str, ExecutorPort] = {}
         self._by_id: dict[str, ExecutorPort] = {}
         for executor in self.executors:
@@ -275,12 +280,101 @@ class ExecutionService:
                 outcome = executor.outcome(terminal)
             except Exception as exc:  # outcome collection must never overwrite the execution result
                 outcome = {"collection_error": f"{type(exc).__name__}: {exc}"}
+            if state == "succeeded":
+                outcome = self._auto_import(terminal, outcome)
             self.repository.update_attempt(
                 row["attempt_id"], status=state, ended_at=terminal["ended_at"],
                 exit_code=result.get("exit_code"), heartbeat_at=utc_now(),
                 error_code=result.get("error_code"), error_message=result.get("error_message"), outcome=outcome)
             transitioned += 1
         return {"checked": checked, "transitioned": transitioned}
+
+    # -- result import (EXEC12) ------------------------------------------
+    def _auto_import(self, attempt: dict[str, Any], outcome: dict[str, Any] | None) -> dict[str, Any]:
+        outcome = dict(outcome or {})
+        executor = self._by_id.get(attempt.get("executor_id"))
+        getter = getattr(executor, "import_candidate", None) if executor else None
+        candidate = None
+        if getter is not None:
+            try:
+                candidate = getter({**attempt, "outcome": outcome})
+            except Exception as exc:
+                candidate = None
+                outcome["import_notes"] = [*outcome.get("import_notes", []),
+                                           f"import candidate failed: {type(exc).__name__}"]
+        if not candidate:
+            reason = "no_import_candidate_for_kind"
+            if executor is not None:
+                describe = getattr(executor, "import_unavailable_reason", None)
+                reason = (describe(attempt) if describe else None) or reason
+            if getter is None:
+                reason = "executor_has_no_importer"
+            outcome["result_import"] = {"status": "manual_import_required", "reason": reason, "checked_at": utc_now()}
+            return outcome
+        if self.importer is None:
+            outcome["result_import"] = {"status": "manual_import_required",
+                                        "reason": "platform_importer_not_configured", "checked_at": utc_now()}
+            return outcome
+        source_instance_id = candidate.get("source_instance_id") or "attempt-result"
+        external_id = str(candidate.get("external_id") or attempt["attempt_id"])
+        adapter_version = candidate.get("adapter_version") or "unknown"
+        try:
+            receipt = self.importer.import_attempt(attempt, candidate) or {}
+        except Exception as exc:
+            reason = f"{type(exc).__name__}: {exc}"[:MAX_ERROR_MESSAGE]
+            outcome["result_import"] = {"status": "failed", "reason": reason, "checked_at": utc_now()}
+            self._record_receipt({
+                "receipt_id": hashlib.sha256(f"failed:{attempt['attempt_id']}".encode()).hexdigest()[:32],
+                "attempt_id": attempt["attempt_id"], "run_id": None, "revision_id": None,
+                "source_instance_id": source_instance_id, "external_id": external_id,
+                "adapter_version": adapter_version, "status": "failed", "reason": reason,
+                "imported_at": utc_now()})
+            return outcome
+        record = {
+            "receipt_id": receipt.get("receipt_id") or hashlib.sha256(
+                f"{attempt['attempt_id']}:{receipt.get('run_id')}:{receipt.get('revision_id')}".encode()).hexdigest()[:32],
+            "attempt_id": attempt["attempt_id"],
+            "run_id": receipt.get("run_id"), "revision_id": receipt.get("revision_id"),
+            "source_instance_id": receipt.get("source_instance_id") or source_instance_id,
+            "external_id": str(receipt.get("external_id") or external_id),
+            "adapter_version": receipt.get("adapter_version") or adapter_version,
+            "status": "reused" if receipt.get("created") is False else "imported",
+            "reason": None, "imported_at": utc_now(),
+        }
+        self._record_receipt(record)
+        outcome["result_import"] = {
+            "status": record["status"], "run_id": record["run_id"], "revision_id": record["revision_id"],
+            "receipt_id": record["receipt_id"], "adapter_version": record["adapter_version"],
+            "imported_at": record["imported_at"],
+        }
+        return outcome
+
+    def _record_receipt(self, record: dict[str, Any]) -> None:
+        try:
+            self.repository.record_import(record)
+        except Exception:  # a receipt failure must not rewrite an execution result
+            pass
+
+    def import_result(self, attempt_id: str) -> dict[str, Any]:
+        """Explicit retry for an attempt that has no successful import receipt yet."""
+        row = self.repository.get_attempt(attempt_id)
+        if row is None:
+            raise AttemptNotFound(f"attempt '{attempt_id}' was not found")
+        if row["status"] != "succeeded":
+            raise InvalidExecutionRequest("only succeeded attempts can be imported")
+        current = (row.get("outcome") or {}).get("result_import") or {}
+        if current.get("status") in ("imported", "reused"):
+            return {"attempt": attempt_dto(row), "imported": False, "reason": "already_imported",
+                    "receipt": self.repository.latest_import(attempt_id)}
+        outcome = self._auto_import({**row, "status": "succeeded"}, row.get("outcome"))
+        updated = self.repository.update_attempt(attempt_id, outcome=outcome)
+        state = (outcome.get("result_import") or {}).get("status")
+        return {"attempt": attempt_dto(updated or row), "imported": state in ("imported", "reused"),
+                "reason": None if state in ("imported", "reused") else (outcome.get("result_import") or {}).get("reason"),
+                "receipt": self.repository.latest_import(attempt_id)}
+
+    def stats(self, window_seconds: int | None = None) -> dict[str, Any]:
+        return self.repository.attempt_stats(window_seconds or self.stats_window_seconds)
 
     def list(self, limit: int = 20, cursor: str | None = None) -> dict[str, Any]:
         self.reconcile()
@@ -321,6 +415,8 @@ class ExecutionService:
                     outcome = executor.outcome({**fresh, "status": state, "exit_code": result.get("exit_code")})
                 except Exception:
                     outcome = None
+                if state == "succeeded":
+                    outcome = self._auto_import({**fresh, "status": state}, outcome)
                 self.repository.update_attempt(
                     attempt_id, status=state, ended_at=result.get("ended_at") or utc_now(),
                     exit_code=result.get("exit_code"), outcome=outcome, heartbeat_at=utc_now())

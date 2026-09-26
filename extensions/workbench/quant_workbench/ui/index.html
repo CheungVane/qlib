@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Quant Workbench</title>
-  <link rel="stylesheet" href="/ui/style.css?v=8">
-  <script src="/ui/app.js?v=15" defer></script>
+  <link rel="stylesheet" href="/ui/style.css?v=9">
+  <script src="/ui/app.js?v=17" defer></script>
 </head>
 <body>
   <div class="shell">
@@ -25,6 +25,7 @@
       <div class="side-label recent-label">最近运行</div>
       <label class="run-search-wrap"><span class="sr-only">搜索运行</span><input id="run-search" type="search" placeholder="搜索运行或引擎" autocomplete="off"></label>
       <div id="run-list" class="run-list"><div class="muted pad">加载中…</div></div>
+      <button type="button" id="run-list-toggle" class="run-toggle" hidden></button>
       <div class="sidebar-foot"><span class="status-dot"></span> 本地研究服务 <span id="health-label">检查中</span></div>
     </aside>
     <main class="main">

@@ -6,6 +6,7 @@ import sys
 import tempfile
 import time
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from quant_workbench.adapters.executors import SubprocessExecutor
@@ -13,7 +14,7 @@ from quant_workbench.application import WorkbenchService
 from quant_workbench.execution import (
     ExecutionService, PreconditionFailed, attempt_dto, utc_now,
 )
-from quant_workbench.storage import LocalResultRepository, SCHEMA_VERSION
+from quant_workbench.storage import LocalResultRepository, SCHEMA_VERSION, V1_SCHEMA, V2_ATTEMPT_SCHEMA
 
 
 class StubExecutor(SubprocessExecutor):
@@ -73,6 +74,35 @@ class RacingExecutor(StubExecutor):
                 "reason": "process_end_confirmed", "evidence": {"signals": ["SIGTERM"]}}
 
 
+class ImportableExecutor(StubExecutor):
+    """Stub whose succeeded attempt exposes an EXEC12 import candidate."""
+
+    def import_candidate(self, attempt):
+        if attempt.get("kind") != "stub.exit":
+            return None
+        return {"importer": "stub", "source_instance_id": "stub-attempt", "external_id": "stub-run-1",
+                "tracking_uri": f"sqlite:///{self.repo_root}/private/mlflow.db", "dataset_id": "stub",
+                "dataset_version": None, "synthetic": True, "adapter_version": "stub_v1"}
+
+
+class StubImporter:
+    """Records calls so tests can assert publication, retries and idempotency."""
+
+    def __init__(self):
+        self.calls = []
+        self.failure = None
+        self.created = True
+
+    def import_attempt(self, attempt, candidate):
+        self.calls.append((attempt["attempt_id"], candidate["external_id"]))
+        if self.failure:
+            raise RuntimeError(self.failure)
+        return {"run_id": "run-0001", "revision_id": "rev-0001", "created": self.created,
+                "source_instance_id": candidate["source_instance_id"],
+                "external_id": candidate["external_id"],
+                "adapter_version": candidate.get("adapter_version", "stub_v1")}
+
+
 def wait_for(predicate, timeout=10.0, interval=0.05):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -93,16 +123,18 @@ class ExecutionTests(unittest.TestCase):
         (self.root / "scripts").mkdir()
         self.repo = LocalResultRepository(self.root / "store")
         self.executor = StubExecutor(self.root)
+        self.extra_executors = []
         self.execution = ExecutionService(self.repo, [self.executor])
         self.service = WorkbenchService(self.repo, None, None, self.execution)
 
     def tearDown(self):
-        for process in list(self.executor._processes.values()):
-            try:
-                process.kill()
-                process.wait(timeout=5)
-            except (OSError, subprocess.TimeoutExpired):
-                pass
+        for executor in [self.executor, *self.extra_executors]:
+            for process in list(executor._processes.values()):
+                try:
+                    process.kill()
+                    process.wait(timeout=5)
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
         self.temp.cleanup()
 
     def submit(self, kind="stub.sleep", params=None, key=None):
@@ -200,10 +232,10 @@ class ExecutionTests(unittest.TestCase):
         self.assertEqual(outcome["attempt"]["exit_code"], 0)
 
     # -- API -------------------------------------------------------------
-    def client(self):
+    def client(self, service=None):
         from fastapi.testclient import TestClient
         from quant_workbench.api import create_app
-        return TestClient(create_app(self.service))
+        return TestClient(create_app(service or self.service))
 
     def test_http_writes_require_same_origin_and_are_idempotent(self):
         client = self.client()
@@ -279,6 +311,168 @@ class ExecutionTests(unittest.TestCase):
         self.assertTrue(cancelled.json()["cancel_confirmed"])
         self.assertEqual(cancelled.json()["attempt"]["status"], "cancelled")
         self.assertEqual(client.post("/v1/executions/unknown/cancel").status_code, 404)
+
+    # -- result import (EXEC12) ------------------------------------------
+    def importable(self, importer):
+        executor = ImportableExecutor(self.root)
+        self.extra_executors.append(executor)
+        execution = ExecutionService(self.repo, [executor], importer=importer)
+        return executor, execution
+
+    def run_to_success(self, execution, key):
+        created = execution.submit("stub.exit", {"script": "exit 0"}, key, "req-import")
+        attempt_id = created["attempt"]["attempt_id"]
+        self.assertTrue(wait_for(lambda: execution.get(attempt_id)["status"] == "succeeded"))
+        return attempt_id
+
+    def test_succeeded_attempt_publishes_result_and_records_receipt(self):
+        importer = StubImporter()
+        _, execution = self.importable(importer)
+        attempt_id = self.run_to_success(execution, "import-key")
+        attempt = execution.get(attempt_id)
+        state = attempt["outcome"]["result_import"]
+        self.assertEqual(state["status"], "imported")
+        self.assertEqual(state["run_id"], "run-0001")
+        self.assertEqual(state["revision_id"], "rev-0001")
+        self.assertEqual(state["adapter_version"], "stub_v1")
+        receipt = self.repo.latest_import(attempt_id)
+        self.assertEqual((receipt["status"], receipt["run_id"], receipt["attempt_id"]),
+                         ("imported", "run-0001", attempt_id))
+        self.assertNotIn("tracking_uri", json.dumps(attempt))
+        self.assertNotIn("sqlite://", json.dumps(attempt))
+        execution.reconcile([attempt_id])
+        self.assertEqual(len(importer.calls), 1)
+
+    def test_reused_content_is_reported_as_reused(self):
+        importer = StubImporter()
+        importer.created = False
+        _, execution = self.importable(importer)
+        attempt_id = self.run_to_success(execution, "reuse-key")
+        self.assertEqual(execution.get(attempt_id)["outcome"]["result_import"]["status"], "reused")
+        self.assertEqual(self.repo.latest_import(attempt_id)["status"], "reused")
+
+    def test_import_failure_keeps_execution_success_and_reason(self):
+        importer = StubImporter()
+        importer.failure = "CN scenario fingerprint mismatch"
+        _, execution = self.importable(importer)
+        attempt_id = self.run_to_success(execution, "import-failure-key")
+        attempt = execution.get(attempt_id)
+        self.assertEqual(attempt["status"], "succeeded")
+        state = attempt["outcome"]["result_import"]
+        self.assertEqual(state["status"], "failed")
+        self.assertIn("fingerprint mismatch", state["reason"])
+        receipt = self.repo.latest_import(attempt_id)
+        self.assertEqual(receipt["status"], "failed")
+        self.assertIn("fingerprint mismatch", receipt["reason"])
+
+    def test_attempt_without_candidate_stays_manual_import_required(self):
+        importer = StubImporter()
+        executor = StubExecutor(self.root)
+        self.extra_executors.append(executor)
+        execution = ExecutionService(self.repo, [executor], importer=importer)
+        attempt_id = self.run_to_success(execution, "manual-import-key")
+        state = execution.get(attempt_id)["outcome"]["result_import"]
+        self.assertEqual(state["status"], "manual_import_required")
+        self.assertEqual(state["reason"], "no_import_candidate_for_kind")
+        self.assertEqual(importer.calls, [])
+        self.assertIsNone(self.repo.latest_import(attempt_id))
+
+    def test_rdagent_attempts_declare_their_import_gap(self):
+        from quant_workbench.adapters.executors import RDAgentExecutor
+
+        executor = RDAgentExecutor(repo_root=self.root, agent_root=self.root)
+        self.assertIsNone(executor.import_candidate({"workspace": str(self.root)}))
+        self.assertEqual(executor.import_unavailable_reason({}), "rdagent_research_snapshot_required")
+
+    def test_import_endpoint_retries_after_failure_and_stays_idempotent(self):
+        importer = StubImporter()
+        importer.failure = "temporary tracking error"
+        _, execution = self.importable(importer)
+        service = WorkbenchService(self.repo, None, None, execution)
+        client = self.client(service)
+        created = client.post("/v1/executions",
+                              json={"kind": "stub.exit", "params": {"script": "exit 0"},
+                                    "idempotency_key": "retry-key"},
+                              headers={"Origin": "http://testserver"})
+        attempt_id = created.json()["attempt"]["attempt_id"]
+        self.assertTrue(wait_for(lambda: execution.get(attempt_id)["status"] == "succeeded"))
+        self.assertEqual(execution.get(attempt_id)["outcome"]["result_import"]["status"], "failed")
+        importer.failure = None
+        retry = client.post(f"/v1/executions/{attempt_id}/import", headers={"Origin": "http://testserver"})
+        self.assertEqual(retry.status_code, 200)
+        self.assertTrue(retry.json()["imported"])
+        self.assertEqual(retry.json()["receipt"]["status"], "imported")
+        again = client.post(f"/v1/executions/{attempt_id}/import", headers={"Origin": "http://testserver"})
+        self.assertEqual(again.status_code, 200)
+        self.assertFalse(again.json()["imported"])
+        self.assertEqual(again.json()["reason"], "already_imported")
+        self.assertEqual(len(importer.calls), 2)
+
+    def test_import_endpoint_requires_same_origin(self):
+        importer = StubImporter()
+        _, execution = self.importable(importer)
+        service = WorkbenchService(self.repo, None, None, execution)
+        client = self.client(service)
+        attempt_id = self.run_to_success(execution, "import-origin-key")
+        cross = client.post(f"/v1/executions/{attempt_id}/import", headers={"Origin": "http://evil.test"})
+        self.assertEqual(cross.status_code, 403)
+
+    # -- attempt statistics (EXEC10) -------------------------------------
+    def seed_attempt(self, attempt_id, status, seconds=10.0, kind="stub.exit"):
+        now = datetime.now(timezone.utc)
+        created = now.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        ended = (now + timedelta(seconds=seconds)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        self.repo.create_attempt({"attempt_id": attempt_id, "kind": kind, "executor_id": "stub",
+                                  "label": "stub", "params": {}, "created_at": created,
+                                  "status": "running", "started_at": created})
+        self.repo.update_attempt(attempt_id, status=status, ended_at=ended)
+
+    def test_attempt_stats_separate_cancelled_from_failures(self):
+        stats = self.repo.attempt_stats(3600)
+        self.assertEqual(stats["availability"], "empty")
+        self.assertEqual(stats["total"], 0)
+        self.assertIsNone(stats["failure_rate"])
+        self.assertEqual(stats["failure_denominator"], 0)
+        self.assertIsNone(stats["terminal_p95_seconds"])
+        self.seed_attempt("stats-succeeded", "succeeded", 4)
+        self.seed_attempt("stats-failed", "failed", 20)
+        self.seed_attempt("stats-cancelled", "cancelled", 6)
+        self.seed_attempt("stats-interrupted", "interrupted", 2, kind="stub.sleep")
+        stats = self.repo.attempt_stats(3600)
+        self.assertEqual(stats["total"], 4)
+        self.assertEqual(stats["failure_rate"], 0.5)
+        self.assertEqual(stats["failure_denominator"], 2)
+        self.assertEqual(stats["cancelled"], 1)
+        self.assertEqual(stats["interrupted"], 1)
+        self.assertAlmostEqual(stats["terminal_p95_seconds"], 20, places=3)
+        by_kind = {row["kind"]: row for row in stats["by_kind"]}
+        self.assertEqual(by_kind["stub.exit"]["total"], 3)
+        self.assertEqual(by_kind["stub.sleep"]["interrupted"], 1)
+        self.assertIn("cancelled", stats["scope"])
+
+    def test_observability_exposes_http_and_attempt_blocks(self):
+        self.seed_attempt("obs-succeeded", "succeeded", 3)
+        body = self.client().get("/v1/observability").json()
+        self.assertIn("error_rate", body)
+        self.assertEqual(body["attempts"]["total"], 1)
+        self.assertEqual(body["attempts"]["statuses"]["succeeded"], 1)
+
+    def test_storage_migrates_v2_to_v3_keeping_attempts(self):
+        legacy = self.root / "v2store"
+        legacy.mkdir()
+        with sqlite3.connect(legacy / "workbench.sqlite3") as conn:
+            conn.executescript(V1_SCHEMA)
+            conn.executescript(V2_ATTEMPT_SCHEMA)
+            conn.execute("""INSERT INTO attempts(attempt_id,kind,executor_id,label,status,params_json,
+                            created_at,queued_at,updated_at)
+                            VALUES('old','k','e','l','succeeded','{}','2026-01-01T00:00:00Z',
+                                   '2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')""")
+        migrated = LocalResultRepository(legacy)
+        self.assertEqual(migrated.health()["schema_version"], 3)
+        self.assertEqual(migrated.get_attempt("old")["status"], "succeeded")
+        with migrated._connect() as conn:
+            self.assertIsNotNone(conn.execute("SELECT name FROM sqlite_master WHERE name='imports'").fetchone())
+        self.assertIsNone(migrated.latest_import("old"))
 
     # -- contract --------------------------------------------------------
     def test_storage_migrates_v1_without_touching_published_results(self):

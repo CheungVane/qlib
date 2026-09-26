@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .adapters.json_result import JsonResultImporter
 from .application import WorkbenchService
+from .adapters.attempt_import import AttemptResultImporter
 from .adapters.executors import QlibCNExecutor, RDAgentExecutor
 from .adapters.rdagent_status import RDAgentStatusProvider
 from .execution import ExecutionService
@@ -23,7 +24,8 @@ def build_service(root: Path, with_executors: bool = True) -> WorkbenchService:
     observer = RDAgentStatusProvider(agent_root) if agent_root else None
     execution = None
     if with_executors:
-        execution = ExecutionService(repository, executors=[QlibCNExecutor(), RDAgentExecutor()])
+        execution = ExecutionService(repository, executors=[QlibCNExecutor(), RDAgentExecutor()],
+                                     importer=AttemptResultImporter(repository))
     return WorkbenchService(repository, observer, ResearchSnapshots(root / "research"), execution)
 
 
@@ -88,6 +90,10 @@ def parser() -> argparse.ArgumentParser:
     a.add_argument("--tail", type=int, default=200)
     a = sub.add_parser("cancel", help="request cancellation and wait for the confirmed process end")
     a.add_argument("attempt_id")
+    a = sub.add_parser("import-attempt", help="retry automatic publication of a succeeded attempt result")
+    a.add_argument("attempt_id")
+    a = sub.add_parser("attempt-stats", help="attempt-level rates, durations and coverage")
+    a.add_argument("--window-seconds", type=int, default=86400)
     sub.add_parser("capabilities")
     sub.add_parser("agent-status", help="show sanitized RD-Agent integration status")
     sub.add_parser("health")
@@ -146,6 +152,10 @@ def main(argv: list[str] | None = None) -> int:
             result = service.execution_log(args.attempt_id, args.tail)
         elif args.command == 'cancel':
             result = service.cancel_execution(args.attempt_id)
+        elif args.command == 'import-attempt':
+            result = service.import_execution(args.attempt_id)
+        elif args.command == 'attempt-stats':
+            result = service.execution_stats(args.window_seconds)
         elif args.command == "capabilities":
             result = service.capabilities()
         elif args.command == "agent-status":

@@ -85,7 +85,8 @@ def create_app(service: WorkbenchService):
 
     @app.get('/v1/observability')
     def observability():
-        return telemetry.snapshot()
+        # OBS01/EXEC10: HTTP process telemetry and attempt-level rates are separate blocks.
+        return {**telemetry.snapshot(), "attempts": service.execution_stats()}
 
     @app.get("/v1/health")
     def health():
@@ -223,5 +224,11 @@ def create_app(service: WorkbenchService):
     def cancel_execution(attempt_id: str, request: Request):
         require_same_origin(request)
         return service.cancel_execution(attempt_id)
+
+    @app.post("/v1/executions/{attempt_id}/import")
+    def import_execution(attempt_id: str, request: Request):
+        """EXEC12 explicit retry; only an attempt without a successful receipt is imported."""
+        require_same_origin(request)
+        return service.import_execution(attempt_id)
 
     return app

@@ -33,6 +33,15 @@ extensions/workbench/.venv/bin/qwb import-qlib \
 
 导入器会读取本机可信 Qlib 产物中的 pickle，因此需要显式提供 `--trust-local-artifacts`；不要用来导入不可信文件。历史运行缺少 Qlib 运行时版本、数据指纹等证据时，结果会保留 `unknown`。不会用当前安装版本推断历史版本。
 
+从界面或 `qwb execute` 发起的 Qlib CN 回测成功后会自动走同一条导入链路：执行器给出导入候选，平台发布结果并把 `运行ID/revision/回执` 写回 Attempt 的 `outcome.result_import`（`imported`）或说明原因（`failed`/`manual_import_required`）。需要重试时：
+
+```bash
+extensions/workbench/.venv/bin/qwb import-attempt <ATTEMPT_ID>   # 只在该 Attempt 没有成功回执时才发布
+extensions/workbench/.venv/bin/qwb attempt-stats --window-seconds 86400
+```
+
+RD-Agent 入口的结果是研究快照，仍按“可信离线导出后再入库”的路子处理，不会自动当成回测结果发布。
+
 常用查询：
 
 ```bash

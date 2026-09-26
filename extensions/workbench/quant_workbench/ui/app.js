@@ -1,6 +1,8 @@
 const initialQuery = new URLSearchParams(location.search);
 const hasCompareQuery = initialQuery.has('compare');
-const state = {renderGeneration:0, revision: initialQuery.get("revision"), seriesOffsets:{}, runs: [], selected: initialQuery.get('run'), compareIds: (initialQuery.get('compare') || '').split(',').filter(Boolean), researchId: initialQuery.get('research'), researchOffset:0, researchQuery:'', search: '', executionKey:null, helpTrigger:null, helpBound:false, view: location.hash.slice(1) || 'overview'};
+const HISTORY_PREVIEW = 8;
+const historyTabParam = initialQuery.get('history');
+const state = {renderGeneration:0, revision: initialQuery.get("revision"), seriesOffsets:{}, runs: [], selected: initialQuery.get('run'), compareIds: (initialQuery.get('compare') || '').split(',').filter(Boolean), researchId: initialQuery.get('research'), researchOffset:0, researchQuery:'', search: '', executionKey:null, helpTrigger:null, helpBound:false, historyTab: historyTabParam==='research'?'research':'attempts', historyExpanded:false, attemptCursor:null, attemptCursors:[], runsExpanded:false, overviewExpanded:false, view: location.hash.slice(1) || 'overview'};
 const titles = {overview:['总览','研究运行、数据状态与系统观察'],backtest:['回测','权益、回撤、费用与来源证据'],training:['训练','指标曲线、阶段状态与来源证据'],compare:['比较','并列查看运行，先核对数据与指标口径'],agent:['研究中心','研究结果、因子内容、过程追踪与下一步'],live:['实时','行情连接与数据新鲜度'],data:['数据','数据集来源、覆盖与质量'],system:['系统','任务状态、请求与错误观察']};
 const HELP = {
  'page.overview':{title:'总览怎么读',summary:'先看来源与能力边界，再看最近研究与已采集的观察指标。',ref:'UI01 / ARC08',
@@ -15,8 +17,8 @@ const HELP = {
   body:['比较分三级：①并排查看；②叠图需要单位与轴一致；③排名需要口径检查通过。','检查不通过时只做并列查看，并列出原因，例如日期窗口、初始资金或数据版本不同。'],
   points:['模拟与真实结果不会静默混入同一排名。','每个运行单独绘图，保留各自时间轴，不按点位硬叠加。']},
  'page.agent':{title:'研究中心怎么读',summary:'上半区是执行（真实进程），下半区是研究记录与过程快照。',ref:'EXECUTION.md / RESEARCH_WORKBENCH.md',
-  body:['研究中心可以启动、取消隔离进程执行，并查看每次 Attempt 的状态、退出码、结果摘要与脱敏日志尾部。','研究记录来自已导出的过程快照；执行成功不等于结果已入库。'],
-  points:['执行成功仍需显式导入结果库，来源标记与情景指纹照旧。','标记“集成探针”的入口用于验证链路，不代表研究成果。']},
+  body:['研究中心可以启动、取消隔离进程执行；“历史记录”里用子tab切换执行记录与研究记录，列表在面板内滚动并默认折叠。','执行记录含状态、退出码、入库结果与脱敏日志尾部；研究记录来自已导出的过程快照。'],
+  points:['Qlib 回测成功后平台会自动发布结果并写回执；没有导入器的入口显示“结果需显式导入”。','标记“集成探针”的入口用于验证链路，不代表研究成果。']},
  'page.live':{title:'实时页为什么是空的',summary:'行情流尚未接入，没有连接记录时不显示 0。',ref:'LIVE01 / UI01',
   body:['实时行情、延迟与缺口能力属于后续阶段；当前没有数据流会话或采集记录。','按规范，无采集样本时不显示 0%，而是明确说明未接入。']},
  'page.data':{title:'数据页怎么读',summary:'这里展示当前结果的来源与情景证据，不是供应商数据目录。',ref:'ARC06 / DATA01—05',
@@ -57,6 +59,8 @@ const HELP = {
   body:['摘要包含质量检查、指标数量、MLflow run id、研究会话数量等可核对信息。','摘要收集失败时显示“摘要收集受限”，不清理已有执行结果。']},
  'research.list':{title:'研究记录怎么读',summary:'一行一次研究过程；过程不完整不等于研究失败。',ref:'RESEARCH_WORKBENCH.md',
   body:['研究记录来自已导出的快照，包含结果状态、因子数量与部分原生指标。','点击研究标题可查看结果、假设、生成代码与阶段过程。']},
+ 'history.panel':{title:'历史记录怎么用',summary:'子tab切换执行/研究；列表在面板内滚动，默认只展开最近记录。',ref:'UI05 / ARC07',
+  body:['执行记录与研究记录放在同一张卡片的两个子tab里，切换只改变显示内容，不改变数据、排序与来源标记。','列表在面板内滚动（鼠标滚轮不会推动整页）；当前显示条数与总数一并标注。','默认折叠为最近若干条，展开与收起只影响展示，筛选与统计分母不受影响；侧栏“最近运行”同样只在自身区域滚动。']},
  'research.detail.metrics':{title:'研究指标',summary:'原生指标保留源口径，未记录不填零。',ref:'RESEARCH_WORKBENCH.md',
   body:['指标直接来自研究产物，未做平台归一化。','与平台标准指标的名称、单位不同，跨运行比较请使用比较页。']},
  'research.detail.factors':{title:'因子与实现',summary:'Agent 生成的定义与代码；可执行不等于因子有效。',ref:'RDAGENT_INTEGRATION.md / ARC09',
@@ -68,7 +72,9 @@ const HELP = {
  'system.observability':{title:'API 运行观测',summary:'只有本工作台 HTTP 服务的实测，包含分母与窗口。',ref:'OBS01 / OBS02',
   body:['错误率定义为窗口内 HTTP 5xx / 已完成请求，4xx 单列；静态资源与健康轮询默认排除。','无样本时显示“无样本”，不显示 0%；采集覆盖不足会明确标注。']},
  'system.storage':{title:'存储与任务',summary:'健康接口区分进程存活与存储可用。',ref:'OBS02 / EXEC01',
-  body:['健康状态只反映本地结果库可用性与数据库 schema 版本。','执行任务的真实状态请到研究中心的执行记录查看，本页统计不代替任务失败率。']},
+  body:['健康状态只反映本地结果库可用性与数据库 schema 版本。','执行任务的真实状态请到研究中心“历史记录 → 执行记录”查看；本页的请求统计与任务观测是两套分母。']},
+ 'system.attempts':{title:'任务观测（Attempt）',summary:'失败率只看成功与失败，已取消和中断单列。',ref:'EXEC10 / OBS01',
+  body:['失败率 = failed /（succeeded + failed），窗口按 Attempt 创建时间；没有样本时显示“无样本”，不显示 0%。','已取消与中断单独计数，不并入失败率；未结束的运行只出现在“未结束”列。','耗时 P95 基于有开始与结束时间的终态 Attempt；与上方 HTTP 指标是两套不同分母的观测。']},
  'data.evidence':{title:'数据证据怎么读',summary:'展示结果对应的数据集身份与执行情景，不是数据目录。',ref:'ARC06 / DATA01—05',
   body:['数据集身份、内容版本、日历与情景指纹共同描述这次结果用了什么输入。','供应商目录、覆盖报告与真实 PIT 校验接入后，本页才会显示这些内容。']},
 };
@@ -152,6 +158,11 @@ async function api(path) {
   return body;
 }
 function empty(message){return `<div class="empty">${esc(message)}</div>`;}
+function foldRows(items,expanded,preview){return expanded?items:items.slice(0,preview);}
+function foldToggle(id,total,shown,expanded,preview=HISTORY_PREVIEW,note=''){
+ if(total<=preview)return '';
+ return `<p class="fold-row"><button type="button" class="fold-toggle" data-fold="${esc(id)}">${expanded?'收起，只看最近 '+preview+' 条':'展开全部（共 '+total+' 条）'}</button><small>当前显示 ${shown} / ${total} 条${note?' · '+esc(note):''}</small></p>`;
+}
 const cardHelp = {
  '最近研究与待检查事项':'research.list','研究记录':'research.list','会话内实验':'research.list','研究结果':'research.list','产物缺口':'research.list',
  '运行概况':'metric.overview','权益曲线':'series.coverage','成本与换手':'cost.turnover',
@@ -161,6 +172,7 @@ const cardHelp = {
  '启动研究（隔离进程）':'exec.launch','执行记录':'exec.attempts','运行环境':'exec.preconditions',
  '结果指标':'research.detail.metrics','因子与实现':'research.detail.factors','Agent 评审意见':'research.detail.feedback','过程时间线':'research.detail.timeline',
  'API 运行观测':'system.observability','存储与任务':'system.storage','当前研究的数据证据':'data.evidence',
+ '任务观测（Attempt）':'system.attempts','历史记录':'history.panel',
 };
 function card(title,body,meta='',helpKey=''){const key=helpKey||cardHelp[title]||'';return `<section class="card"><div class="card-head"><div class="card-title"><h2>${esc(title)}</h2>${key?help(key,title):''}</div><small>${esc(meta)}</small></div>${body}</section>`;}
 function statusLabel(status){const text={succeeded:'成功',failed:'失败',running:'运行中',queued:'排队中',cancelled:'已取消',interrupted:'中断',unknown:'未知'}[status]||status;return `<span class="status ${status==='failed'?'failed':status==='unknown'?'unknown':''}">${esc(text)}</span>`;}
@@ -177,8 +189,15 @@ function selectRun(id,revision=null){state.selected=id;state.revision=revision;c
 function renderRuns(){
   const box=document.getElementById('run-list');
   const visible=state.runs.filter(item=>`${item.run.title} ${item.run.engine.id} ${item.external_id}`.toLocaleLowerCase().includes(state.search));
-  box.innerHTML=visible.length?visible.map(item=>`<button class="run-item ${item.run_id===state.selected?'selected':''}" data-run="${esc(item.run_id)}"><b>${esc(item.run.title==='mlflow_recorder'?'Qlib 回测 · '+item.run.created_at.slice(0,16).replace('T',' '):item.run.title)}</b><small>${sample(item.run)}${esc(item.run.engine.id)} · ${esc(item.run.status)}</small></button>`).join(''):empty(state.runs.length?'没有匹配的运行':'还没有导入运行结果');
+  const shown=foldRows(visible,state.runsExpanded,HISTORY_PREVIEW);
+  box.innerHTML=visible.length?shown.map(item=>`<button class="run-item ${item.run_id===state.selected?'selected':''}" data-run="${esc(item.run_id)}"><b>${esc(item.run.title==='mlflow_recorder'?'Qlib 回测 · '+item.run.created_at.slice(0,16).replace('T',' '):item.run.title)}</b><small>${sample(item.run)}${esc(item.run.engine.id)} · ${esc(item.run.status)}</small></button>`).join(''):empty(state.runs.length?'没有匹配的运行':'还没有导入运行结果');
   box.querySelectorAll('[data-run]').forEach(button=>button.onclick=()=>selectRun(button.dataset.run));
+  const toggle=document.getElementById('run-list-toggle');
+  if(toggle){
+    toggle.hidden=visible.length<=HISTORY_PREVIEW;
+    toggle.textContent=state.runsExpanded?`收起，只看最近 ${HISTORY_PREVIEW} 条`:`展开全部（共 ${visible.length} 条）`;
+    toggle.onclick=()=>{state.runsExpanded=!state.runsExpanded;renderRuns();};
+  }
 }
 function renderWidget(widget,payload){
   let body;
@@ -195,9 +214,13 @@ async function renderOverview(){
   const manifest=await api('/v1/dashboards/overview');
   const research=await api('/v1/research?limit=5');
   const payloads=await Promise.all(manifest.widgets.map(w=>api(`/v1/widgets/${encodeURIComponent(w.query.id)}`)));
-  document.getElementById('content').innerHTML=`<div class="stack">${await capabilityPanel()}${card('最近研究与待检查事项', researchTable(research.items))}<div class="grid">${manifest.widgets.map((w,i)=>renderWidget(w,payloads[i])).join('')}</div></div>`;
+  const overviewPreview=5;
+  const shown=foldRows(research.items,state.overviewExpanded,overviewPreview);
+  const overviewCard=card('最近研究与待检查事项',
+    researchTable(shown)+foldToggle('overview',research.items.length,shown.length,state.overviewExpanded,overviewPreview));
+  document.getElementById('content').innerHTML=`<div class="stack">${await capabilityPanel()}${overviewCard}<div class="grid">${manifest.widgets.map((w,i)=>renderWidget(w,payloads[i])).join('')}</div></div>`;
   document.querySelectorAll('[data-open-run]').forEach(button=>button.onclick=()=>{selectRun(button.dataset.openRun);setView('backtest');});
-  bindResearch();
+  bindResearch();bindHistory();
 }
 function chart(points,unit='CNY',axis='trading_date'){
   const valid=points.filter(p=>typeof p.value==='number');
@@ -321,8 +344,19 @@ function outcomeSummary(outcome){
  if(outcome.artifacts?.mlflow_runs?.length)parts.push(`MLflow run ${outcome.artifacts.mlflow_runs.map(x=>x.slice(0,8)).join('、')}`);
  if(outcome.research_sessions_synced?.length)parts.push(`研究会话 ${outcome.research_sessions_synced.length}个`);
  if(outcome.collection_error)parts.push('摘要收集受限');
- if(outcome.result_import==='manual_import_required')parts.push('结果需显式导入');
+ const imported=outcome.result_import;
+ if(imported&&typeof imported==='object'){
+  const labels={imported:`已入库 · 运行 ${String(imported.run_id||'').slice(0,8)}`,
+                reused:'已入库（复用同内容 revision）',
+                failed:`入库失败 · ${imported.reason||'原因未记录'}`,
+                manual_import_required:'结果需显式导入'};
+  parts.push(labels[imported.status]||`入库状态 ${imported.status||'未知'}`);
+ }else if(imported==='manual_import_required'){parts.push('结果需显式导入');}
  return parts.join(' · ')||'已记录';
+}
+function needsImportRetry(outcome){
+ const state=outcome&&outcome.result_import;
+ return !!(state&&typeof state==='object'&&['failed','manual_import_required'].includes(state.status));
 }
 function executionChecks(entry){
  const required=entry.reasons||[];
@@ -341,6 +375,7 @@ function attemptTable(attempts){
   const actions=[];
   if(a.has_log)actions.push(`<button class="link-button" data-attempt-log="${esc(a.attempt_id)}">日志尾部</button>`);
   if(['queued','running'].includes(a.status))actions.push(`<button class="link-button" data-attempt-cancel="${esc(a.attempt_id)}">${a.cancel_pending?'取消请求中…':'取消'}</button>`);
+  if(a.status==='succeeded'&&needsImportRetry(a.outcome))actions.push(`<button class="link-button" data-attempt-import="${esc(a.attempt_id)}">重试入库</button>`);
   const started=(a.started_at||a.created_at||'').replace('T',' ').slice(0,19);
   const ended=a.ended_at?('→ '+a.ended_at.replace('T',' ').slice(0,19)):'进行中';
   const exitCode=(a.exit_code===null||a.exit_code===undefined)?'未知':esc(a.exit_code);
@@ -391,6 +426,16 @@ function bindExecution(catalog){
    target.innerHTML=`<details open><summary>日志尾部 ${help('exec.log')}（脱敏；最多80行，${body.truncated?'已截断':'未截断'}）</summary><pre>${esc((body.lines||[]).join('\n'))}</pre></details>`;
   }catch(error){target.innerHTML=`<p class="warning">${esc(error.message)}</p>`;}
  });
+ document.querySelectorAll('[data-attempt-import]').forEach(button=>button.onclick=async()=>{
+  button.disabled=true;
+  try{
+   const response=await fetch(`/v1/executions/${encodeURIComponent(button.dataset.attemptImport)}/import`,{method:'POST'});
+   const body=await response.json().catch(()=>({}));
+   if(!response.ok)throw new Error(body.message||'入库失败');
+   setNotice(body.imported?`已入库，运行 ${String((body.receipt&&body.receipt.run_id)||'').slice(0,8)}`:`未入库（${body.reason||'原因未记录'}）`);
+  }catch(error){setNotice(error.message);}
+  render();
+ });
 }
 const researchMetricNames = {'IC':'IC（相关系数）','Rank IC':'Rank IC','ICIR':'ICIR','Rank ICIR':'Rank ICIR','1day.excess_return_with_cost.annualized_return':'成本后年化超额收益（原生口径）','1day.excess_return_with_cost.max_drawdown':'成本后超额最大回撤','1day.excess_return_with_cost.information_ratio':'成本后信息比率','l2.train':'训练 L2','l2.valid':'验证 L2'};
 function reviewPanel(review,evidence={}){
@@ -407,9 +452,26 @@ function openResearch(id){state.researchId=id;const u=new URL(location.href);u.s
 function bindResearch(){
  document.querySelectorAll('[data-research]').forEach(b=>b.onclick=()=>openResearch(b.dataset.research));
  document.querySelectorAll('[data-research-compare]').forEach(b=>b.onclick=()=>{
-  const id=b.dataset.researchCompare;
-  if(!state.compareIds.includes(id))state.compareIds=[...state.compareIds,id].slice(-10);
-  const u=new URL(location.href);u.searchParams.set('compare',state.compareIds.join(','));history.replaceState(null,'',u);setView('compare');
+   const id=b.dataset.researchCompare;
+   if(!state.compareIds.includes(id))state.compareIds=[...state.compareIds,id].slice(-10);
+   const u=new URL(location.href);u.searchParams.set('compare',state.compareIds.join(','));history.replaceState(null,'',u);setView('compare');
+ });
+}
+function bindHistory(){
+ document.querySelectorAll('[data-history-tab]').forEach(button=>button.onclick=()=>{
+  const tab=button.dataset.historyTab==='research'?'research':'attempts';
+  if(state.historyTab===tab)return;
+  state.historyTab=tab;state.historyExpanded=false;
+  const u=new URL(location.href);u.searchParams.set('history',tab);history.replaceState(null,'',u);
+  render();
+ });
+ document.querySelectorAll('[data-fold]').forEach(button=>button.onclick=()=>{
+  const target=button.dataset.fold;
+  if(target==='overview')state.overviewExpanded=!state.overviewExpanded;
+  else if(target==='history')state.historyExpanded=!state.historyExpanded;
+  else if(target==='runs'){state.runsExpanded=!state.runsExpanded;renderRuns();return;}
+  else return;
+  render();
  });
 }
 function readableFields(value){
@@ -432,18 +494,48 @@ async function renderResearchDetail(){
 }
 async function renderAgent(){
  if(state.researchId){await renderResearchDetail();return;}
- const [list,runtime,catalog,attempts]=await Promise.all([api(`/v1/research?limit=20&offset=${state.researchOffset}&query=${encodeURIComponent(state.researchQuery)}`),api('/v1/agents/rdagent'),api('/v1/executions/catalog'),api('/v1/executions?limit=20')]);
+ const attemptPage=`/v1/executions?limit=20${state.attemptCursor?'&cursor='+encodeURIComponent(state.attemptCursor):''}`;
+ const [list,runtime,catalog,attempts]=await Promise.all([api(`/v1/research?limit=20&offset=${state.researchOffset}&query=${encodeURIComponent(state.researchQuery)}`),api('/v1/agents/rdagent'),api('/v1/executions/catalog'),api(attemptPage)]);
  if(catalog.items.length&&!state.executionKey)state.executionKey=newIdempotencyKey();
  const toolbar=`<form id="research-search" class="toolbar"><input aria-label="搜索研究" id="research-query" placeholder="搜索因子名、日期、状态" value="${esc(state.researchQuery)}"><button class="action">搜索</button><button type="button" id="research-refresh" class="action secondary">刷新记录</button><small>共 ${list.total} 条</small></form><p class="panel-note">每条研究可查看结果、假设、生成代码和阶段记录。历史缺失信息会保留为未记录；完整指标可在统一比较页并列查看。</p>`;
  const pager=`<div class="toolbar"><button class="action secondary" id="research-prev" ${state.researchOffset===0?'disabled':''}>上一页</button><button class="action secondary" id="research-next" ${list.next_offset===null?'disabled':''}>下一页</button></div>`;
  const reasons=(runtime.execution?.reasons||[]).map(reasonLabel);
  const ready=`<details><summary>环境与执行能力</summary><p>聊天模型：${esc(runtime.chat?.model||'未连接')}；Embedding：${esc(runtime.embedding?.model||'未连接')}；Linux Docker：${runtime.runtime?.linux_container_available?'可用':'不可用'}。</p><p>界面可启动/取消隔离进程执行；被阻塞的入口会列出缺失条件${reasons.length?'（当前：'+esc(reasons.join('；'))+'）':''}。取消需执行器确认进程结束后才落终态。</p><p class="panel-note">同步已有历史产物：在 RD-Agent 目录执行 .venv/bin/python ../qlib/scripts/export_rdagent_research.py --trust-local-artifacts --synthetic；历史刷新只重新读取已导出的快照，不执行研究。</p></details>`;
- document.getElementById('content').innerHTML=`<div class="stack">${executionPanel(catalog,attempts.items)}${card('执行记录',attemptTable(attempts.items),'平台执行状态；结果进入结果库仍需显式导入')}${card('研究记录',toolbar+researchTable(list.items)+pager)}${card('运行环境',ready)}</div>`;
- document.getElementById('research-search').onsubmit=e=>{e.preventDefault();state.researchQuery=document.getElementById('research-query').value;state.researchOffset=0;render();};
- document.getElementById('research-prev').onclick=()=>{state.researchOffset=Math.max(0,state.researchOffset-20);render();};
- document.getElementById('research-next').onclick=()=>{state.researchOffset=list.next_offset;render();};
- document.getElementById('research-refresh').onclick=async()=>{await refreshRuns();render();};
- bindExecution(catalog);bindResearch();
+ const tab=state.historyTab==='research'?'research':'attempts';
+ const shownAttempts=foldRows(attempts.items,state.historyExpanded,HISTORY_PREVIEW);
+ const shownResearch=foldRows(list.items,state.historyExpanded,HISTORY_PREVIEW);
+ const tabs=`<div class="subtabs" role="tablist" aria-label="历史记录"><button type="button" role="tab" class="subtab ${tab==='attempts'?'active':''}" data-history-tab="attempts" aria-selected="${tab==='attempts'}">执行记录 <small>${attempts.items.length}</small></button><button type="button" role="tab" class="subtab ${tab==='research'?'active':''}" data-history-tab="research" aria-selected="${tab==='research'}">研究记录 <small>${list.total}</small></button></div>`;
+ const attemptPager=`<div class="toolbar"><button class="action secondary" id="attempt-prev" ${state.attemptCursors.length?'':'disabled'}>较新一页</button><button class="action secondary" id="attempt-next" ${attempts.next_cursor?'':'disabled'}>更早的记录</button><small>每页 20 条；翻页不改变排序与筛选。</small></div>`;
+ const pane=tab==='attempts'
+  ? attemptTable(shownAttempts)+foldToggle('history',attempts.items.length,shownAttempts.length,state.historyExpanded)+attemptPager
+  : toolbar+researchTable(shownResearch)+foldToggle('history',list.items.length,shownResearch.length,state.historyExpanded,'',`全库 ${list.total} 条`)+pager;
+ const historyCard=card('历史记录',`${tabs}<div class="history-scroll" id="history-scroll">${pane}</div>`,'子tab切换；列表在面板内滚动，默认折叠为最近记录');
+ document.getElementById('content').innerHTML=`<div class="stack">${executionPanel(catalog,attempts.items)}${historyCard}${card('运行环境',ready)}</div>`;
+ const search=document.getElementById('research-search');
+ if(search)search.onsubmit=e=>{e.preventDefault();state.researchQuery=document.getElementById('research-query').value;state.researchOffset=0;render();};
+ const prev=document.getElementById('research-prev');
+ if(prev)prev.onclick=()=>{state.researchOffset=Math.max(0,state.researchOffset-20);render();};
+ const next=document.getElementById('research-next');
+ if(next)next.onclick=()=>{state.researchOffset=list.next_offset;render();};
+ const refresh=document.getElementById('research-refresh');
+ if(refresh)refresh.onclick=async()=>{await refreshRuns();render();};
+ const attemptPrev=document.getElementById('attempt-prev');
+ if(attemptPrev)attemptPrev.onclick=()=>{
+   const cursors=[...state.attemptCursors];
+   state.attemptCursor=cursors.pop()||null;
+   state.attemptCursors=cursors;
+   state.historyExpanded=false;
+   render();
+ };
+ const attemptNext=document.getElementById('attempt-next');
+ if(attemptNext)attemptNext.onclick=()=>{
+   if(!attempts.next_cursor)return;
+   state.attemptCursors=[...state.attemptCursors,state.attemptCursor].filter(Boolean);
+   state.attemptCursor=attempts.next_cursor;
+   state.historyExpanded=false;
+   render();
+ };
+ bindExecution(catalog);bindResearch();bindHistory();
  if(attempts.items.some(x=>['queued','running'].includes(x.status)))setTimeout(()=>{if(state.view==='agent'&&!state.researchId)render();},5000);
 }
 async function refreshRuns(){
@@ -454,7 +546,12 @@ async function refreshRuns(){
 
 async function renderSystem(){
  const [stats,health]=await Promise.all([api('/v1/observability'),api('/v1/health')]);
- document.getElementById('content').innerHTML=`<div class="stack">${card('API 运行观测',`${badge('measured')}${badge('limited')}<p class="panel-note">仅本工作台HTTP服务的实测，非Qlib或RD-Agent错误率。</p><div class="metric-row"><div class="metric-box"><small>5xx 错误率</small><strong>${stats.error_rate===null?'无样本':fmt(stats.error_rate*100)+'%'}</strong></div><div class="metric-box"><small>已完成请求</small><strong>${stats.completed_requests}</strong></div><div class="metric-box"><small>4xx / 5xx</small><strong>${stats.client_errors} / ${stats.server_errors}</strong></div><div class="metric-box"><small>P95 响应耗时</small><strong>${fmt(stats.p95_ms)} ms</strong></div></div><p class="panel-note">覆盖 ${fmt(stats.coverage_seconds,0)} / 300 秒；${stats.truncated?'达到容量上限，统计覆盖不完整':'未截断'}。${esc(stats.scope)}<br>采集开始 ${esc(stats.collection_started_at)}</p><button id="system-refresh" class="action secondary">刷新观测</button>`)}${await capabilityPanel()}${card('存储与任务',`${badge('measured')}<p>本地结果库：${esc(health.status)}（schema ${esc(health.schema_version)}）。</p><p class="panel-note">执行 Attempt 在“研究中心 → 执行记录”查看，含状态、退出码与日志尾部；本页的请求统计不代替任务失败率，历史过程不完整不等同于失败。</p>`)}</div>`;
+ const attempts=stats.attempts||{};
+ const rate=attempts.failure_rate;
+ const duration=attempts.terminal_p95_seconds;
+ const attemptRows=(attempts.by_kind||[]).map(row=>`<tr><td>${esc(row.kind)}</td><td>${row.total}</td><td>${row.succeeded}</td><td>${row.failed}</td><td>${row.cancelled}</td><td>${row.interrupted}</td><td>${row.running+row.queued}</td></tr>`).join('');
+ const attemptsCard=card('任务观测（Attempt）',`${badge('measured')}${attempts.availability==='empty'?badge('missing'):''}<p class="panel-note">${esc(attempts.scope||'窗口内没有任务观测')}</p><div class="metric-row"><div class="metric-box"><small>Attempt 失败率</small><strong>${rate===null||rate===undefined?'无样本':fmt(rate*100)+'%'}</strong></div><div class="metric-box"><small>分母（成功+失败）</small><strong>${attempts.failure_denominator??0}</strong></div><div class="metric-box"><small>已取消 / 中断</small><strong>${attempts.cancelled??0} / ${attempts.interrupted??0}</strong></div><div class="metric-box"><small>终态耗时 P95</small><strong>${duration===null||duration===undefined?'无样本':fmt(duration,1)+' 秒'}</strong></div></div><p class="panel-note">窗口 ${fmt(attempts.window_seconds,0)} 秒 · 覆盖 ${fmt(attempts.coverage_seconds,0)} 秒 · 总数 ${attempts.total??0} · 采集开始 ${esc(attempts.collection_started_at||'无记录')}</p>${attemptRows?`<div class="table-scroll"><table class="table"><thead><tr><th>入口</th><th>总数</th><th>成功</th><th>失败</th><th>已取消</th><th>中断</th><th>未结束</th></tr></thead><tbody>${attemptRows}</tbody></table></div>`:empty('该窗口内还没有执行记录')}`,'窗口内按 Attempt 状态统计；与上方 HTTP 指标分开');
+ document.getElementById('content').innerHTML=`<div class="stack">${card('API 运行观测',`${badge('measured')}${badge('limited')}<p class="panel-note">仅本工作台HTTP服务的实测，非Qlib或RD-Agent错误率。</p><div class="metric-row"><div class="metric-box"><small>5xx 错误率</small><strong>${stats.error_rate===null?'无样本':fmt(stats.error_rate*100)+'%'}</strong></div><div class="metric-box"><small>已完成请求</small><strong>${stats.completed_requests}</strong></div><div class="metric-box"><small>4xx / 5xx</small><strong>${stats.client_errors} / ${stats.server_errors}</strong></div><div class="metric-box"><small>P95 响应耗时</small><strong>${fmt(stats.p95_ms)} ms</strong></div></div><p class="panel-note">覆盖 ${fmt(stats.coverage_seconds,0)} / 300 秒；${stats.truncated?'达到容量上限，统计覆盖不完整':'未截断'}。${esc(stats.scope)}<br>采集开始 ${esc(stats.collection_started_at)}</p><button id="system-refresh" class="action secondary">刷新观测</button>`)}${attemptsCard}${await capabilityPanel()}${card('存储与任务',`${badge('measured')}<p>本地结果库：${esc(health.status)}（schema ${esc(health.schema_version)}）。</p><p class="panel-note">执行 Attempt 在“研究中心 → 历史记录”查看，含状态、退出码、入库结果与日志尾部；历史过程不完整不等同于失败。</p>`)}</div>`;
  document.getElementById('system-refresh').onclick=()=>render();
 }
 async function renderDataEvidence(){

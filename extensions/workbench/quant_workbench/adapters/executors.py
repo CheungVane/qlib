@@ -26,6 +26,10 @@ PREFLIGHT_TTL_SECONDS = 15.0
 LOG_BYTE_CAP = 200_000
 COMPILE_TIMEOUT = 180
 QWB_RDAGENT_IMAGE = "qwb-qlib-cpu:local"
+# Dataset identity for the current synthetic CN scenario; a real data directory will
+# replace this constant (see docs/spec/CN_A_SHARE_AUDIT.md and the DATA01-05 gap).
+CN_SYNTHETIC_DATASET_ID = "cn-current-synthetic"
+CN_SYNTHETIC_SOURCE_INSTANCE = "qlib-cn-attempt"
 
 
 def _now() -> str:
@@ -136,6 +140,10 @@ class SubprocessExecutor:
         return {**os.environ, "PYTHONUNBUFFERED": "1"}
 
     def config_fingerprint(self) -> str | None:
+        return None
+
+    def import_candidate(self, attempt: dict[str, Any]) -> dict[str, Any] | None:
+        """EXEC12 hook: return the engine-produced artifact to publish, or None."""
         return None
 
     def workspace(self, attempt_id: str, kind: str, params: dict[str, Any]) -> Path:
@@ -479,10 +487,6 @@ class QlibCNExecutor(SubprocessExecutor):
         tracking = run_dir / "mlflow.db"
         if tracking.is_file():
             outcome["artifacts"]["mlflow_tracking"] = {"file": "mlflow.db", "bytes": tracking.stat().st_size}
-            try:
-                relative = tracking.relative_to(self.repo_root)
-            except ValueError:
-                relative = Path(".data/cn_runs") / run_dir.name / tracking.name
             # Qlib writes one directory per run under the attempt workspace; listing the
             # attempt's own output is not a read of the source experiment database.
             run_ids = sorted({path.name for path in (run_dir / "mlruns").glob("*/*")
@@ -492,11 +496,38 @@ class QlibCNExecutor(SubprocessExecutor):
                 outcome["artifacts"]["mlflow_runs"] = run_ids
             outcome["import_hint"] = {
                 "tool": "qwb import-qlib",
-                "tracking_uri": f"sqlite:///./{relative}",
                 "external_ids": run_ids,
-                "note": "导入时需声明 --synthetic/--real、dataset 标识，并按结果合同标注来源。",
+                "note": ("本入口的执行结果会由平台自动导入（EXEC12）；手工重试使用 "
+                         "`qwb import-attempt <attempt_id>`，不再暴露跟踪库路径。"),
             }
         return outcome
+
+    def import_candidate(self, attempt: dict[str, Any]) -> dict[str, Any] | None:
+        """EXEC12: the engine's own MLflow run in the attempt workspace is the import input."""
+        run_dir = Path(attempt.get("workspace") or "")
+        tracking = run_dir / "mlflow.db"
+        run_ids = ((attempt.get("outcome") or {}).get("artifacts") or {}).get("mlflow_runs") or []
+        if not tracking.is_file() or not run_ids:
+            return None
+        effective_path = run_dir / "effective.json"
+        synthetic = True
+        if effective_path.is_file():
+            try:
+                synthetic = bool(json.loads(effective_path.read_text(encoding="utf-8"))["research"]["synthetic"])
+            except (OSError, ValueError, KeyError, TypeError):
+                synthetic = True
+        return {
+            "importer": "qlib_mlflow",
+            "source_instance_id": CN_SYNTHETIC_SOURCE_INSTANCE,
+            "external_id": run_ids[-1],
+            "tracking_uri": f"sqlite:///{tracking}",
+            "dataset_id": CN_SYNTHETIC_DATASET_ID,
+            "dataset_version": None,
+            "synthetic": synthetic,
+            "trust_local_artifacts": True,
+            "config_path": str(effective_path) if effective_path.is_file() else None,
+            "require_cn_scenario_evidence": True,
+        }
 
 
 class RDAgentExecutor(SubprocessExecutor):
@@ -533,6 +564,11 @@ class RDAgentExecutor(SubprocessExecutor):
             return self.bundle()["fingerprint"]
         except Exception:
             return None
+
+    def import_unavailable_reason(self, attempt: dict[str, Any]) -> str:
+        # RD-Agent output is a research snapshot: it enters the result library through the
+        # trusted offline export, never as an automatic backtest import (EXEC12).
+        return "rdagent_research_snapshot_required"
 
     def describe(self, kind: str) -> dict[str, Any]:
         mode = "loop" if kind == self.LOOP else "baseline"

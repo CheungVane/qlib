@@ -15,9 +15,11 @@
 | `rdagent.factor.baseline` | `rdagent_subprocess` | RD-Agent 因子基线（本地执行，不发聊天请求） | 合成情景、集成探针 |
 | `rdagent.factor.loop` | `rdagent_subprocess` | RD-Agent 单轮因子演化循环（使用本地 `.env` 的聊天与 embedding 配置） | 合成情景、集成探针 |
 
-不在范围内：结果自动入库、任务队列与调度、资源配额/并发上限、远程或云执行器、券商下单、子进程内存/CPU 硬限制、日志流式推送。以上缺口必须在 UI 与实施文档中保持可见，不能以按钮存在代替能力。
+范围内：执行入口与 Attempt 生命周期，以及**由执行结果触发的自动入库**（EXEC12）：执行器声明导入候选、平台按导入适配器发布结果并记录 ImportReceipt。
 
-执行产生的原始产物（MLflow 目录、RD-Agent 会话目录、费用台账、质量 JSON）保留在其工作目录；进入结果库仍走显式导入，且遵循来源标记与手写样本规则。
+不在范围内：任务队列与调度、资源配额/并发上限、远程或云执行器、券商下单、子进程内存/CPU 硬限制、日志流式推送。以上缺口必须在 UI 与实施文档中保持可见，不能以按钮存在代替能力。
+
+执行产生的原始产物（MLflow 目录、RD-Agent 会话目录、费用台账、质量 JSON）保留在其工作目录；自动入库只发布执行器产出且通过校验的产物，无法导入时保留 `manual_import_required` 或 `failed` 并给出原因，且两者都继续遵循来源标记与手写样本规则。
 
 ## 2. Attempt 领域模型
 
@@ -110,13 +112,26 @@ EXEC09（CLI 与 UI 共用）：`qwb execution-catalog`、`qwb execute`、`qwb e
 - 运行中显示"取消请求中"与终态的区别；
 - 无记录显示空态，不画示意进度或假成功率。
 
-EXEC10（观测，OBS01/OBS02）：Attempt 记录 `request_id`；平台读取操作不计入任务执行；`/v1/observability` 仍只表达工作台 HTTP 进程自身，不能代替任务失败率。失败率与耗时的分子分母在计算时必须以 Attempt 状态为准，并把 `unknown` 与 0 分开。
+EXEC10（观测，OBS01/OBS02）：Attempt 记录 `request_id`；平台读取操作不计入任务执行。
+
+- `/v1/observability` 必须同时返回两部分：HTTP 进程自身（现有字段）与 `attempts` 任务块。两块的窗口、分母与排除项都必须披露，不能用一块代替另一块。
+- `attempts` 块至少包含：窗口秒数与采集覆盖、总数、按状态计数、`failure_rate = failed/(succeeded+failed)`、单列 cancelled 与 interrupted、终态耗时 P95、按 kind 的分组计数。
+- 没有样本时 `failure_rate` 为 `null`（显示“无样本”），不得显示 0%；分母为 0 与真实 0 失败必须分开；仅依赖 Attempt 状态，不从日志文本或退出码推断额外语义。
+
+EXEC12（执行结果自动入库，U15）：自动入库是执行链路的一部分，不是对来源规则的豁免。
+
+- 触发：Attempt 落 `succeeded` 终态后，由执行器给出导入候选（例如 Qlib 私有跟踪库中的 run id、数据集身份、配置路径、模拟/真实性质）；平台调用导入适配器发布结果，并写入 ImportReceipt。
+- Attempt 的 `outcome.result_import` 状态取值：`imported`（含 `run_id`、`revision_id`、`receipt_id`、`adapter_version`、`imported_at`）、`reused`（同内容已有 revision）、`failed`（含原因）、`manual_import_required`（没有可用导入候选或该入口尚未提供导入器）。
+- 只有引擎产出的产物可作为自动入库输入；导入必须复用显式导入的校验（来源冲突拒绝、脱敏、指纹核验、只读访问源库）。任何一项不通过即 `failed`，不得降低校验以让执行“看起来成功”。
+- 自动入库不得改写历史 revision 或既有 Attempt；重复核对同一 Attempt 不得重复发布（内容哈希相同即复用）。
+- 提供显式重试入口（CLI 与 HTTP 写接口，走同一服务）：仅对没有 `imported/reused` 回执的 Attempt 执行；重试失败保留最后一次原因。
+- 执行成功、结果入库与结果可信是三件事：`succeeded` 不保证 `imported`，`imported` 也不等于研究有效。
 
 EXEC11（演进，GOV-UPSTREAM）：Qlib 与 RD-Agent 保持外部引擎边界；执行器是适配层，不修改上游源码，不把 RD-Agent 代码复制进 Qlib。RD-Agent 探针脚本位于本仓库 `scripts/`，RD-Agent checkout 只写其被 Git 忽略的目录。上游更新后重验执行器命令、前置条件检查与适配器契约。
 
 ## 4. 已知限制（保持可见）
 
-- 结果自动入库未实现：执行成功后 `outcome.result_import = "manual_import_required"`，用户需按导入流程显式发布，来源标记与情景指纹照旧。
+- 自动入库当前只覆盖声明了导入器的入口（Qlib CN 合成行情回测）。RD-Agent 入口仍为 `manual_import_required`：其结果需经可信离线导出后再进入结果库，平台不把研究会话快照当成回测结果。
 - RD-Agent 内部工作目录由其自身分配（版本化模板目录按指纹隔离）；平台保证日志、退出证据与配置指纹隔离，不修改上游的目录分配逻辑。
 - 无调度器与并发上限；多次提交按机器资源自行竞争，界面不承诺排队。
 - 日志查看为有界尾部读取，不是实时流；日志内容经脱敏后可能替换路径与密钥。
@@ -130,5 +145,7 @@ EXEC11（演进，GOV-UPSTREAM）：Qlib 与 RD-Agent 保持外部引擎边界�
 | A19 | 取消有确认状态；取消/完成竞争不覆盖已确认终态；失败任务保留日志与部分产物；读取接口不启动训练 | 单元/回归测试 + 浏览器检查 |
 | EXEC06 | 缺前置条件时不产生 Attempt、不返回假成功 | 回归测试（缺 RD-Agent checkout/venv 时 catalog 与提交行为） |
 | EXEC07 | 跨源写请求 403；幂等重放 200；未知 kind 拒绝 | 回归测试（TestClient） |
+| EXEC10 | `/v1/observability` 同时返回 HTTP 与 Attempt 两块；无样本为 null；cancelled 单列；分母与窗口披露 | 回归测试 + 系统页 |
+| EXEC12 | 成功 Attempt 自动发布结果并写 ImportReceipt；无候选保留 `manual_import_required`；导入失败保留原因；重复核对不重复发布；DTO 不泄漏跟踪库路径 | 回归测试 + 本机真实 Attempt 记录 |
 
 完成状态与实测证据记录在 [IMPLEMENTATION.md](IMPLEMENTATION.md)，变更历史记录在 [CHANGELOG.md](CHANGELOG.md)。通过测试不等于执行器已覆盖真实数据或生产部署。

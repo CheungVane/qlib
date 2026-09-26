@@ -25,6 +25,13 @@
 
 当前运行时验证器为model.validate_package；全领域MetricDefinition/主体、freshness采集、JSON Schema/OpenAPI自动一致性仍为M0未完成项。本表约束当前切片，不以缺字段自动填造fresh/coverage。
 
+## 执行结果自动入库（EXEC12）
+
+- 自动入库与显式 `import-qlib` 使用同一适配器与校验；来源实例、外部ID、adapter_version 与内容哈希共同决定 run/revision 身份，同内容重复导入复用既有 revision。
+- 每次自动入库在平台库记录 ImportReceipt（attempt、run、revision、来源实例、外部ID、适配器版本、状态、时间、失败原因）；Attempt 的 `outcome.result_import` 是投影，回执是事实记录。
+- 自动入库不得跳过来源冲突拒绝、脱敏、情景指纹核验与只读源库访问；导入失败时 Attempt 保持执行成功但入库状态为失败并给出原因。
+- 导入对象的 provenance/字段来源与显式导入一致：引擎原始记录、工作台派生与模拟标记照旧，`imported` 不等于研究有效。
+
 ## 比较模式
 
 API/CLI支持mode=auto/equity/metric；auto对platform.equity选equity，其余选metric。并排浏览一直允许，未知/差异显示原因。尚不提供费用实验的自动排名，费用不同仍可并排查看。
