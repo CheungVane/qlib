@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ..cn_market import load_profile
+from ..cn_market import CN_SYNTHETIC_DATASET_ID, CN_SYNTHETIC_SOURCE_INSTANCE, load_profile
 from ..execution import InvalidExecutionRequest
 from ..source_safety import Sanitizer
 
@@ -26,10 +26,6 @@ PREFLIGHT_TTL_SECONDS = 15.0
 LOG_BYTE_CAP = 200_000
 COMPILE_TIMEOUT = 180
 QWB_RDAGENT_IMAGE = "qwb-qlib-cpu:local"
-# Dataset identity for the current synthetic CN scenario; a real data directory will
-# replace this constant (see docs/spec/CN_A_SHARE_AUDIT.md and the DATA01-05 gap).
-CN_SYNTHETIC_DATASET_ID = "cn-current-synthetic"
-CN_SYNTHETIC_SOURCE_INSTANCE = "qlib-cn-attempt"
 
 
 def _now() -> str:
@@ -510,19 +506,28 @@ class QlibCNExecutor(SubprocessExecutor):
         if not tracking.is_file() or not run_ids:
             return None
         effective_path = run_dir / "effective.json"
+        dataset_path = run_dir / "dataset.json"
         synthetic = True
+        dataset_id, dataset_version = CN_SYNTHETIC_DATASET_ID, None
         if effective_path.is_file():
             try:
                 synthetic = bool(json.loads(effective_path.read_text(encoding="utf-8"))["research"]["synthetic"])
             except (OSError, ValueError, KeyError, TypeError):
                 synthetic = True
+        if dataset_path.is_file():
+            try:
+                registered = json.loads(dataset_path.read_text(encoding="utf-8"))
+                dataset_id = registered.get("dataset_id") or dataset_id
+                dataset_version = registered.get("dataset_version")
+            except (OSError, ValueError, TypeError):
+                dataset_version = None
         return {
             "importer": "qlib_mlflow",
             "source_instance_id": CN_SYNTHETIC_SOURCE_INSTANCE,
             "external_id": run_ids[-1],
             "tracking_uri": f"sqlite:///{tracking}",
-            "dataset_id": CN_SYNTHETIC_DATASET_ID,
-            "dataset_version": None,
+            "dataset_id": dataset_id,
+            "dataset_version": dataset_version,
             "synthetic": synthetic,
             "trust_local_artifacts": True,
             "config_path": str(effective_path) if effective_path.is_file() else None,

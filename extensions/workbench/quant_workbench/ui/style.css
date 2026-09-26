@@ -52,3 +52,19 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.65;
 .fold-toggle{background:#fff;border:1px solid #cfdee2;color:#197f70;border-radius:7px;padding:6px 11px;font:inherit;font-size:12px;cursor:pointer}
 .fold-toggle:hover,.fold-toggle:focus-visible{border-color:#19a98f;outline:none}
 @media(max-width:650px){.history-scroll{max-height:60vh}.sidebar{height:auto;position:static;overflow:visible}}
+
+.compare-table th:first-child,.compare-table td:first-child{position:sticky;left:0;background:#fff}
+.compare-table th{text-transform:none;letter-spacing:0;font-size:12px;color:#3c5a66}
+.compare-table thead th{font-weight:700;border-bottom:1px solid #e4ecee}
+.compare-table .compare-row-title{text-align:left;font-weight:600;color:#22404c;min-width:190px;vertical-align:top}
+.compare-table .compare-row-title small{font-weight:400;text-transform:none}
+.compare-table td{text-align:right;font-variant-numeric:tabular-nums}
+.compare-table td strong{font-size:14px}
+.cell-best{background:#fdeceb !important;box-shadow:inset 3px 0 0 #c0392b}
+.cell-worst{background:#eaf7ee !important;box-shadow:inset 3px 0 0 #1b7a3d}
+.cell-missing{color:#7c919b}
+.rank-mark{display:inline-block;font-size:10px;font-weight:700;border-radius:4px;padding:1px 6px;margin-top:4px}
+.rank-best{background:#c0392b;color:#fff}
+.rank-worst{background:#1b7a3d;color:#fff}
+.compare-details{border:1px solid #e2ecee;border-radius:10px;padding:12px 16px;background:#fbfdfd}
+.compare-details>summary{font-weight:600}

@@ -30,7 +30,10 @@ def verify_effective(effective, quality=None):
 
 
 def comparison_context(effective):
-    return {'execution_id': effective['fingerprint'], 'initial_equity': effective['account']['initial_cash'],
+    # evaluation_id identifies the evaluation semantics and sample scope; for the CN scenario the
+    # scenario fingerprint is that identity. It never substitutes the dataset content version.
+    return {'execution_id': effective['fingerprint'], 'evaluation_id': effective['fingerprint'],
+            'initial_equity': effective['account']['initial_cash'],
             'cashflow_policy': 'none', 'price_basis': 'qlib_adjusted_account',
             'benchmark_id': effective['research']['benchmark']}
 

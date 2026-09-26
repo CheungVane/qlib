@@ -6,7 +6,9 @@ from typing import Any
 
 from .ports import AgentObservationPort, ResultRepository
 from .provenance import classify, capabilities_audit
-from .metrics import summarize, coordinate
+from .metrics import (
+    COMPARE_ROWS, DIRECTIONS, EXTRA_ROW_LIMIT, coordinate, rank, row_value, summarize,
+)
 
 
 class WorkbenchService:
@@ -199,6 +201,107 @@ class WorkbenchService:
         return {'mode': mode, 'status':'comparable' if not reasons else 'partial',
                 'overlay_allowed':not overlay_reasons, 'ranking_allowed':not reasons,
                 'reasons':reasons, 'revisions':{rid:rev['revision_id'] for rid,rev in zip(run_ids,revisions)}}
+
+    def compare_table(self, run_ids: list[str], metric_ids: list[str] | None = None) -> dict[str, Any]:
+        """UI06: one row per metric, one column per run; best/worst are decided here, not in the UI."""
+        if not 2 <= len(run_ids) <= 10 or len(set(run_ids)) != len(run_ids):
+            raise ValueError("provide 2 to 10 distinct run IDs")
+        revisions = []
+        for run_id in run_ids:
+            revision = self.get_revision(run_id)
+            if revision is None:
+                return {"status": "incompatible", "reasons": [f"run_not_found:{run_id}"],
+                        "run_ids": list(run_ids), "runs": [], "rows": []}
+            revisions.append(revision)
+        rows = []
+        for descriptor in self._table_descriptors(revisions, metric_ids):
+            assessment = self.compare(run_ids, descriptor["metric_id"], "auto")
+            if assessment.get("status") == "incompatible":
+                allowed, reasons = False, list(assessment.get("reasons", []))
+            else:
+                allowed, reasons = bool(assessment.get("ranking_allowed")), list(assessment.get("reasons", []))
+            direction = descriptor.get("direction", "unknown")
+            if direction not in ("higher_better", "lower_better"):
+                if allowed:
+                    reasons = [*reasons, "direction_not_registered"]
+                allowed = False
+            cells, values = [], []
+            for run_id, revision in zip(run_ids, revisions):
+                series = next((x for x in revision["result"]["series"]
+                               if x["metric_id"] == descriptor["metric_id"]), None)
+                unit = descriptor.get("unit") or (series or {}).get("unit")
+                if series is None:
+                    availability, reason, value = "not_recorded", "metric_not_in_revision", None
+                elif series["availability"] != "available":
+                    availability, reason, value = series["availability"], series.get("reason"), None
+                else:
+                    summary = summarize(series)
+                    value = row_value(series, descriptor["aggregation"], summary)
+                    availability = "available" if value is not None else "empty"
+                    reason = None if value is not None else (summary.get("last_reason") or "no_valid_point")
+                values.append(value)
+                cells.append({"run_id": run_id, "value": value, "availability": availability,
+                              "unit": unit, "reason": reason})
+            if not allowed:
+                marks = [None] * len(cells)
+                ties = {"tied_best": False, "tied_worst": False}
+            else:
+                ranking = rank(values, direction)
+                marks = ranking["marks"]
+                ties = {"tied_best": ranking["tied_best"], "tied_worst": ranking["tied_worst"]}
+            extra_reasons = list(reasons)
+            if allowed and not any(marks):
+                allowed = False
+                extra_reasons = [*extra_reasons,
+                                 "values_within_tolerance" if ranking["within_tolerance"]
+                                 else "values_equal_or_incomplete"]
+            for cell, mark in zip(cells, marks):
+                cell["mark"] = mark
+                cell["tied"] = bool(mark == "best" and ties["tied_best"]
+                                    or mark == "worst" and ties["tied_worst"])
+            rows.append({
+                "metric_id": descriptor["metric_id"], "label": descriptor["label"],
+                "aggregation": descriptor["aggregation"], "direction": direction,
+                "direction_label": DIRECTIONS.get(direction, DIRECTIONS["unknown"]),
+                "unit": next((cell["unit"] for cell in cells if cell["unit"]), None),
+                "ranking_allowed": allowed, "reasons": sorted(set(extra_reasons)), "cells": cells,
+            })
+        overall = sorted({reason for row in rows for reason in row["reasons"]})
+        return {
+            "status": "comparable" if rows and all(row["ranking_allowed"] for row in rows) else "partial",
+            "ranking_allowed": bool(rows) and all(row["ranking_allowed"] for row in rows),
+            "reasons": overall,
+            "run_ids": list(run_ids),
+            "runs": [{"run_id": run_id, "title": revision["result"]["run"]["title"],
+                      "engine_id": revision["result"]["run"]["engine"]["id"],
+                      "dataset_id": revision["result"]["run"]["dataset"]["id"],
+                      "dataset_version": revision["result"]["run"]["dataset"].get("version"),
+                      "synthetic": revision["result"]["run"]["synthetic"]}
+                     for run_id, revision in zip(run_ids, revisions)],
+            "revisions": {run_id: revision["revision_id"] for run_id, revision in zip(run_ids, revisions)},
+            "rows": rows,
+        }
+
+    def _table_descriptors(self, revisions, metric_ids):
+        descriptors = [dict(row) for row in COMPARE_ROWS]
+        if metric_ids:
+            wanted, known = list(dict.fromkeys(metric_ids)), {d["metric_id"] for d in descriptors}
+            descriptors = [d for d in descriptors if d["metric_id"] in wanted]
+            for metric_id in wanted:
+                if metric_id not in known:
+                    descriptors.append({"metric_id": metric_id, "label": metric_id,
+                                        "aggregation": "last", "direction": "unknown"})
+            return descriptors
+        covered = {d["metric_id"] for d in descriptors}
+        shared = None
+        for revision in revisions:
+            present = {x["metric_id"] for x in revision["result"]["series"]
+                       if x["availability"] == "available"}
+            shared = present if shared is None else (shared & present)
+        extras = sorted((shared or set()) - covered)[:EXTRA_ROW_LIMIT]
+        descriptors.extend({"metric_id": metric_id, "label": metric_id, "aggregation": "last",
+                            "direction": "unknown"} for metric_id in extras)
+        return descriptors
 
     def provenance_capabilities(self):
         return capabilities_audit()

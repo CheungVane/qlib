@@ -190,6 +190,11 @@ def create_app(service: WorkbenchService):
     def compare(run_id: list[str] = Query(...), metric_id: str = Query(...), mode: str = Query("auto")):
         return service.compare(run_id, metric_id, mode)
 
+    @app.get("/v1/compare/table")
+    def compare_table(run_id: list[str] = Query(...), metric_id: list[str] | None = Query(None)):
+        """UI06: one row per metric, one column per run, best/worst computed server-side."""
+        return service.compare_table(run_id, metric_id)
+
     @app.get("/v1/executions/catalog")
     def executions_catalog(refresh: bool = False):
         return service.execution_catalog(refresh)

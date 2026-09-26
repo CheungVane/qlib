@@ -65,6 +65,9 @@ def parser() -> argparse.ArgumentParser:
     a.add_argument("metric_id")
     a.add_argument("run_ids", nargs="+")
     a.add_argument("--mode", choices=["auto","equity","metric"], default="auto")
+    a = sub.add_parser("compare-table", help="one row per metric, one column per run (UI06)")
+    a.add_argument("run_ids", nargs="+")
+    a.add_argument("--metric-id", action="append", dest="metric_ids")
     a = sub.add_parser('research-list')
     a.add_argument('--limit', type=int, default=20)
     a.add_argument('--offset', type=int, default=0)
@@ -131,6 +134,8 @@ def main(argv: list[str] | None = None) -> int:
             result = service.get_series(args.run_id, args.metric_id, args.revision_id, args.limit, args.offset)
         elif args.command == "compare":
             result = service.compare(args.run_ids, args.metric_id, args.mode)
+        elif args.command == "compare-table":
+            result = service.compare_table(args.run_ids, args.metric_ids)
         elif args.command == 'research-list':
             result = service.research_list(args.limit, args.offset, args.query)
         elif args.command == 'research-detail':

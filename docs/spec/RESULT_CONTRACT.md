@@ -32,6 +32,14 @@
 - 自动入库不得跳过来源冲突拒绝、脱敏、情景指纹核验与只读源库访问；导入失败时 Attempt 保持执行成功但入库状态为失败并给出原因。
 - 导入对象的 provenance/字段来源与显式导入一致：引擎原始记录、工作台派生与模拟标记照旧，`imported` 不等于研究有效。
 
+## 数据集内容版本与评估口径（比较表前置）
+
+- `run.dataset.version` 记录**已物化数据快照的内容摘要**：对快照目录按相对路径排序后逐个文件取 SHA-256，再对这些摘要做一次 SHA-256（`basis=files_sha256`），并把摘要写入快照的 `content.json`；只登记文件数量与字节数，不写原始行情。
+- 内容摘要与情景/配置指纹是两件事：GOV-CONFIG 仍然禁止用配置指纹代替数据内容版本。本机 CN 快照由固定种子与日历确定性生成，因此内容摘要稳定可复算。
+- CN 适配器把执行/评估语义标识映射为 `evidence.comparison.evaluation_id = <情景指纹>`（同一指纹表示同一评估配置与样本范围），与 `execution_id` 并存；权益比较仍需 `initial_equity`、`cashflow_policy`、`price_basis`、`benchmark_id`。
+- 历史 revision 不改写：缺少内容摘要或 `evaluation_id` 的旧对象继续保持不可排名状态，原因随比较结果显示；重跑或重新导入会产生新 revision。
+- 数据目录正式接入后，`dataset.version` 应由供应商数据的内容摘要或版本号填充，本机的文件摘要机制仍然适用于本地快照与夹具。
+
 ## 比较模式
 
 API/CLI支持mode=auto/equity/metric；auto对platform.equity选equity，其余选metric。并排浏览一直允许，未知/差异显示原因。尚不提供费用实验的自动排名，费用不同仍可并排查看。

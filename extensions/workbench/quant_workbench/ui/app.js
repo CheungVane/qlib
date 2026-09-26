@@ -43,6 +43,8 @@ const HELP = {
   body:['佣金、最低佣金、过户费、卖出税与滑点按当前生效情景分项计算。','费用序列缺失时显示“未记录/不支持”，不以 0 表示免费。']},
  'compare.rules':{title:'比较口径检查',summary:'能不能排名由检查结果决定，不由界面外观决定。',ref:'COMPARE01',
   body:['检查输出 comparable / partial / incompatible 及原因，例如数据版本、日历、初始资金或费用情景不同。','模拟与真实结果、手写样本不参与排名。']},
+ 'compare.table':{title:'比较表怎么读',summary:'一行一个指标、一列一个运行；红=最优、绿=最劣，仅在该行允许比较时着色。',ref:'UI06 / COMPARE01',
+  body:['每行是一个指标（含单位与方向：越高越好／越低越好／方向未登记），每列是一个运行；同一行内才比较，不跨行换算。','红=最优、绿=最劣（A股习惯），同时有“最优/最劣”文字标记；颜色不是唯一信息。','只有该行口径检查通过且方向已登记才着色：数据版本、日历、单位、初始资金、评估口径任一不一致时保持中性并写明原因。','并列极值会标“并列”，不虚构唯一最优；方向未登记的指标（例如换手率）不做优劣判断。','单元格数值来自该指标的全量 revision 摘要（末值、最小值或首末变化），未知与缺测显示原因，不填零。']},
  'exec.launch':{title:'启动研究（隔离进程）',summary:'每次启动都是一次独立进程，有独立工作目录与日志。',ref:'EXECUTION.md EXEC03 / EXEC04',
   body:['执行入口按 kind 选择；提交前会逐项检查前置条件，缺任一项就拒绝启动且不产生 Attempt。','同一提交期间复用同一幂等键以吸收重复点击；启动成功或去重后自动换新键，可以再次启动。']},
  'exec.kind.qlib.cn_synthetic_backtest':{title:'Qlib CN 合成行情训练+回测',summary:'训练 LightGBM 并在合成行情上回测，结果会自动入库。',ref:'EXEC12 / CN01—03 / UI05',
@@ -175,6 +177,7 @@ const cardHelp = {
  '来源证据':'provenance.panel','来源核查':'provenance.panel','数据来源与能力标记':'provenance.panel','能力边界与来源审计':'provenance.panel','来源与限制':'provenance.panel',
  '规则摘要与待验证事项':'review.panel','训练运行':'metric.engine','训练与信号指标':'metric.table.native',
  '选择运行':'compare.rules','口径检查':'compare.rules','比较结果':'compare.rules',
+ '比较表（一行一指标）':'compare.table',
  '启动研究（隔离进程）':'exec.launch','执行记录':'exec.attempts','运行环境':'exec.preconditions',
  '结果指标':'research.detail.metrics','因子与实现':'research.detail.factors','Agent 评审意见':'research.detail.feedback','过程时间线':'research.detail.timeline',
  'API 运行观测':'system.observability','存储与任务':'system.storage','当前研究的数据证据':'data.evidence',
@@ -297,7 +300,25 @@ async function renderTraining(){
   const stageText=summary.run.stages?.map(x=>`${esc(x.kind)}：${esc(x.status)}`).join(' · ')||'阶段信息未知';
   document.getElementById('content').innerHTML=`<div class="stack">${card('训练运行',`<div class="heading-row"><h2>${esc(summary.run.title)}</h2>${sample(summary.run)}</div><p class="panel-note">${stageText}<br>引擎运行时版本：${esc(summary.run.engine.version||'未知')} · 数据版本：${esc(summary.run.dataset.version||'未知')}</p>`)}${provenancePanel(detail)}${reviewPanel(review,detail.evidence)}${card('训练与信号指标',rows.length?`<table class="table"><thead><tr><th>指标</th><th>轴</th><th>末点</th><th>单位</th><th>记录状态</th></tr></thead><tbody>${rows.join('')}</tbody></table>`:empty('该运行没有可显示的训练指标'))}</div>`;
 }
-const compareReasons = {legacy_experiment_attribution_unverified:'旧版导出实验归属未复核',dataset_id_differs:'数据集身份不同',coverage_axis_differs:'有效观测坐标不同',missing_observations:'序列有缺测',step_kind_differs:'训练步定义未知或不同',evaluation_unknown_or_differs:'评估口径未知或不同',initial_equity_unknown_or_differs:'初始资金未知或不同',initial_equity_invalid:'缺少有效初始资金',cashflow_policy_unknown_or_differs:'现金流口径未知或不同',cashflow_not_supported:'尚不支持该现金流口径',price_basis_unknown_or_differs:'价格口径未知或不同',benchmark_id_unknown_or_differs:'基准未知或不同',handwritten_fixture_present:'包含手写演示样本，不支持研究排名',date_window_differs:'回测日期窗口不同',first_equity_differs:'首个观测权益不同',execution_scenario_unknown_or_differs:'执行/费用情景未知或不同',unit_differs:'单位不同',axis_differs:'序列轴不同',definition_id_differs:'指标定义不同',calendar_id_differs:'交易日历不同',currency_differs:'币种不同',synthetic_and_real_mixed:'模拟与真实数据混用',dataset_version_unknown_or_differs:'数据版本未知或不同'};
+const compareReasons = {legacy_experiment_attribution_unverified:'旧版导出实验归属未复核',dataset_id_differs:'数据集身份不同',coverage_axis_differs:'有效观测坐标不同',missing_observations:'序列有缺测',step_kind_differs:'训练步定义未知或不同',evaluation_unknown_or_differs:'评估口径未知或不同',initial_equity_unknown_or_differs:'初始资金未知或不同',initial_equity_invalid:'缺少有效初始资金',cashflow_policy_unknown_or_differs:'现金流口径未知或不同',cashflow_not_supported:'尚不支持该现金流口径',price_basis_unknown_or_differs:'价格口径未知或不同',benchmark_id_unknown_or_differs:'基准未知或不同',handwritten_fixture_present:'包含手写演示样本，不支持研究排名',date_window_differs:'回测日期窗口不同',first_equity_differs:'首个观测权益不同',execution_scenario_unknown_or_differs:'执行/费用情景未知或不同',unit_differs:'单位不同',axis_differs:'序列轴不同',definition_id_differs:'指标定义不同',calendar_id_differs:'交易日历不同',currency_differs:'币种不同',synthetic_and_real_mixed:'模拟与真实数据混用',dataset_version_unknown_or_differs:'数据版本未知或不同',direction_not_registered:'该指标方向未登记，不做优劣判断',values_equal_or_incomplete:'数值相同或不全，无法判断优劣',values_within_tolerance:'极值差异在1e-9相对容差内，可能是数值噪声，标注优劣会失真',metric_unavailable:'该运行没有这个指标'};
+function compareCell(cell,row){
+ if(typeof cell.value!=='number'){
+  const label=cell.availability==='available'?'未知':availabilityLabel(cell.availability);
+  return `<td class="cell-missing"><strong>未知</strong><br><small class="muted">${esc(label)}${cell.reason?' · '+esc(compareReasons[cell.reason]||cell.reason):''}</small></td>`;
+ }
+ const ratio=row.unit==='ratio';
+ const mark=cell.mark?`<span class="rank-mark rank-${cell.mark}">${cell.mark==='best'?'最优':'最劣'}${cell.tied?'·并列':''}</span>`:'';
+ return `<td class="${cell.mark?'cell-'+cell.mark:''}"><strong>${fmt(cell.value,ratio?4:2)}</strong> <small>${esc(row.unit||cell.unit||'')}</small>${ratio?`<br><small class="muted">${fmt(cell.value*100,2)}%</small>`:''}${mark?`<br>${mark}`:''}</td>`;
+}
+function compareTableHtml(table){
+ if(!table.rows||!table.rows.length)return empty('没有可比较的指标');
+ const head=`<tr><th>指标</th>${table.runs.map(r=>`<th>${esc(r.title)} ${r.synthetic?'<span class="sample">模拟</span>':''}<small class="block muted">${esc(r.engine_id)} · 数据版本 ${esc(r.dataset_version?String(r.dataset_version).slice(0,10):'未记录')}</small></th>`).join('')}</tr>`;
+ const body=table.rows.map(row=>{
+  const note=row.ranking_allowed?'':`<small class="block warning">本行不做优劣判断：${esc(row.reasons.map(r=>compareReasons[r]||r).join(' · '))}</small>`;
+  return `<tr><th class="compare-row-title">${esc(row.label)}<small class="block muted">${esc(row.unit||'单位未记录')} · ${esc(row.direction_label)}</small>${note}</th>${row.cells.map(cell=>compareCell(cell,row)).join('')}</tr>`;
+ }).join('');
+ return `<div class="table-scroll"><table class="table compare-table"><thead>${head}</thead><tbody>${body}</tbody></table></div><p class="panel-note">红=最优、绿=最劣（A股习惯），只在整行口径检查通过且方向已登记时着色；未着色的行写明原因，最优/最劣同时有文字标记，颜色不是唯一信息。</p>`;
+}
 async function renderCompare(){
   const choices=state.runs.map(item=>`<label class="compare-choice"><input type="checkbox" data-compare-run="${esc(item.run_id)}" ${state.compareIds.includes(item.run_id)?'checked':''}><span><strong>${esc(item.run.title)}</strong><small>${esc(item.run.engine.id)} · ${esc(item.run.dataset.id)} · ${esc(item.run.dataset.version||'版本未知')} ${sample(item.run)}</small></span></label>`).join('');
   const picker=card('选择运行',`<p class="panel-note">选择 2 至 10 个运行。比较依据为平台标准指标，原生指标保留各自定义。</p><div class="compare-choices">${choices||empty('还没有导入运行')}</div>`);
@@ -305,6 +326,9 @@ async function renderCompare(){
   const query=new URLSearchParams({metric_id:'platform.equity'});
   state.compareIds.forEach(id=>query.append('run_id',id));
   const assessment=await api(`/v1/compare?${query}`);
+  const tableQuery=new URLSearchParams();
+  state.compareIds.forEach(id=>tableQuery.append('run_id',id));
+  const table=await api(`/v1/compare/table?${tableQuery}`);
   const reasons=assessment.reasons.map(reason=>compareReasons[reason]||reason);
   const tone=assessment.ranking_allowed?'assessment-ok':'assessment-caution';
   const assessmentBody=`<div class="assessment ${tone}"><strong>${assessment.ranking_allowed?'可按统一口径比较':'仅供并列查看，暂不能排名'}</strong><p>${esc(reasons.length?reasons.join(' · '):'指标定义、单位、日历和数据版本一致')}</p></div><p class="panel-note">每个运行单独绘图，保留原始时间轴与数值。不同时间窗口或起始资金不自动归一化。</p>`;
@@ -324,7 +348,8 @@ async function renderCompare(){
     const context=`<dl class="context-grid"><dt>报告区间</dt><dd>${esc(bounds?.start||'未记录')} → ${esc(bounds?.end||'未记录')}</dd><dt>最大观测回撤 ${badge('derived')}</dt><dd>${typeof review.facts.max_observed_drawdown==='number'?fmt(review.facts.max_observed_drawdown*100)+'%':'未知'}</dd><dt>累计成本</dt><dd>${fmt(review.facts.total_cost)} CNY</dd><dt>质量</dt><dd>${badge(review.quality?'custom':'missing')} ${esc(review.quality?.status||'未记录')}</dd><dt>执行情景</dt><dd>${esc(scenario?.fingerprint?.slice(0,12)||'未知')}</dd><dt>佣金 / 最低费</dt><dd>${esc(scenario?.commission_both??'未知')} / ${esc(scenario?.minimum_commission??'未知')}</dd><dt>结果版本</dt><dd>${esc(revisionId.slice(0,12))}</dd></dl>`;
     return card(selectedRun.title,heading+facts+context+seriesPanel(result),esc(selectedRun.created_at.slice(0,10)),'page.compare');
   }));
-  document.getElementById('content').innerHTML=`<div class="stack">${picker}${card('口径检查',assessmentBody)}<div class="compare-grid">${panels.join('')}</div></div>`;
+  const tableCard=card('比较表（一行一指标）',compareTableHtml(table),'红=最优，绿=最劣；只在该行口径允许时着色','compare.table');
+  document.getElementById('content').innerHTML=`<div class="stack">${picker}${card('口径检查',assessmentBody)}${tableCard}<details class="compare-details"><summary>逐运行明细与曲线（${state.compareIds.length} 个运行）</summary><div class="compare-grid">${panels.join('')}</div></details></div>`;
   bindCompare();
   document.querySelectorAll('[data-open-run]').forEach(button=>button.onclick=()=>{selectRun(button.dataset.openRun);setView('backtest');});
   bindResearch();

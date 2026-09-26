@@ -12,7 +12,9 @@ import yaml
 
 PROJECT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT / 'extensions/workbench'))
-from quant_workbench.cn_market import effective_segments, load_profile
+from quant_workbench.cn_market import (
+    CN_SYNTHETIC_DATASET_ID, effective_segments, ensure_snapshot_content, load_profile,
+)
 
 
 def profile_path():
@@ -82,6 +84,17 @@ def compile_qlib(bundle, out_dir=None):
     if out_dir is not None:
         # Workbench attempts get their own experiment store so two configurations never share runs.
         config['qlib_init']['exp_manager']['kwargs']['uri'] = f'sqlite:///{target}/mlflow.db'
+    # Record the materialised snapshot's content identity next to the compiled config so the
+    # import path can publish a dataset version that is not the scenario fingerprint.
+    content = ensure_snapshot_content(dataset_path(bundle))
+    (target / 'dataset.json').write_text(json.dumps({
+        'schema_version': 1, 'dataset_id': CN_SYNTHETIC_DATASET_ID,
+        'dataset_version': content['digest'], 'content_basis': content['basis'],
+        'synthetic': bool(bundle['research']['synthetic']),
+        'snapshot_label': dataset_path(bundle).name,
+        'content_file_count': content['file_count'], 'content_bytes': content['bytes'],
+        'registered_at': content.get('registered_at'),
+    }, ensure_ascii=False, indent=2) + '\n')
     (target / 'effective.json').write_text(json.dumps(bundle, ensure_ascii=False, indent=2)+'\n')
     (target / 'workflow.yaml').write_text(yaml.safe_dump(config, sort_keys=False, allow_unicode=True))
     return target / 'workflow.yaml'

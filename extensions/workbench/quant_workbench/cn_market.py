@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 from pathlib import Path
 from .cn_schema import check, validate_shapes
@@ -11,6 +11,47 @@ from .cn_schema import check, validate_shapes
 
 def dec(value):
     return Decimal(str(value))
+
+
+CN_SYNTHETIC_DATASET_ID = "cn-current-synthetic"
+
+
+def snapshot_content_digest(path) -> dict:
+    """Content digest of a materialised snapshot: sha256 over sorted path/file digests."""
+    root = Path(path)
+    if not root.is_dir():
+        raise ValueError(f"snapshot path is not a directory: {root}")
+    files = sorted(p for p in root.rglob("*") if p.is_file() and p.name != "content.json")
+    outer = hashlib.sha256()
+    size = 0
+    for file in files:
+        digest = hashlib.sha256(file.read_bytes()).hexdigest()
+        outer.update(f"{file.relative_to(root).as_posix()}\n{digest}\n".encode())
+        size += file.stat().st_size
+    return {"schema_version": 1, "basis": "files_sha256", "digest": outer.hexdigest(),
+            "file_count": len(files), "bytes": size}
+
+
+def ensure_snapshot_content(path) -> dict:
+    """Write or refresh `content.json`; the digest is always recomputed from the files."""
+    root = Path(path)
+    computed = snapshot_content_digest(root)
+    manifest = root / "content.json"
+    recorded = None
+    if manifest.is_file():
+        try:
+            recorded = json.loads(manifest.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            recorded = None
+    if recorded and recorded.get("digest") == computed["digest"] and recorded.get("basis") == computed["basis"]:
+        return recorded
+    stamp = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    record = {**computed, "registered_at": stamp,
+              "previous_digest": (recorded or {}).get("digest"),
+              "note": "synthetic snapshot; digest covers file bytes only, not market truth"}
+    manifest.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return record
+CN_SYNTHETIC_SOURCE_INSTANCE = "qlib-cn-attempt"
 
 
 def load_profile(path):

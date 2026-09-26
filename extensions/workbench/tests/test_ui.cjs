@@ -255,3 +255,33 @@ test('U16: history controls stay outside the scrolling pane',async()=>{
   assert.ok(pagerAt>scrollerAt,'翻页按钮固定在滚动区下方');
   assert.match(html,/id="execution-kind"/);
 });
+
+test('U17: the comparison table marks best/worst with colour and text',()=>{
+  const x=ui();
+  const table={run_ids:['a','b'],
+    runs:[{run_id:'a',title:'运行 A',engine_id:'qlib',dataset_version:'content-v1',synthetic:true},
+          {run_id:'b',title:'运行 B',engine_id:'qlib',dataset_version:'content-v1',synthetic:true}],
+    rows:[
+      {metric_id:'platform.equity',label:'期末权益',unit:'CNY',direction:'higher_better',
+       direction_label:'越高越好',ranking_allowed:true,reasons:[],
+       cells:[{run_id:'a',value:1100000,availability:'available',unit:'CNY',reason:null,mark:'best',tied:false},
+              {run_id:'b',value:900000,availability:'available',unit:'CNY',reason:null,mark:'worst',tied:false}]},
+      {metric_id:'native.qlib.turnover',label:'换手率（末值）',unit:'ratio',direction:'unknown',
+       direction_label:'方向未登记',ranking_allowed:false,reasons:['direction_not_registered'],
+       cells:[{run_id:'a',value:0.4,availability:'available',unit:'ratio',reason:null,mark:null,tied:false},
+              {run_id:'b',value:null,availability:'empty',unit:'ratio',reason:'no_valid_point',mark:null,tied:false}]},
+    ]};
+  x.context.compareTable=table;
+  const html=x.run('compareTableHtml(compareTable)');
+  assert.match(html,/class="cell-best"/);
+  assert.match(html,/class="cell-worst"/);
+  assert.match(html,/rank-mark rank-best">最优/);
+  assert.match(html,/rank-mark rank-worst">最劣/);
+  assert.match(html,/本行不做优劣判断：该指标方向未登记/);
+  assert.match(html,/红=最优、绿=最劣/);
+  assert.match(html,/1,100,000/);
+  assert.equal((html.match(/cell-best/g)||[]).length,1,'只有已允许的行才着色');
+  assert.equal((html.match(/cell-worst/g)||[]).length,1);
+  assert.match(html,/方向未登记/);
+  assert.match(html,/暂无观测|未知/);
+});

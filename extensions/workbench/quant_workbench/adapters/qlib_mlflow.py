@@ -77,8 +77,11 @@ class QlibMlflowImporter:
         ]
         for field, unit in (("return", "ratio"), ("bench", "ratio"), ("total_cost", "CNY"),
                             ("cost", "ratio"), ("total_turnover", "CNY"), ("turnover", "ratio")):
+            # Money columns carry the account currency so comparison checks can verify it.
+            money = {"currency": "CNY"} if unit == "CNY" else {}
             series.append(_day_series(f"native.qlib.{field}", f"native.qlib.report.{field}.v1", unit,
                                       calendar_id, dates, report[field].tolist(),
+                                      **money,
                                       source_ref=f"portfolio_analysis/report_normal_1day.pkl:{field}"))
         # MLflow metrics may have step histories for training and scalar values for analysis.
         for name in sorted(external.data.metrics):
