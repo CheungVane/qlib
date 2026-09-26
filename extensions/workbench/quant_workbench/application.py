@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from .ports import AgentObservationPort, ResultRepository
 from .provenance import classify, capabilities_audit
 from .metrics import (
-    COMPARE_ROWS, DIRECTIONS, EXTRA_ROW_LIMIT, coordinate, rank, row_value, summarize,
+    COMPARE_ROWS, DIRECTIONS, EXTRA_ROW_LIMIT, GROUP_LABELS, RANKABLE_GROUPS, coordinate,
+    metric_group, rank, row_value, summarize,
 )
+from . import factors as factor_layer
 
 
 def display_run_title(run: dict[str, Any] | None) -> str:
@@ -132,6 +135,95 @@ class WorkbenchService:
     def list_revisions_page(self, run_id: str, limit: int = 20, cursor: str | None = None) -> dict[str, Any]:
         return self.repository.list_revisions_page(run_id, limit, cursor)
 
+    # -- factor layer (FACTOR_ANALYSIS U18/U19) ---------------------------
+    def import_factor_panel(self, identity: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+        panel = factor_layer.canonical_panel(payload)
+        return self.repository.publish_factor(identity, panel)
+
+    def list_factors(self) -> dict[str, Any]:
+        return {"items": [self._factor_dto(row) for row in self.repository.list_factors()]}
+
+    def factor_detail(self, factor_id: str, panel_id: str | None = None) -> dict[str, Any] | None:
+        row = self.repository.get_factor(factor_id)
+        if row is None:
+            return None
+        stored = self.repository.get_factor_panel(factor_id, panel_id)
+        if stored is None:
+            return {**self._factor_dto(row), "panels": [], "panel": None}
+        panel = stored.pop("panel")
+        preview_rows = min(panel["date_count"], 3)
+        preview_columns = min(panel["instrument_count"], 8)
+        width = panel["instrument_count"]
+        preview = {
+            "dates": panel["dates"][:preview_rows],
+            "instruments": panel["instruments"][:preview_columns],
+            "values": [panel["values"][row_index * width:row_index * width + preview_columns]
+                       for row_index in range(preview_rows)],
+            "truncated": panel["date_count"] > preview_rows or panel["instrument_count"] > preview_columns,
+        }
+        return {**self._factor_dto(row), "panels": self.repository.list_factor_panels(factor_id),
+                "panel": {**stored, "coverage": panel["coverage"], "value_stats": panel["value_stats"],
+                          "preview": preview}}
+
+    def _factor_dto(self, row: dict[str, Any]) -> dict[str, Any]:
+        return {key: row.get(key) for key in
+                ("factor_id", "name", "source_instance_id", "external_id", "definition", "dataset",
+                 "calendar_id", "provenance", "created_at", "panel_count")}
+
+    def factor_analysis(self, factor_ids: list[str], horizons: list[int] | None = None) -> dict[str, Any]:
+        if not factor_ids:
+            raise factor_layer.FactorError("factor_id is required")
+        requested = list(dict.fromkeys(factor_ids))
+        if len(requested) > factor_layer.MAX_FACTORS_PER_ANALYSIS:
+            raise factor_layer.FactorError(
+                f"at most {factor_layer.MAX_FACTORS_PER_ANALYSIS} factors per analysis")
+        entries, datasets, calendars = [], [], set()
+        for factor_id in requested:
+            row = self.repository.get_factor(factor_id)
+            if row is None:
+                raise LookupError(f"factor not found: {factor_id}")
+            stored = self.repository.get_factor_panel(factor_id)
+            if stored is None:
+                raise factor_layer.FactorError(f"factor has no panel: {factor_id}")
+            entries.append({"factor_id": factor_id, "name": row["name"], "panel": stored["panel"]})
+            datasets.append(row.get("dataset") or {})
+            if row.get("calendar_id"):
+                calendars.add(row["calendar_id"])
+        versions = {(item.get("id"), item.get("version")) for item in datasets}
+        if len(versions) != 1:
+            raise factor_layer.FactorError("factors must share one dataset id and content version")
+        dataset = datasets[0]
+        if len(calendars) > 1:
+            raise factor_layer.FactorError("factors must share one calendar")
+        snapshot = self.factor_snapshot_dir(dataset)
+        digest = factor_layer.verify_snapshot(snapshot, dataset)
+        panels = [entry["panel"] for entry in entries]
+        dates, instruments = factor_layer.aligned_rows(panels)
+        prices = factor_layer.load_close_series(snapshot, dates, instruments)
+        window = tuple(sorted(set(horizons or factor_layer.DEFAULT_HORIZONS)))
+        if any(isinstance(h, bool) or not isinstance(h, int) or not 1 <= h <= 60 for h in window):
+            raise factor_layer.FactorError("horizons must be integers between 1 and 60")
+        returns = {h: factor_layer.forward_returns(prices["values"], h) for h in window}
+        limitations = []
+        if prices["missing_instruments"]:
+            limitations.append(f"{len(prices['missing_instruments'])} 个标的在快照中缺价格，未参与计算")
+        report = factor_layer.analyze(entries, returns, horizons=window, dataset=dataset,
+                                      calendar_id=next(iter(calendars), None), limitations=tuple(limitations))
+        report["basis"]["snapshot"] = {"label": snapshot.name, "content_digest": digest["digest"],
+                                       "files": digest["file_count"], "price_fields": prices["fields"]}
+        return report
+
+    def factor_snapshot_dir(self, dataset: dict[str, Any]):
+        """Resolve the recorded snapshot for a dataset identity through the single config source."""
+        from .cn_market import default_profile_path, discover_project_root, load_profile
+        label = (dataset or {}).get("snapshot_label")
+        if not label:
+            raise factor_layer.FactorError("factor dataset has no snapshot label recorded")
+        root = discover_project_root()
+        data_path = Path(load_profile(default_profile_path())["research"]["data_path"])
+        base = data_path if data_path.is_absolute() else (root / data_path)
+        return (base / label).resolve()
+
     def get_revision(self, run_id: str, revision_id: str | None = None) -> dict[str, Any] | None:
         revision = self.repository.get_revision(run_id, revision_id)
         if revision:
@@ -231,9 +323,13 @@ class WorkbenchService:
             variables.append('experiment_id_unknown')
         elif len(set(experiments)) != 1:
             variables.append('experiment_id_differs')
+        group = metric_group(metric_id)
+        if group not in RANKABLE_GROUPS:
+            reasons.append(f'group_only_side_by_side:{group}')
         return {'mode': mode, 'status':'comparable' if not reasons else 'partial',
                 'overlay_allowed':not overlay_reasons, 'ranking_allowed':not reasons,
-                'reasons':reasons, 'experiment_variables':variables,
+                'reasons':reasons, 'experiment_variables':variables, 'group': group,
+                'group_label': GROUP_LABELS.get(group, group),
                 'revisions':{rid:rev['revision_id'] for rid,rev in zip(run_ids,revisions)}}
 
     def compare_table(self, run_ids: list[str], metric_ids: list[str] | None = None) -> dict[str, Any]:
@@ -299,6 +395,9 @@ class WorkbenchService:
                 "metric_id": descriptor["metric_id"], "label": descriptor["label"],
                 "aggregation": descriptor["aggregation"], "direction": direction,
                 "direction_label": DIRECTIONS.get(direction, DIRECTIONS["unknown"]),
+                "group": metric_group(descriptor["metric_id"]),
+                "group_label": GROUP_LABELS.get(metric_group(descriptor["metric_id"]),
+                                                metric_group(descriptor["metric_id"])),
                 "unit": next((cell["unit"] for cell in cells if cell["unit"]), None),
                 "ranking_allowed": allowed, "reasons": sorted(set(extra_reasons)),
                 "experiment_variables": sorted(set(variables)), "cells": cells,

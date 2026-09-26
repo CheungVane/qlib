@@ -64,6 +64,12 @@ M1的完成证据：环境锁、导入命令、成功/失败样本、自动化�
 | A15 | 小屏页面、加载/错误态、键盘选择和图表数值可访问；长序列降采样标识明确，缩放查询不突破API上限 | ARC07, UI01 |
 | A27 | 比较页一行一指标、一列一运行；红=最优绿=最劣仅在该行口径允许时出现，并有文字标记；方向未登记/口径不通过/差异在容差内/缺测时保持中性并写明原因；方向与优劣由服务端给出 | UI06 / U17 / COMPARE01 |
 | A27证据 | 新增`/v1/compare/table`与CLI `compare-table`；`metrics.COMPARE_ROWS`登记方向（期末权益/权益变化/最大回撤越高越好、累计成本越低越好、换手率方向未登记），1e-9相对容差只过滤浮点噪声。回归`test_compare_table.py`覆盖最优/最劣/并列/容差/未知方向/缺版本/缺评估口径；JS回归覆盖着色类与文字标记。真实数据实测：两次同情景Qlib运行数据集内容摘要一致（`58dfbf22…`），权益与回撤行因差异小于容差保持中性并给出原因；旧revision仍因数据版本未记录保持中性 | WORKBENCH_SPEC UI06 |
+| A28 | 训练/研究/回测分组由服务端登记；只有回测组可排名，跨组只并排并写明原因 | FACTOR_ANALYSIS §2 / U18 |
+| A28证据 | `metrics.metric_group()` 登记回测白名单（权益/回撤/成本/换手/收益/基准），训练与研究方向仅降级不升级；`assess()`对非回测组追加`group_only_side_by_side:<组>`并使`ranking_allowed=false`；比较表行首显示组标签，界面显示“训练组只并排，不做排名”。回归`test_review2_fixes.py::test_metric_groups_are_registered_and_only_backtest_ranks`与 JS `U18/U19` 用例 | FACTOR_ANALYSIS §2 |
+| A29 | 因子面板可入库、内容可校验、超限被拒、重复导入复用、缺测不填 0 | FACTOR_ANALYSIS §3 / U19 |
+| A29证据 | 平台库schema 3→4新增`factors`与`factor_panels`（面板按内容哈希不可变存储于对象库）；边界`dates≤2000 / instruments≤2000 / cells≤400000 / 16MB`；重复导入复用面板、内容变化产生新面板；真实RD-Agent导出自动发布10个因子面板（同数据集摘要`eb27e8cc…`）。回归`test_factors.py::PanelTests/RepositoryTests` | FACTOR_ANALYSIS §3 |
+| A30 | 单因子统计、重叠家族、增量与显著性按公式计算；未接入项显式`not_available` | FACTOR_ANALYSIS §4 / U19 |
+| A30证据 | `factors.py`实现横截面IC/RankIC、Newey-West t、双侧p、BH-FDR、分位差与单调性、秩换手、因子值相关矩阵、VIF共线（含完全共线标志）、IC序列相关、正交IC与等权组合增量；收益标签由平台按`close*factor`从同一内容版本快照计算。真实5因子实测：mom_5d↔mom_20d相关+0.47、ret_1d_reversal↔mom_5d −0.41、vol_ratio_5d换手1.06；跨会话重复因子`vol_10d↔Vol10`相关1.00、`mom_20d↔Rev20` −1.00；持仓重叠与拥挤度返回`not_available`。回归`test_factors.py::AnalysisTests`（含JSON合规与非有限值转null） | FACTOR_ANALYSIS §4 |
 
 页面视觉验收必须使用浏览器实际检查；API通过不代表UI通过。不以空面板截图声称实时或可靠性功能完成。
 
@@ -128,6 +134,8 @@ M2正式验收以M1完成为前提；允许为验证用户流程提前建设明�
 2026-09-26 U17比较表：新增`/v1/compare/table`（服务端计算方向、最优/最劣与行级口径原因）、CLI `compare-table`与比较页表格视图；指标方向登记在`metrics.COMPARE_ROWS`，红=最优/绿=最劣并同时给出文字标记，1e-9相对容差只过滤浮点噪声。为让比较有意义，补齐两处身份数据：数据快照写入`content.json`（按文件SHA-256的内容摘要）并随编译写入`dataset.json`，导入时记录为`run.dataset.version`；CN比较证据新增`evaluation_id`。同时修复金额类原生序列缺少`currency`导致成本行永远不可比的缺陷。验证：Python 78项测试77通过、1项环境隔离跳过；JS回归13项通过；浏览器实测比较表11行、表头含数据版本摘要、未通过行的原因可见且明细区默认折叠。
 
 2026-09-26 第二轮审查修复（B-1—B-9、A-1—A-8）：按[审查记录](review-20260926b.md)顺序落地。**身份分层**：`cn_market.scenario_identities()`把情景拆成`execution_fingerprint`（规则/账户/日历/撮合）、`evaluation_fingerprint`（区间/切分/标签/质量）、`experiment_id`（模型/策略/Agent）与`data_identity`；完整`fingerprint`仍用于数据物化与模板。比较证据改用拆分身份，`experiment_id`差异进入`experiment_variables`且**不阻断排名**（RESULT_CONTRACT 身份分层）。**逻辑内容摘要**：快照摘要改为只覆盖数据文件（排除`scenario.json`/`content.json`），本机快照与 RD-Agent 容器快照得到同一摘要`eb27e8cc…`；RD-Agent 导出改为写入该摘要作为`dataset.version`，并在缺少派生身份时由`comparison_context`按记录配置现算。**其他修复**：Qlib 导入日历改用情景日历（跨引擎日历一致）、金额序列补`currency`、执行目录新增`result_destination`（UI 不再按 kind 分支）、运行展示标题在服务端合成、比较页顶部改为"N/M 行可排名"、`/v1/runs/{id}/revisions` 有界分页、widget 注册但未实现返回`unsupported`、比较表每运行只加载一次 revision、UI 测试新增 strict DOM 模式、stub 进程组按组清理。验证：Python 83项测试82通过、1项环境隔离跳过（新增`test_review2_fixes.py` 5项）；JS回归14项通过；浏览器与API实测**跨引擎同情景比较**（Qlib 运行`7fa46b8f` vs RD-Agent 运行`d6c0c4b2`，同一内容摘要、同一执行/评估身份）得到 4 行可排名：期末权益、首末变化、最大回撤、累计成本各标出最优/最劣（成本行`越低越好`方向正确），换手率与额外行保持中性。限制：跨*实验变量*的排名口径（费用情景模式）仍待立项；正式数据目录接入后逻辑摘要由供应商版本替代。
+
+2026-09-26 U18/U19因子层：按用户确认落地方案。**比较分组**：`metrics.metric_group()` 登记回测白名单，训练/研究/其他只降级不升级；非回测组追加 `group_only_side_by_side:<组>` 且不排名，比较表行首显示组标签。**因子面板入库**：平台库 schema 3→4 新增 `factors`/`factor_panels`，面板按内容哈希不可变存入对象库（边界 dates≤2000、instruments≤2000、cells≤400000、16MB），重复导入复用、内容变化产生新面板；RD-Agent 导出自动发布会话内的 `combined_factors_df.parquet` 每个因子列（真实导入10个面板，数据集摘要与本地快照一致）。**分析口径**：`factors.py` 实现横截面 IC/RankIC、Newey-West t、双侧 p、BH-FDR、分位差与单调性、秩换手、因子值相关矩阵、VIF 共线、IC 序列相关、正交 IC 与等权组合增量；收益标签由平台按 `close*factor` 从同一内容版本快照计算（`r=close_{t+h}/close_t-1`），持仓重叠与拥挤度显式 `not_available`。入口：`/v1/factors`、`/v1/factors/{id}`、`POST /v1/factors`、`/v1/factor-analysis`，CLI `factors`/`factor`/`import-factor-panel`/`factor-analysis`，界面新增“因子”页（面板库、单因子统计、重叠矩阵、增量、未接入说明）。验证：Python 94项测试93通过、1项环境隔离跳过（新增`test_factors.py` 10项含 JSON 合规与非有限值转 null、`test_review2_fixes.py` 分组用例）；JS回归15项通过；真实5因子实测（mom_5d↔mom_20d 相关+0.47、ret_1d_reversal↔mom_5d −0.41、vol_ratio_5d 换手1.06）与跨会话重复因子识别（vol_10d↔Vol10=1.00、mom_20d↔Rev20=−1.00）。限制：因子集合默认取同一数据集版本下的全部因子，按实验挑选集合待补；持仓重叠、拥挤度、因子衰减的完整换手成本模型仍未接入。
 
 ## Spec治理交付门槛（GOV01 / U11）
 

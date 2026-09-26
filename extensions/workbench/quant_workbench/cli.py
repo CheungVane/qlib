@@ -76,6 +76,23 @@ def parser() -> argparse.ArgumentParser:
     a.add_argument('--query', default='')
     a = sub.add_parser('research-detail')
     a.add_argument('identity')
+    a = sub.add_parser("factors", help="list registered factor panels")
+    a = sub.add_parser("factor", help="show one factor and its panel metadata")
+    a.add_argument("factor_id")
+    a.add_argument("--panel-id")
+    a = sub.add_parser("import-factor-panel", help="import one canonical factor panel (JSON file)")
+    a.add_argument("path")
+    a.add_argument("--source-instance", required=True)
+    a.add_argument("--external-id", required=True)
+    a.add_argument("--dataset-id", required=True)
+    a.add_argument("--dataset-version", required=True)
+    a.add_argument("--snapshot-label", required=True)
+    a.add_argument("--calendar-id")
+    a.add_argument("--formulation")
+    a.add_argument("--source-ref")
+    a = sub.add_parser("factor-analysis", help="single-factor statistics, overlap and increment")
+    a.add_argument("factor_ids", nargs="+")
+    a.add_argument("--horizons", default="1,5,10,20")
     a = sub.add_parser('review')
     a.add_argument('run_id')
     a.add_argument("--revision-id")
@@ -142,6 +159,27 @@ def main(argv: list[str] | None = None) -> int:
             result = service.research_list(args.limit, args.offset, args.query)
         elif args.command == 'research-detail':
             result = service.research_detail(args.identity)
+        elif args.command == 'factors':
+            result = service.list_factors()
+        elif args.command == 'factor':
+            result = service.factor_detail(args.factor_id, args.panel_id)
+        elif args.command == 'import-factor-panel':
+            payload = json.loads(Path(args.path).read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("factor panel file must contain a JSON object")
+            identity = {
+                "source_instance_id": args.source_instance, "external_id": args.external_id,
+                "name": payload.get("name") or args.external_id,
+                "definition": {"formulation": args.formulation, "source_ref": args.source_ref},
+                "dataset": {"id": args.dataset_id, "version": args.dataset_version,
+                            "snapshot_label": args.snapshot_label},
+                "calendar_id": args.calendar_id or payload.get("calendar_id"),
+                "provenance": {"import": "cli", "source_ref": args.source_ref},
+            }
+            result = service.import_factor_panel(identity, payload)
+        elif args.command == 'factor-analysis':
+            horizons = [int(value) for value in str(args.horizons).split(',') if value.strip()]
+            result = service.factor_analysis(args.factor_ids, horizons)
         elif args.command == 'review':
             result = service.review(args.run_id, args.revision_id)
         elif args.command == 'execution-catalog':

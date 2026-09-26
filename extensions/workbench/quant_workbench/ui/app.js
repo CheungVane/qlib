@@ -2,8 +2,8 @@ const initialQuery = new URLSearchParams(location.search);
 const hasCompareQuery = initialQuery.has('compare');
 const HISTORY_PREVIEW = 8;
 const historyTabParam = initialQuery.get('history');
-const state = {renderGeneration:0, revision: initialQuery.get("revision"), seriesOffsets:{}, runs: [], selected: initialQuery.get('run'), compareIds: (initialQuery.get('compare') || '').split(',').filter(Boolean), researchId: initialQuery.get('research'), researchOffset:0, researchQuery:'', search: '', executionKey:null, executionKind:null, helpTrigger:null, helpBound:false, historyTab: historyTabParam==='research'?'research':'attempts', historyExpanded:false, historyScrollTop:0, attemptCursor:null, attemptCursors:[], runsExpanded:false, overviewExpanded:false, view: location.hash.slice(1) || 'overview'};
-const titles = {overview:['总览','研究运行、数据状态与系统观察'],backtest:['回测','权益、回撤、费用与来源证据'],training:['训练','指标曲线、阶段状态与来源证据'],compare:['比较','并列查看运行，先核对数据与指标口径'],agent:['研究中心','研究结果、因子内容、过程追踪与下一步'],live:['实时','行情连接与数据新鲜度'],data:['数据','数据集来源、覆盖与质量'],system:['系统','任务状态、请求与错误观察']};
+const state = {renderGeneration:0, revision: initialQuery.get("revision"), seriesOffsets:{}, runs: [], selected: initialQuery.get('run'), compareIds: (initialQuery.get('compare') || '').split(',').filter(Boolean), researchId: initialQuery.get('research'), researchOffset:0, researchQuery:'', search: '', executionKey:null, executionKind:null, helpTrigger:null, helpBound:false, historyTab: historyTabParam==='research'?'research':'attempts', historyExpanded:false, historyScrollTop:0, attemptCursor:null, attemptCursors:[], runsExpanded:false, overviewExpanded:false, factorGroup:null, view: location.hash.slice(1) || 'overview'};
+const titles = {overview:['总览','研究运行、数据状态与系统观察'],backtest:['回测','权益、回撤、费用与来源证据'],training:['训练','指标曲线、阶段状态与来源证据'],compare:['比较','并列查看运行，先核对数据与指标口径'],agent:['研究中心','研究结果、因子内容、过程追踪与下一步'],factors:['因子','单因子统计、重叠性与增量贡献'],live:['实时','行情连接与数据新鲜度'],data:['数据','数据集来源、覆盖与质量'],system:['系统','任务状态、请求与错误观察']};
 const HELP = {
  'page.overview':{title:'总览怎么读',summary:'先看来源与能力边界，再看最近研究与已采集的观察指标。',ref:'UI01 / ARC08',
   body:['总览把最近运行、研究记录和当前真正采集到的指标放在同一页。','未接入的指标显示“未接入/未记录”，不用 0 代替；模拟行情始终带标记。'],
@@ -19,6 +19,12 @@ const HELP = {
  'page.agent':{title:'研究中心怎么读',summary:'上半区是执行（真实进程），下半区是研究记录与过程快照。',ref:'EXECUTION.md / RESEARCH_WORKBENCH.md',
   body:['研究中心可以启动、取消隔离进程执行；“历史记录”里用子tab切换执行记录与研究记录，列表在面板内滚动并默认折叠。','执行记录含状态、退出码、入库结果与脱敏日志尾部；研究记录来自已导出的过程快照。'],
   points:['Qlib 回测成功后平台会自动发布结果并写回执；没有导入器的入口显示“结果需显式导入”。','标记“集成探针”的入口用于验证链路，不代表研究成果。']},
+ 'page.factors':{title:'因子页怎么读',summary:'按因子（而不是按运行）看预测力、显著性与重叠性。',ref:'FACTOR_ANALYSIS.md',
+  body:['因子页回答“这个因子有没有用、和别的因子有多像”，与“某个回测跑出什么组合结果”是两个层次的问题。','只有同一数据集内容版本、同一日历的因子才能一起分析；不同版本需要分别查看。','所有数字都是工作台计算，附公式、样本区间与数据版本；未接入的指标会写明缺什么数据，不用 0 代替。']},
+ 'factor.stats':{title:'单因子统计口径',summary:'Rank IC、t 值、p 值、FDR、分位差与换手，都是平台计算。',ref:'FACTOR_ANALYSIS.md §4.1',
+  body:['Rank IC：每个交易日横截面秩相关（因子 vs 未来收益）的均值；IC 为 Pearson 版本。','显著性：t = 均值 /（Newey-West 标准误 / √N），滞后取 h−1；p 为双侧正态近似。因子同时检验很多个时看 FDR q 值，只用 p 值容易“试出显著”。','分位差：按因子分 5 组的平均未来收益 Q5−Q1，并判断分组收益是否单调；单调性比单点数字更能说明方向是否稳定。','换手：相邻交易日横截面秩的变动；换手接近 1 表示因子排序几乎每天翻转，交易成本会很敏感。','收益标签由平台按 close（含复权因子）计算 r=close_{t+h}/close_t−1，只用同一数据内容版本的快照。']},
+ 'factor.overlap':{title:'重叠性怎么读',summary:'相关、共线性、冗余、正交与增量；持仓重叠和拥挤度当前未接入。',ref:'FACTOR_ANALYSIS.md §4.2',
+  body:['因子值相关性：逐日横截面秩相关的均值，回答“两个因子是不是在排同一批股票”；|相关| ≥ 0.7 标记为高重叠。','共线性：由相关矩阵算 VIF，>10 说明该因子与其它因子高度共线（冗余），不构成独立信息；完全共线会单独标明。','正交增量：把新因子对已有因子横截面回归后取残差再算 IC，回答“去掉已有因子能解释的部分，还剩多少信息”。','组合增量：等权合成（横截面标准化后取均值）中加入/去掉该因子的 IC 变化；接近 0 说明被已有因子解释。','未接入：持仓重叠需要逐日持仓明细，拥挤度需要市场层面的因子使用数据；两者都显式标注而不是填 0。']},
  'page.live':{title:'实时页为什么是空的',summary:'行情流尚未接入，没有连接记录时不显示 0。',ref:'LIVE01 / UI01',
   body:['实时行情、延迟与缺口能力属于后续阶段；当前没有数据流会话或采集记录。','按规范，无采集样本时不显示 0%，而是明确说明未接入。']},
  'page.data':{title:'数据页怎么读',summary:'这里展示当前结果的来源与情景证据，不是供应商数据目录。',ref:'ARC06 / DATA01—05',
@@ -182,6 +188,8 @@ const cardHelp = {
  '结果指标':'research.detail.metrics','因子与实现':'research.detail.factors','Agent 评审意见':'research.detail.feedback','过程时间线':'research.detail.timeline',
  'API 运行观测':'system.observability','存储与任务':'system.storage','当前研究的数据证据':'data.evidence',
  '任务观测（Attempt）':'system.attempts','历史记录':'history.panel',
+ '因子面板':'factor.stats','单因子统计':'factor.stats','重叠性：相关性、共线性与冗余':'factor.overlap',
+ '增量贡献（相对等权组合）':'factor.overlap','因子分析':'factor.stats',
 };
 function card(title,body,meta='',helpKey=''){const key=helpKey||cardHelp[title]||'';return `<section class="card"><div class="card-head"><div class="card-title"><h2>${esc(title)}</h2>${key?help(key,title):''}</div><small>${esc(meta)}</small></div>${body}</section>`;}
 function statusLabel(status){const text={succeeded:'成功',failed:'失败',running:'运行中',queued:'排队中',cancelled:'已取消',interrupted:'中断',unknown:'未知'}[status]||status;return `<span class="status ${status==='failed'?'failed':status==='unknown'?'unknown':''}">${esc(text)}</span>`;}
@@ -302,6 +310,12 @@ async function renderTraining(){
   document.getElementById('content').innerHTML=`<div class="stack">${card('训练运行',`<div class="heading-row"><h2>${esc(summary.display_title||summary.run.title)}</h2>${sample(summary.run)}</div><p class="panel-note">${stageText}<br>引擎运行时版本：${esc(summary.run.engine.version||'未知')} · 数据版本：${esc(summary.run.dataset.version||'未知')}</p>`)}${provenancePanel(detail)}${reviewPanel(review,detail.evidence)}${card('训练与信号指标',rows.length?`<table class="table"><thead><tr><th>指标</th><th>轴</th><th>末点</th><th>单位</th><th>记录状态</th></tr></thead><tbody>${rows.join('')}</tbody></table>`:empty('该运行没有可显示的训练指标'))}</div>`;
 }
 const compareReasons = {legacy_experiment_attribution_unverified:'旧版导出实验归属未复核',dataset_id_differs:'数据集身份不同',coverage_axis_differs:'有效观测坐标不同',missing_observations:'序列有缺测',step_kind_differs:'训练步定义未知或不同',evaluation_unknown_or_differs:'评估口径未知或不同',initial_equity_unknown_or_differs:'初始资金未知或不同',initial_equity_invalid:'缺少有效初始资金',cashflow_policy_unknown_or_differs:'现金流口径未知或不同',cashflow_not_supported:'尚不支持该现金流口径',price_basis_unknown_or_differs:'价格口径未知或不同',benchmark_id_unknown_or_differs:'基准未知或不同',handwritten_fixture_present:'包含手写演示样本，不支持研究排名',date_window_differs:'回测日期窗口不同',first_equity_differs:'首个观测权益不同',execution_scenario_unknown_or_differs:'执行/费用情景未知或不同',unit_differs:'单位不同',axis_differs:'序列轴不同',definition_id_differs:'指标定义不同',calendar_id_differs:'交易日历不同',currency_differs:'币种不同',synthetic_and_real_mixed:'模拟与真实数据混用',dataset_version_unknown_or_differs:'数据版本未知或不同',direction_not_registered:'该指标方向未登记，不做优劣判断',values_equal_or_incomplete:'数值相同或不全，无法判断优劣',values_within_tolerance:'极值差异在1e-9相对容差内，可能是数值噪声，标注优劣会失真',metric_unavailable:'该运行没有这个指标'};
+const compareGroupLabels={training:'训练',research:'研究',backtest:'回测',other:'其他/未登记'};
+function compareReasonLabel(reason){
+ const [code,suffix]=String(reason).split(':');
+ if(code==='group_only_side_by_side')return `${compareGroupLabels[suffix]||suffix}组只并排，不做排名`;
+ return compareReasons[code]||compareReasons[reason]||reason;
+}
 function compareCell(cell,row){
  if(typeof cell.value!=='number'){
   const label=cell.availability==='available'?'未知':availabilityLabel(cell.availability);
@@ -315,8 +329,9 @@ function compareTableHtml(table){
  if(!table.rows||!table.rows.length)return empty('没有可比较的指标');
  const head=`<tr><th>指标</th>${table.runs.map(r=>`<th>${esc(r.title)} ${r.synthetic?'<span class="sample">模拟</span>':''}<small class="block muted">${esc(r.engine_id)} · 数据版本 ${esc(r.dataset_version?String(r.dataset_version).slice(0,10):'未记录')}</small></th>`).join('')}</tr>`;
  const body=table.rows.map(row=>{
-  const note=row.ranking_allowed?'':`<small class="block warning">本行不做优劣判断：${esc(row.reasons.map(r=>compareReasons[r]||r).join(' · '))}</small>`;
-  return `<tr><th class="compare-row-title">${esc(row.label)}<small class="block muted">${esc(row.unit||'单位未记录')} · ${esc(row.direction_label)}</small>${note}</th>${row.cells.map(cell=>compareCell(cell,row)).join('')}</tr>`;
+  const note=row.ranking_allowed?'':`<small class="block warning">本行不做优劣判断：${esc(row.reasons.map(compareReasonLabel).join(' · '))}</small>`;
+  const group=row.group_label?`<span class="group-tag">${esc(row.group_label)}组</span>`:'';
+  return `<tr><th class="compare-row-title">${esc(row.label)} ${group}<small class="block muted">${esc(row.unit||'单位未记录')} · ${esc(row.direction_label)}</small>${note}</th>${row.cells.map(cell=>compareCell(cell,row)).join('')}</tr>`;
  }).join('');
  return `<div class="table-scroll"><table class="table compare-table"><thead>${head}</thead><tbody>${body}</tbody></table></div><p class="panel-note">红=最优、绿=最劣（A股习惯），只在整行口径检查通过且方向已登记时着色；未着色的行写明原因，最优/最劣同时有文字标记，颜色不是唯一信息。</p>`;
 }
@@ -330,7 +345,7 @@ async function renderCompare(){
   const tableQuery=new URLSearchParams();
   state.compareIds.forEach(id=>tableQuery.append('run_id',id));
   const table=await api(`/v1/compare/table?${tableQuery}`);
-  const reasons=assessment.reasons.map(reason=>compareReasons[reason]||reason);
+  const reasons=assessment.reasons.map(compareReasonLabel);
   const rankable=table.rows.filter(row=>row.ranking_allowed).length;
   const tone=rankable?'assessment-ok':'assessment-caution';
   const variables=table.experiment_variables||[];
@@ -615,6 +630,66 @@ async function refreshRuns(){
  state.runs=items;renderRuns();
 }
 
+function factorStatsRow(row){
+ const rank=row.rank_ic||{}, spread=row.quantile_spread||{}, turn=row.turnover||{};
+ const pct=value=>typeof value==='number'?fmt(value,4):'未记录';
+ return `<tr><td><strong>${esc(row.name)}</strong>${row.coverage!==null&&row.coverage!==undefined?`<small class="block muted">覆盖 ${fmt(row.coverage*100,1)}%</small>`:''}</td><td>${pct(rank.ic_mean)}</td><td>${pct(rank.t_stat)}</td><td>${pct(rank.p_value)}</td><td>${pct(row.fdr_q)}</td><td>${pct(rank.icir)}</td><td>${typeof spread.top_minus_bottom==='number'?fmt(spread.top_minus_bottom*100,3)+'%':'未记录'}</td><td>${spread.monotonic===true?'单调':spread.monotonic===false?'非单调':'未知'}</td><td>${typeof turn.turnover==='number'?fmt(turn.turnover,3):'未记录'}</td><td>${rank.days??'未记录'}</td></tr>`;
+}
+function factorCorrelationTable(correlation,redundancy){
+ if(!correlation||!correlation.labels?.length)return empty('没有可计算的重叠：至少需要两个因子面板');
+ const head=`<tr><th>因子</th>${correlation.labels.map(name=>`<th>${esc(name)}</th>`).join('')}</tr>`;
+ const body=correlation.labels.map((name,row)=>`<tr><th class="compare-row-title">${esc(name)}</th>${correlation.matrix[row].map(value=>{
+   if(value===null||value===undefined)return '<td class="cell-missing">未记录</td>';
+   const strong=Math.abs(value)>=0.7?'cell-warn':'';
+   return `<td class="${strong}">${value.toFixed(2)}</td>`;
+ }).join('')}</tr>`).join('');
+ const pairs=(redundancy?.pairs||[]).filter(pair=>typeof pair.correlation==='number')
+   .sort((a,b)=>Math.abs(b.correlation)-Math.abs(a.correlation)).slice(0,5)
+   .map(pair=>`<li>${esc(pair.left)} ↔ ${esc(pair.right)}：相关 ${pair.correlation.toFixed(3)} · 冗余度 ${pair.redundancy.toFixed(3)}</li>`).join('');
+ return `<div class="table-scroll"><table class="table compare-table"><thead>${head}</thead><tbody>${body}</tbody></table></div><p class="panel-note">逐日横截面秩相关的均值；|相关| ≥ 0.7 标记为高重叠（中性色，不代表优劣）。</p>${pairs?`<p class="panel-note">最重叠的因子对：</p><ul class="stack li">${pairs}</ul>`:''}`;
+}
+function factorIncrementTable(incremental,combined){
+ if(!incremental||!incremental.length)return empty('至少需要两个因子才能计算增量贡献');
+ const rows=incremental.map(item=>`<tr><td>${esc(item.factor)}</td><td>${item.without_ic===null?'未记录':fmt(item.without_ic,4)}</td><td>${item.delta===null?'未记录':fmt(item.delta,4)}</td></tr>`).join('');
+ return `<div class="table-scroll"><table class="table"><thead><tr><th>因子</th><th>去掉它后的组合 IC</th><th>加入后的增量</th></tr></thead><tbody>${rows}</tbody></table></div><p class="panel-note">等权合成（横截面标准化后取均值）；组合 IC 全量 ${combined?.ic_mean===undefined||combined?.ic_mean===null?'未记录':fmt(combined.ic_mean,4)}，天数 ${combined?.days??'未记录'}。增量接近 0 说明该因子被已有因子解释。</p>`;
+}
+async function renderFactors(){
+ const list=await api('/v1/factors');
+ const items=list.items||[];
+ if(!items.length){
+  document.getElementById('content').innerHTML=`<div class="stack">${card('因子库',`${badge('missing')}<p class="panel-note">还没有入库的因子面板。RD-Agent 研究会话导出时会自动发布因子面板；也可以用手工导入命令写入手工面板（会标为人工来源）。</p>`, '因子面板是一类独立数据', 'factor.stats')}</div>`;
+  return;
+ }
+ const groups={};
+ items.forEach(item=>{
+  const dataset=item.dataset||{};
+  const key=`${dataset.id||'未知数据集'} · ${(dataset.version||'未记录版本').slice(0,10)}`;
+  (groups[key]=groups[key]||[]).push(item);
+ });
+ const keys=Object.keys(groups);
+ if(!keys.includes(state.factorGroup))state.factorGroup=keys[0];
+ const members=groups[state.factorGroup].slice(0,12);
+ const query=members.map(item=>'factor_id='+encodeURIComponent(item.factor_id)).join('&');
+ let report=null,error=null;
+ try{report=await api(`/v1/factor-analysis?${query}&horizon=1&horizon=5&horizon=10`);}catch(problem){error=problem.message;}
+ const tabs=`<div class="subtabs" role="tablist" aria-label="因子数据集">${keys.map(key=>`<button type="button" role="tab" class="subtab ${key===state.factorGroup?'active':''}" data-factor-group="${esc(key)}">${esc(key)} <small>${groups[key].length}</small></button>`).join('')}</div>`;
+ const membersCard=card('因子面板',`${tabs}<div class="history-scroll">${items.slice(0,40).map(item=>`<p><strong>${esc(item.name)}</strong> <small class="muted">${esc(item.source_instance_id)} · 面板 ${item.panel_count} 个 · ${esc((item.provenance?.experiment_key||'').slice(0,48))}</small>${item.definition?.formulation?`<br><small class="muted">${esc(String(item.definition.formulation).slice(0,90))}</small>`:''}</p>`).join('')}</div>`, '已入库的因子面板；同一数据集版本才能一起分析','factor.stats');
+ if(error){
+  document.getElementById('content').innerHTML=`<div class="stack">${membersCard}${card('因子分析',`<p class="warning">无法计算：${esc(error)}</p>`,'必须满足同一数据集内容版本与同一日历','factor.stats')}</div>`;
+  bindFactorGroups();
+  return;
+ }
+ const stats=card('单因子统计',`<div class="table-scroll"><table class="table"><thead><tr><th>因子</th><th>Rank IC</th><th>t（NW）</th><th>p</th><th>FDR q</th><th>ICIR</th><th>分位差 Q5−Q1</th><th>单调性</th><th>换手</th><th>有效天数</th></tr></thead><tbody>${report.factors.map(factorStatsRow).join('')}</tbody></table></div><p class="panel-note">样本 ${esc(report.basis.sample.start)} → ${esc(report.basis.sample.end)}（${report.basis.sample.dates} 个交易日 × ${report.basis.sample.instruments} 个标的）；收益标签由平台按 close 前复权计算，h=1 为主口径；显著性用 Newey-West 调整并做 BH-FDR（参与检验 ${report.basis.factor_count} 个因子）。</p>`, '工作台计算；不是引擎原生指标', 'factor.stats');
+ const overlap=card('重叠性：相关性、共线性与冗余',factorCorrelationTable(report.overlap.value_correlation,report.overlap.redundancy)+`<p class="panel-note">共线性：最大 VIF ${report.overlap.collinearity?.max_vif===null||report.overlap.collinearity?.max_vif===undefined?'未记录':fmt(report.overlap.collinearity.max_vif,2)}${report.overlap.collinearity?.high_collinearity?' · 存在高共线因子':''}${report.overlap.collinearity?.perfect_collinearity?' · 存在完全共线因子':''}。${esc(report.overlap.collinearity?.note||'')}</p>`+`<p class="panel-note">未接入：${(report.overlap.not_available||[]).map(item=>`${esc(item.metric)}（${esc(item.reason)}）`).join('；')||'无'}</p>`, '重叠越高，越不构成独立信息', 'factor.overlap');
+ const increment=card('增量贡献（相对等权组合）',factorIncrementTable(report.overlap.incremental_ic,report.overlap.combined_ic),'组合口径为工作台计算', 'factor.overlap');
+ document.getElementById('content').innerHTML=`<div class="stack">${membersCard}${stats}${overlap}${increment}</div>`;
+ bindFactorGroups();
+}
+function bindFactorGroups(){
+ document.querySelectorAll('[data-factor-group]').forEach(button=>button.onclick=()=>{
+  state.factorGroup=button.dataset.factorGroup;render();
+ });
+}
 async function renderSystem(){
  const [stats,health]=await Promise.all([api('/v1/observability'),api('/v1/health')]);
  const attempts=stats.attempts||{};
@@ -646,6 +721,7 @@ async function render(){
     else if(state.view==='training')await renderTraining();
     else if(state.view==='compare')await renderCompare();
     else if(state.view==='agent')await renderAgent();
+    else if(state.view==='factors')await renderFactors();
     else if(state.view==='system')await renderSystem();
     else if(state.view==='data')await renderDataEvidence();
     else renderUnavailable(state.view);

@@ -483,10 +483,12 @@ class ExecutionTests(unittest.TestCase):
                             VALUES('old','k','e','l','succeeded','{}','2026-01-01T00:00:00Z',
                                    '2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')""")
         migrated = LocalResultRepository(legacy)
-        self.assertEqual(migrated.health()["schema_version"], 3)
+        self.assertEqual(migrated.health()["schema_version"], SCHEMA_VERSION)
         self.assertEqual(migrated.get_attempt("old")["status"], "succeeded")
         with migrated._connect() as conn:
             self.assertIsNotNone(conn.execute("SELECT name FROM sqlite_master WHERE name='imports'").fetchone())
+            self.assertIsNotNone(conn.execute("SELECT name FROM sqlite_master WHERE name='factors'").fetchone())
+            self.assertIsNotNone(conn.execute("SELECT name FROM sqlite_master WHERE name='factor_panels'").fetchone())
         self.assertIsNone(migrated.latest_import("old"))
 
     # -- contract --------------------------------------------------------

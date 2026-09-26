@@ -44,6 +44,8 @@
 
 API/CLI支持mode=auto/equity/metric；auto对platform.equity选equity，其余选metric。并排浏览一直允许，未知/差异显示原因。尚不提供费用实验的自动排名，费用不同仍可并排查看。
 
+比较按对象分组（[因子层规范](FACTOR_ANALYSIS.md) §2）：训练/研究/回测各有自己的指标集合，**跨组只并排、不做排名**；只有同组且同一把尺子（数据内容 + 执行口径 + 评估口径）时才允许最优/最劣标记。分组由服务端登记，未登记归入「其他/未登记」并只并排。
+
 | 必须已知且匹配 | equity | metric |
 | --- | --- | --- |
 | 数据集id+内容version、synthetic性质、非fixture | 是 | 是 |

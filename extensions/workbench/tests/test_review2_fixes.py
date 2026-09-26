@@ -103,6 +103,28 @@ class Review2Tests(unittest.TestCase):
         self.assertEqual(len([c for c in calls if c in run_ids]), len(run_ids),
                          "比较表应每个运行只加载一次 revision，而不是每行重读")
 
+    def test_metric_groups_are_registered_and_only_backtest_ranks(self):
+        from quant_workbench.metrics import metric_group
+        self.assertEqual(metric_group("platform.equity"), "backtest")
+        self.assertEqual(metric_group("native.qlib.total_cost"), "backtest")
+        self.assertEqual(metric_group("native.qlib.mlflow.l2.train"), "training")
+        self.assertEqual(metric_group("native.rdagent.IC"), "research")
+        self.assertEqual(metric_group("something.unknown"), "other")
+        for index in range(2):
+            payload = json.loads(FIXTURE.read_text())
+            payload["run"]["dataset"] = {"id": "dataset1", "version": "content-v1"}
+            payload["series"] = payload["series"][:2]  # platform.equity + native.generic.train_loss
+            self.service.import_package("test", f"group-{index}", "generic_v1", payload)
+        run_ids = [row["run_id"] for row in self.service.list_runs(limit=5)["items"]]
+        table = self.service.compare_table(run_ids, ["platform.equity", "native.generic.train_loss"])
+        rows = {row["metric_id"]: row for row in table["rows"]}
+        self.assertEqual(rows["platform.equity"]["group"], "backtest")
+        self.assertEqual(rows["native.generic.train_loss"]["group"], "training")
+        self.assertFalse(rows["native.generic.train_loss"]["ranking_allowed"],
+                         "训练组指标只并排，不参与排名")
+        self.assertIn("group_only_side_by_side:training", rows["native.generic.train_loss"]["reasons"])
+        self.assertEqual([cell["mark"] for cell in rows["native.generic.train_loss"]["cells"]], [None, None])
+
 
 if __name__ == "__main__":
     unittest.main()

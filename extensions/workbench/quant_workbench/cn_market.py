@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 from pathlib import Path
@@ -63,6 +64,32 @@ def rdagent_snapshot_path(fingerprint: str, home=None) -> Path:
     """Container snapshot used by the RD-Agent factor template (same scenario data)."""
     base = Path(home).expanduser() if home else Path.home()
     return base / ".qlib/qlib_data/qwb_cn_current" / fingerprint[:12]
+
+
+def discover_project_root(explicit=None) -> Path:
+    """Locate the Qlib checkout that owns configs/cn/profile.json and scripts/."""
+    candidates = []
+    if explicit:
+        candidates.append(Path(explicit))
+    if os.environ.get("QWB_REPO_ROOT"):
+        candidates.append(Path(os.environ["QWB_REPO_ROOT"]))
+    here = Path(__file__).resolve()
+    candidates.extend(here.parents)
+    candidates.append(Path.cwd())
+    for candidate in candidates:
+        try:
+            if (candidate / "configs/cn/profile.json").is_file() and (candidate / "scripts").is_dir():
+                return candidate.resolve()
+        except OSError:
+            continue
+    return here.parents[2].resolve()
+
+
+def default_profile_path(explicit=None) -> Path:
+    env = os.environ.get("QWB_CN_PROFILE")
+    if env:
+        return Path(env).expanduser().resolve()
+    return discover_project_root(explicit) / "configs/cn/profile.json"
 CN_SYNTHETIC_SOURCE_INSTANCE = "qlib-cn-attempt"
 
 

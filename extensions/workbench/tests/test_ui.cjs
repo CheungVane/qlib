@@ -327,3 +327,49 @@ test('U16b: strict DOM mode fails on missing-element bindings',async()=>{
   assert.match(researchHtml,/id="research-search"/);
   assert.equal(typeof x.elements['research-search'].onsubmit,'function');
 });
+
+test('U18/U19: compare rows carry groups and the factor view renders statistics',async()=>{
+  const x=ui(async path=>{
+    if(path.startsWith('/v1/factor-analysis'))return response({basis:{sample:{start:'2019-10-08',end:'2022-01-10',dates:552,instruments:16},
+      factor_count:2,horizons:[1,5,10]},factors:[
+      {factor_id:'f1',name:'mom_5d',coverage:0.98,rank_ic:{ic_mean:0.01,t_stat:1.2,p_value:0.2,icir:0.05,days:540},
+       ic:{ic_mean:0.011},quantile_spread:{top_minus_bottom:0.0004,monotonic:false},turnover:{turnover:0.25},fdr_q:0.4},
+      {factor_id:'f2',name:'vol_10d',coverage:0.97,rank_ic:{ic_mean:-0.015,t_stat:-1.3,p_value:0.18,icir:-0.06,days:541},
+       ic:{ic_mean:-0.016},quantile_spread:{top_minus_bottom:-0.0009,monotonic:true},turnover:{turnover:0.15},fdr_q:0.45}],
+      overlap:{value_correlation:{labels:['mom_5d','vol_10d'],matrix:[[1,0.1],[0.1,1]]},
+        redundancy:{pairs:[{left:'mom_5d',right:'vol_10d',correlation:0.1,redundancy:0.9}]},
+        collinearity:{available:true,max_vif:1.2,high_collinearity:false,perfect_collinearity:false},
+        incremental_ic:[{factor:'mom_5d',without_ic:0.004,delta:0.002},{factor:'vol_10d',without_ic:0.006,delta:-0.001}],
+        combined_ic:{days:540,ic_mean:0.006},
+        ic_series_correlation:{labels:['mom_5d','vol_10d'],matrix:[[1,0.2],[0.2,1]]},
+        not_available:[{metric:'holding_overlap',reason:'缺少持仓/成交明细'},{metric:'crowding',reason:'缺少市场层面数据'}]},
+      limitations:['因子面板来自已导入的记录']});
+    if(path==='/v1/factors')return response({items:[
+      {factor_id:'f1',name:'mom_5d',source_instance_id:'rdagent-local',panel_count:1,dataset:{id:'cn-current-synthetic',version:'eb27e8cc5b04a9761381af168958ff5d6291db7bc5f58e34ca72b08058ecd9ca'},
+       definition:{formulation:'Close_t/Close_{t-5}-1'},provenance:{experiment_key:'Loop_0:runner'}},
+      {factor_id:'f2',name:'vol_10d',source_instance_id:'rdagent-local',panel_count:1,dataset:{id:'cn-current-synthetic',version:'eb27e8cc5b04a9761381af168958ff5d6291db7bc5f58e34ca72b08058ecd9ca'},
+       definition:{},provenance:{experiment_key:'Loop_0:runner'}}]});
+    return response({items:[]});
+  });
+  await x.run("state.view='factors';renderFactors()");
+  const html=x.elements['content'].innerHTML;
+  assert.match(html,/单因子统计/);
+  assert.match(html,/Rank IC/);
+  assert.match(html,/FDR q/);
+  assert.match(html,/重叠性：相关性、共线性与冗余/);
+  assert.match(html,/持仓重叠|holding_overlap/);
+  assert.match(html,/拥挤|holding|not_available/);
+  assert.match(html,/增量贡献/);
+  assert.match(html,/data-factor-group=/);
+
+  // group labels and the "side by side only" reason on the compare table
+  const table={run_ids:['a'],runs:[{run_id:'a',title:'运行 A',engine_id:'qlib',dataset_version:'v',synthetic:true}],
+    rows:[{metric_id:'native.qlib.mlflow.l2.train',label:'训练 L2',unit:'ratio',direction:'unknown',
+      direction_label:'方向未登记',group:'training',group_label:'训练',ranking_allowed:false,
+      reasons:['group_only_side_by_side:training'],cells:[{run_id:'a',value:0.5,availability:'available',unit:'ratio',mark:null,tied:false}],experiment_variables:[]}]};
+  x.context.compareTable=table;
+  const tableHtml=x.run('compareTableHtml(compareTable)');
+  assert.match(tableHtml,/group-tag">训练组/);
+  assert.match(tableHtml,/训练组只并排，不做排名/);
+  assert.equal((tableHtml.match(/cell-best|cell-worst/g)||[]).length,0,'非回测组不得着色');
+});

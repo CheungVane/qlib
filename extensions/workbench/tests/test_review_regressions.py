@@ -89,7 +89,12 @@ class QueryRegressionTests(unittest.TestCase):
             definition_id='mse.v1',currency=None,points=[{'x':0,'value':2},{'x':1,'value':1}])
         p['evidence']={'comparison':{'evaluation_id':'mse-test-split1'}}
         a=self.publish(p,'a');b=self.publish(p,'b')
-        self.assertTrue(self.s.compare([a,b],'loss')['ranking_allowed'])
+        assessment=self.s.compare([a,b],'loss')
+        # U18: training metrics are compared side by side only; ranking is reserved for backtest rows.
+        self.assertFalse(assessment['ranking_allowed'])
+        self.assertIn('group_only_side_by_side:training',assessment['reasons'])
+        self.assertEqual(assessment['status'],'partial')
+        self.assertTrue(assessment['overlay_allowed'])
         p['series'][0]['step_kind']='iteration';c=self.publish(p,'c')
         self.assertFalse(self.s.compare([a,c],'loss')['overlay_allowed'])
 

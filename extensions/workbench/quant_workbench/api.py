@@ -124,6 +124,34 @@ def create_app(service: WorkbenchService):
         if result is None: raise HTTPException(404, 'research not found')
         return result
 
+    @app.get("/v1/factors")
+    def factors():
+        return service.list_factors()
+
+    @app.get("/v1/factors/{factor_id}")
+    def factor_detail(factor_id: str, panel_id: str | None = None):
+        result = service.factor_detail(factor_id, panel_id)
+        if result is None:
+            raise HTTPException(404, "factor not found")
+        return result
+
+    @app.post("/v1/factors")
+    def create_factor(request: Request, payload: dict[str, Any] = Body(...)):
+        """Import one canonical factor panel (write endpoint, same-origin)."""
+        require_same_origin(request)
+        unknown = set(payload) - {"factor", "panel"}
+        if unknown:
+            raise HTTPException(400, f"unknown request fields: {', '.join(sorted(unknown))}")
+        identity = payload.get("factor")
+        panel = payload.get("panel")
+        if not isinstance(identity, dict) or not isinstance(panel, dict):
+            raise HTTPException(400, "factor and panel objects are required")
+        return service.import_factor_panel(identity, panel)
+
+    @app.get("/v1/factor-analysis")
+    def factor_analysis(factor_id: list[str] = Query(...), horizon: list[int] | None = Query(None)):
+        return service.factor_analysis(factor_id, horizon)
+
     @app.get('/v1/runs/{run_id}/review')
     def review(run_id: str, revision_id: str | None = None):
         result = service.review(run_id, revision_id)

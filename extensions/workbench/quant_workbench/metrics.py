@@ -22,6 +22,28 @@ DIRECTIONS = {"higher_better": "越高越好", "lower_better": "越低越好", "
 # noise; it must never be used to judge economic significance.
 RANK_TOLERANCE = 1e-9
 
+# Comparison groups (FACTOR_ANALYSIS §2): only backtest rows may be ranked; training and
+# research rows exist in different groups whose metric sets are not interchangeable.
+BACKTEST_METRICS = {
+    "platform.equity", "platform.drawdown", "native.qlib.total_cost", "native.qlib.total_turnover",
+    "native.qlib.turnover", "native.qlib.return", "native.qlib.bench", "native.qlib.cost",
+}
+GROUP_LABELS = {"training": "训练", "research": "研究", "backtest": "回测", "other": "其他/未登记"}
+RANKABLE_GROUPS = ("backtest",)
+
+
+def metric_group(metric_id: str) -> str:
+    if metric_id in BACKTEST_METRICS:
+        return "backtest"
+    lowered = str(metric_id).lower()
+    if lowered.startswith("native.rdagent.") or lowered.startswith("platform.factor"):
+        return "research"
+    # Only ever downgrades to a non-rankable group; anything unknown stays "other".
+    if (".l2." in lowered or "loss" in lowered or lowered.endswith((".train", ".valid"))
+            or ".train." in lowered or ".valid." in lowered):
+        return "training"
+    return "other"
+
 
 def row_value(entry, aggregation, summary=None):
     """Scalar used by one comparison-table cell; None means "no number", never 0."""

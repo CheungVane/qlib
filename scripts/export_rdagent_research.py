@@ -66,6 +66,7 @@ def export(root, output, platform, synthetic, session_names=None):
         for record_key, paths, feedback_attributable in records:
             identity=hashlib.sha256(('rdagent:'+session.name+':'+record_key).encode()).hexdigest()[:24]
             events=[];factors=[];metrics={};report=None;runner_report=None;effective=None;quality=None;warnings=[];feedback=None
+            runner_workspace=None
             source_refs = {}
             if not feedback_attributable:
                 warnings.append('同一Loop包含多个实验；公共过程按Loop展示，未将反馈归属于当前实验')
@@ -103,6 +104,7 @@ def export(root, output, platform, synthetic, session_names=None):
                             if code and safe(code):factor['code']=clean(code.read_text(),18000)
                             factors.append(factor)
                         workspace=Path(obj.experiment_workspace.workspace_path)
+                        runner_workspace=workspace
                         report_file=workspace/'ret.parquet'
                         if safe(report_file):
                             import pandas as pd
@@ -116,7 +118,7 @@ def export(root, output, platform, synthetic, session_names=None):
                                 else:quality=data
                         content={'result':'研究实验结果已记录','factor_count':len(factors),'metric_count':len(metrics)}
                     if content is not None:events.append({'at':at,'stage':clean(stage,200),'kind':tag,'content':content,
-                        'source_ref':clean(str(p.relative_to(session)))})
+                                                      'source_ref':clean(str(p.relative_to(session)))})
                 except Exception as exc:
                     if tag == 'runner result':
                         runner_report = None; report = None; effective = None; quality = None; metrics = {}
@@ -186,6 +188,14 @@ def export(root, output, platform, synthetic, session_names=None):
                     package = scrub(package)
                     receipt=service.import_package('rdagent-local',session.name+':'+record_key,'rdagent_history_v2',package)
                     data['platform_run_id']=receipt['run_id'];data['revision_id']=receipt['revision_id'];data['review']=review_result(package)
+                    if runner_workspace is not None and effective and dataset_version:
+                        panels = publish_factor_panels(
+                            service, runner_workspace, session=session.name, record_key=record_key,
+                            dataset={'id': 'cn-current-synthetic', 'version': dataset_version,
+                                     'snapshot_label': effective['fingerprint'][:12]},
+                            calendar_id=calendar, factors=factors, warnings=warnings)
+                        if panels:
+                            data['factor_panels'] = panels
             data=scrub(data)
             while len(json.dumps(data,ensure_ascii=False).encode()) > 3_900_000 and data['events']:
                 data['events'].pop()
@@ -205,6 +215,63 @@ def export(root, output, platform, synthetic, session_names=None):
         tmp.write_text(json.dumps(index,ensure_ascii=False,allow_nan=False,indent=2));os.replace(tmp,target)
         count+=1
     return count
+
+
+def publish_factor_panels(service, workspace, *, session, record_key, dataset, calendar_id, factors, warnings):
+    """Publish each factor column of the RD-Agent factor panel as an immutable platform panel."""
+    import pandas as pd
+    path = Path(workspace) / 'combined_factors_df.parquet'
+    if not path.is_file():
+        warnings.append('未找到因子面板 combined_factors_df.parquet；因子层分析不可用')
+        return []
+    try:
+        frame = pd.read_parquet(path)
+    except Exception as exc:
+        warnings.append('因子面板无法读取：'+type(exc).__name__)
+        return []
+    if not isinstance(frame.index, pd.MultiIndex) or frame.index.nlevels < 2:
+        warnings.append('因子面板索引不是 (datetime, instrument)；未发布')
+        return []
+    if isinstance(frame.columns, pd.MultiIndex):
+        frame = frame.copy()
+        frame.columns = [str(column[-1]) for column in frame.columns]
+    definitions = {item.get('factor_name'): item for item in factors or []}
+    dates = sorted({str(value.date()) for value in frame.index.get_level_values(0)})
+    instruments = sorted({str(value) for value in frame.index.get_level_values(1)})
+    rows = {day: position for position, day in enumerate(dates)}
+    columns = {code: position for position, code in enumerate(instruments)}
+    published = []
+    for name in frame.columns:
+        values = [None] * (len(dates) * len(instruments))
+        for (stamp, code), value in frame[name].items():
+            if value is None or not math.isfinite(float(value)):
+                continue
+            values[rows[str(stamp.date())] * len(instruments) + columns[str(code)]] = float(value)
+        definition = definitions.get(str(name)) or {}
+        payload = {'schema_version': 1, 'name': str(name), 'calendar_id': calendar_id,
+                   'dates': dates, 'instruments': instruments, 'values': values,
+                   'source_ref': 'combined_factors_df.parquet'}
+        identity = {
+            'source_instance_id': 'rdagent-local',
+            'external_id': f'{session}:{record_key}:{name}',
+            'name': str(name),
+            'definition': {'formulation': definition.get('formulation'),
+                           'description': definition.get('description'),
+                           'variables': definition.get('variables')},
+            'dataset': dataset,
+            'calendar_id': calendar_id,
+            'provenance': {'source': 'rdagent combined_factors_df.parquet',
+                           'session': session, 'experiment_key': record_key,
+                           'sha256': hashlib.sha256(path.read_bytes()).hexdigest()},
+        }
+        try:
+            receipt = service.import_factor_panel(identity, payload)
+        except Exception as exc:
+            warnings.append(f'因子 {name} 面板未发布：{type(exc).__name__}')
+            continue
+        published.append({'name': str(name), 'factor_id': receipt['factor_id'],
+                          'panel_id': receipt['panel_id'], 'created': receipt['created']})
+    return published
 
 
 def main():

@@ -19,7 +19,8 @@ from pathlib import Path
 from typing import Any
 
 from ..cn_market import (
-    CN_SYNTHETIC_DATASET_ID, CN_SYNTHETIC_SOURCE_INSTANCE, load_profile, rdagent_snapshot_path,
+    CN_SYNTHETIC_DATASET_ID, CN_SYNTHETIC_SOURCE_INSTANCE, discover_project_root, load_profile,
+    rdagent_snapshot_path,
 )
 from ..execution import InvalidExecutionRequest
 from ..source_safety import Sanitizer
@@ -35,21 +36,8 @@ def _now() -> str:
 
 
 def find_repo_root(explicit: str | Path | None = None) -> Path:
-    candidates: list[Path] = []
-    if explicit:
-        candidates.append(Path(explicit))
-    if os.environ.get("QWB_REPO_ROOT"):
-        candidates.append(Path(os.environ["QWB_REPO_ROOT"]))
-    here = Path(__file__).resolve()
-    candidates.extend(here.parents)
-    candidates.append(Path.cwd())
-    for candidate in candidates:
-        try:
-            if (candidate / "configs/cn/profile.json").is_file() and (candidate / "scripts").is_dir():
-                return candidate.resolve()
-        except OSError:
-            continue
-    return here.parents[2].resolve()
+    """Single implementation lives in cn_market (config layer, no engine imports)."""
+    return discover_project_root(explicit)
 
 
 def _pid_alive(pid: Any) -> bool:

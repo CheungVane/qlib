@@ -2,6 +2,15 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-26 — U18/U19：比较分组与因子层（面板入库、统计、重叠性、增量）
+
+- 来源：用户明确「训练/研究/回测三类数据不能做全量比较，跨组只并排；因子层要做；因子面板要作为一类数据入库」，并确认"重叠性"指相关性/共线性/冗余度、正交性、IC 序列相关、持仓重叠与拥挤度这一族。
+- 合同：新增专题 [因子层：因子实体、面板与分析](FACTOR_ANALYSIS.md)（分组规则、面板格式与边界、平台计算收益标签、单因子统计、重叠家族、未接入项、A28—A30）；[核心规范](WORKBENCH_SPEC.md)补 U18/U19 需求行与 README 索引入口；[结果合同](RESULT_CONTRACT.md)加入分组与身份分层衔接。
+- 实现：①`metrics.metric_group()` 登记回测白名单，训练/研究/其他只降级不升级；`assess()` 对非回测组追加 `group_only_side_by_side:<组>` 且不排名，比较表行首显示组标签与"只并排"原因。②平台库 schema 3→4 新增 `factors`/`factor_panels`，面板按内容哈希不可变存入对象库，边界 dates≤2000 / instruments≤2000 / cells≤400000 / 16MB，重复导入复用、内容变化产生新面板。③`factors.py` 实现横截面 IC 与 RankIC、Newey-West t、双侧 p、BH-FDR、分位差与单调性、秩换手、因子值相关矩阵、VIF 共线（含完全共线标志）、IC 序列相关、正交 IC 与等权组合增量；非有限值在 DTO 中转 `null`。④收益标签由平台按 `close*factor` 从同一内容版本快照计算（`r=close_{t+h}/close_t-1`）。⑤RD-Agent 导出自动发布会话因子面板。⑥新增 `/v1/factors`、`/v1/factors/{id}`、`POST /v1/factors`、`/v1/factor-analysis` 与 CLI `factors`/`factor`/`import-factor-panel`/`factor-analysis`，界面新增"因子"页。
+- 验证：Python 94项测试93通过、1项环境隔离跳过（新增 `test_factors.py` 10项：面板校验/边界/缺测不填0、幂等与内容敏感、快照校验失败即拒、收益与 IC 的已知答案、相关与 VIF、正交与增量、FDR 单调、JSON 合规、HTTP 同源与 CLI/HTTP 共用服务）；JS回归15项通过（新增因子页与分组用例）；真实数据：RD-Agent 导出发布10个因子面板，5因子统计与相关矩阵合理（mom_5d↔mom_20d +0.47、ret_1d_reversal↔mom_5d −0.41、vol_ratio_5d 换手1.059），跨会话重复因子被识别（vol_10d↔Vol10 1.00、mom_20d↔Rev20 −1.00），持仓重叠与拥挤度返回 `not_available`。
+- 限制：因子集合默认取同一数据集版本下的全部因子（按实验挑选集合待补）；持仓重叠、拥挤度与因子衰减的完整换手成本模型未接入；`numpy` 已声明为可选依赖 `analysis`，缺失时分析返回明确错误而不是静默降级。
+- 兼容：schema 3→4 只新增因子表，历史 runs/revisions/attempts/imports 不改写；比较响应新增 `group`/`group_label` 与 `group_only_side_by_side:*` 原因属增量；训练类指标的排名行为由"可排名"变为"只并排"（既有回归 R05 已按新语义更新）。
+
 ## 2026-09-26 — 第二轮审查修复：身份分层、逻辑内容摘要与跨引擎比较
 
 - 来源：用户要求按[第二轮审查](review-20260926b.md)的建议顺序修复，并"以稳为主"。审查发现 2 项严重（身份模型、数据集身份链）、2 项高（UI 引擎分支、比较页结论）、5 项中、6 项低。
