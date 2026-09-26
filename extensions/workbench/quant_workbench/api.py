@@ -47,6 +47,13 @@ def create_app(service: WorkbenchService):
         return JSONResponse(status_code=exc.status_code,
                             content={"code": exc.code, "message": str(exc), "request_id": rid,
                                      "details": exc.as_details()})
+
+    @app.exception_handler(LookupError)
+    async def lookup_error(request: Request, exc: LookupError):
+        rid = getattr(request.state, "request_id", uuid.uuid4().hex)
+        return JSONResponse(status_code=404,
+                            content={"code": "not_found", "message": str(exc), "request_id": rid,
+                                     "details": {}})
     telemetry = RequestTelemetry()
     ui_root = files("quant_workbench.ui")
 
@@ -151,6 +158,18 @@ def create_app(service: WorkbenchService):
     @app.get("/v1/factor-analysis")
     def factor_analysis(factor_id: list[str] = Query(...), horizon: list[int] | None = Query(None)):
         return service.factor_analysis(factor_id, horizon)
+
+    @app.get("/v1/validation")
+    def validation(run_id: list[str] = Query(...), horizon: int = Query(1, ge=1, le=60),
+                   splits: int = Query(5, ge=2, le=20), embargo: int | None = Query(None, ge=0, le=60),
+                   trials: int | None = Query(None, ge=2, le=1000), blocks: int = Query(8, ge=4, le=12)):
+        """VALIDATION U20: PSR/DSR per run, PBO across runs and the leakage summary."""
+        return service.strategy_validation(run_id, horizon, splits, embargo, trials, blocks)
+
+    @app.get("/v1/attention")
+    def attention(limit: int = Query(20, ge=1, le=100)):
+        """UI07:待处理事项（失败执行、未入库结果、探针结果、取消请求中）。"""
+        return service.attention(limit)
 
     @app.get('/v1/runs/{run_id}/review')
     def review(run_id: str, revision_id: str | None = None):

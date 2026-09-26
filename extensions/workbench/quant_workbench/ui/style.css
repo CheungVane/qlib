@@ -70,3 +70,16 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.65;
 .compare-details>summary{font-weight:600}
 .group-tag{display:inline-block;font-size:10px;font-weight:600;border-radius:4px;padding:1px 6px;margin-left:6px;background:#eef2f5;color:#5a6f7a;border:1px solid #d7e0e4}
 .cell-warn{background:#fff8e6 !important;box-shadow:inset 3px 0 0 #d0a24c}
+.action-pill{background:#fff0e9;border-color:#f0cdbb;color:#9c4a2b;cursor:pointer}
+.attention-list{list-style:none;margin:0;padding:0}
+.attention-list li{padding:10px 12px;border-radius:8px;margin-bottom:8px;border:1px solid #e4ecee;background:#fbfdfd}
+.attention-list li.attention-high{border-color:#efc8c0;background:#fdf3f1}
+.attention-list li.attention-medium{border-color:#f0dfc0;background:#fdfaf0}
+.attention-list li.attention-low{border-color:#dbe6ea;background:#f7fafb}
+.command-card{max-width:640px}
+.command-input{width:100%;padding:11px 13px;border:1px solid #c9d8dd;border-radius:8px;font:inherit;margin-bottom:12px}
+.command-input:focus{outline:2px solid #40d1b6;outline-offset:1px}
+.command-results{max-height:44vh;overflow:auto}
+.command-item{display:block;width:100%;text-align:left;background:#fff;border:1px solid #e4ecee;border-radius:8px;padding:9px 12px;margin-bottom:6px;cursor:pointer;font:inherit}
+.command-item:hover,.command-item.active{border-color:#19a98f;background:#f2fbf8}
+.command-kind{display:inline-block;font-size:10px;font-weight:700;color:#3f6b78;background:#eef4f6;border-radius:4px;padding:1px 6px;margin-right:8px}

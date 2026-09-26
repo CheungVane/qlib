@@ -2,7 +2,7 @@ const initialQuery = new URLSearchParams(location.search);
 const hasCompareQuery = initialQuery.has('compare');
 const HISTORY_PREVIEW = 8;
 const historyTabParam = initialQuery.get('history');
-const state = {renderGeneration:0, revision: initialQuery.get("revision"), seriesOffsets:{}, runs: [], selected: initialQuery.get('run'), compareIds: (initialQuery.get('compare') || '').split(',').filter(Boolean), researchId: initialQuery.get('research'), researchOffset:0, researchQuery:'', search: '', executionKey:null, executionKind:null, helpTrigger:null, helpBound:false, historyTab: historyTabParam==='research'?'research':'attempts', historyExpanded:false, historyScrollTop:0, attemptCursor:null, attemptCursors:[], runsExpanded:false, overviewExpanded:false, factorGroup:null, view: location.hash.slice(1) || 'overview'};
+const state = {renderGeneration:0, revision: initialQuery.get("revision"), seriesOffsets:{}, runs: [], selected: initialQuery.get('run'), compareIds: (initialQuery.get('compare') || '').split(',').filter(Boolean), researchId: initialQuery.get('research'), researchOffset:0, researchQuery:'', search: '', executionKey:null, executionKind:null, helpTrigger:null, helpBound:false, historyTab: historyTabParam==='research'?'research':'attempts', historyExpanded:false, historyScrollTop:0, attemptCursor:null, attemptCursors:[], runsExpanded:false, overviewExpanded:false, factorGroup:null, paletteIndex:null, paletteFetchedAt:0, paletteSelection:0, paletteResults:[], paletteScope:'', paletteBound:false, view: location.hash.slice(1) || 'overview'};
 const titles = {overview:['总览','研究运行、数据状态与系统观察'],backtest:['回测','权益、回撤、费用与来源证据'],training:['训练','指标曲线、阶段状态与来源证据'],compare:['比较','并列查看运行，先核对数据与指标口径'],agent:['研究中心','研究结果、因子内容、过程追踪与下一步'],factors:['因子','单因子统计、重叠性与增量贡献'],live:['实时','行情连接与数据新鲜度'],data:['数据','数据集来源、覆盖与质量'],system:['系统','任务状态、请求与错误观察']};
 const HELP = {
  'page.overview':{title:'总览怎么读',summary:'先看来源与能力边界，再看最近研究与已采集的观察指标。',ref:'UI01 / ARC08',
@@ -25,6 +25,10 @@ const HELP = {
   body:['Rank IC：每个交易日横截面秩相关（因子 vs 未来收益）的均值；IC 为 Pearson 版本。','显著性：t = 均值 /（Newey-West 标准误 / √N），滞后取 h−1；p 为双侧正态近似。因子同时检验很多个时看 FDR q 值，只用 p 值容易“试出显著”。','分位差：按因子分 5 组的平均未来收益 Q5−Q1，并判断分组收益是否单调；单调性比单点数字更能说明方向是否稳定。','换手：相邻交易日横截面秩的变动；换手接近 1 表示因子排序几乎每天翻转，交易成本会很敏感。','收益标签由平台按 close（含复权因子）计算 r=close_{t+h}/close_t−1，只用同一数据内容版本的快照。']},
  'factor.overlap':{title:'重叠性怎么读',summary:'相关、共线性、冗余、正交与增量；持仓重叠和拥挤度当前未接入。',ref:'FACTOR_ANALYSIS.md §4.2',
   body:['因子值相关性：逐日横截面秩相关的均值，回答“两个因子是不是在排同一批股票”；|相关| ≥ 0.7 标记为高重叠。','共线性：由相关矩阵算 VIF，>10 说明该因子与其它因子高度共线（冗余），不构成独立信息；完全共线会单独标明。','正交增量：把新因子对已有因子横截面回归后取残差再算 IC，回答“去掉已有因子能解释的部分，还剩多少信息”。','组合增量：等权合成（横截面标准化后取均值）中加入/去掉该因子的 IC 变化；接近 0 说明被已有因子解释。','未接入：持仓重叠需要逐日持仓明细，拥挤度需要市场层面的因子使用数据；两者都显式标注而不是填 0。']},
+ 'attention.list':{title:'待处理事项',summary:'失败执行、未入库结果、探针结果与取消请求中；来自已记录状态。',ref:'UI07 / U21',
+  body:['这里只列已有状态能判断的事项：失败/中断的执行、已成功但未入库的结果、集成探针结果、取消请求中。','每条给出原因与跳转目标；没有事项时显示空态，不隐藏也不假装有内容。','数据新鲜度、实时行情等未接入能力不会进入此列表（否则会变成无法处理的噪声）。']},
+ 'validation.card':{title:'验证卡怎么读',summary:'PSR/DSR 修正选择偏差，PBO 估计过拟合概率，purge 与唯一性说明样本泄漏。',ref:'VALIDATION.md',
+  body:['PSR：Sharpe 大于基准的概率（偏度/峰度修正）；DSR：以"试了 N 个配置后的期望最大 Sharpe"为基准，比 PSR 更保守。','PBO（CSCV）：把收益矩阵切成时间块，样本内最优配置在样本外的分位低于中位的比例；越高说明越可能是挑出来的。','purge/embargo：训练集剔除与测试窗口标签重叠的样本及其后若干样本；唯一性权重说明重叠标签让有效样本数小于观测数。','这些都不能替代前瞻/实盘验证：结果里固定列出"缺少前瞻样本"这条未接入项。']},
  'page.live':{title:'实时页为什么是空的',summary:'行情流尚未接入，没有连接记录时不显示 0。',ref:'LIVE01 / UI01',
   body:['实时行情、延迟与缺口能力属于后续阶段；当前没有数据流会话或采集记录。','按规范，无采集样本时不显示 0%，而是明确说明未接入。']},
  'page.data':{title:'数据页怎么读',summary:'这里展示当前结果的来源与情景证据，不是供应商数据目录。',ref:'ARC06 / DATA01—05',
@@ -190,6 +194,7 @@ const cardHelp = {
  '任务观测（Attempt）':'system.attempts','历史记录':'history.panel',
  '因子面板':'factor.stats','单因子统计':'factor.stats','重叠性：相关性、共线性与冗余':'factor.overlap',
  '增量贡献（相对等权组合）':'factor.overlap','因子分析':'factor.stats',
+ '待处理事项':'attention.list','验证：过拟合与多重检验':'validation.card',
 };
 function card(title,body,meta='',helpKey=''){const key=helpKey||cardHelp[title]||'';return `<section class="card"><div class="card-head"><div class="card-title"><h2>${esc(title)}</h2>${key?help(key,title):''}</div><small>${esc(meta)}</small></div>${body}</section>`;}
 function statusLabel(status){const text={succeeded:'成功',failed:'失败',running:'运行中',queued:'排队中',cancelled:'已取消',interrupted:'中断',unknown:'未知'}[status]||status;return `<span class="status ${status==='failed'?'failed':status==='unknown'?'unknown':''}">${esc(text)}</span>`;}
@@ -232,13 +237,20 @@ function renderWidget(widget,payload){
 async function renderOverview(){
   const manifest=await api('/v1/dashboards/overview');
   const research=await api('/v1/research?limit=5');
+  const attention=await api('/v1/attention?limit=12');
   const payloads=await Promise.all(manifest.widgets.map(w=>api(`/v1/widgets/${encodeURIComponent(w.query.id)}`)));
   const overviewPreview=5;
   const shown=foldRows(research.items,state.overviewExpanded,overviewPreview);
   const overviewCard=card('最近研究与待检查事项',
     researchTable(shown)+foldToggle('overview',research.items.length,shown.length,state.overviewExpanded,overviewPreview));
-  document.getElementById('content').innerHTML=`<div class="stack">${await capabilityPanel()}${overviewCard}<div class="grid">${manifest.widgets.map((w,i)=>renderWidget(w,payloads[i])).join('')}</div></div>`;
+  const attentionCard=card('待处理事项',attention.total?`<ul class="attention-list">${attention.items.map(item=>`<li class="attention-${esc(item.severity)}"><button type="button" class="link-button" data-attention="${esc(item.kind)}" data-attention-view="${esc(item.target?.view||'')}" data-attention-history="${esc(item.target?.history||'')}">${esc(item.title)}</button><small class="block muted">${esc(item.detail)}</small></li>`).join('')}</ul><p class="panel-note">共 ${attention.total} 项（高 ${attention.counts.high} · 中 ${attention.counts.medium} · 低 ${attention.counts.low}）。${esc(attention.scope)}</p>`:empty('当前没有待处理事项：失败的执行、未入库结果与探针结果都会出现在这里。'),'来自已记录状态，不是建议','attention.list');
+  document.getElementById('content').innerHTML=`<div class="stack">${attentionCard}${await capabilityPanel()}${overviewCard}<div class="grid">${manifest.widgets.map((w,i)=>renderWidget(w,payloads[i])).join('')}</div></div>`;
   document.querySelectorAll('[data-open-run]').forEach(button=>button.onclick=()=>{selectRun(button.dataset.openRun);setView('backtest');});
+  document.querySelectorAll('[data-attention]').forEach(button=>button.onclick=()=>{
+    const view=button.dataset.attentionView||'agent';
+    if(button.dataset.attentionHistory)state.historyTab=button.dataset.attentionHistory;
+    setView(view);
+  });
   bindResearch();bindHistory();
 }
 function chart(points,unit='CNY',axis='trading_date'){
@@ -335,6 +347,29 @@ function compareTableHtml(table){
  }).join('');
  return `<div class="table-scroll"><table class="table compare-table"><thead>${head}</thead><tbody>${body}</tbody></table></div><p class="panel-note">红=最优、绿=最劣（A股习惯），只在整行口径检查通过且方向已登记时着色；未着色的行写明原因，最优/最劣同时有文字标记，颜色不是唯一信息。</p>`;
 }
+async function renderValidationCard(runIds){
+ const query=runIds.map(id=>'run_id='+encodeURIComponent(id)).join('&');
+ let report=null,reason=null;
+ try{report=await api(`/v1/validation?${query}&horizon=1&blocks=4`);}catch(error){reason=error.message;}
+ if(reason)return card('验证：过拟合与多重检验',`<p class="warning">无法计算：${esc(reason)}</p><p class="panel-note">需要至少有 20 个观测的收益序列；缺少该序列的运行不参与验证。</p>`, '工作台计算', 'validation.card');
+ const configs=report.configs||[];
+ const rows=configs.map(config=>{
+  const psr=config.psr||{},dsr=config.dsr||{};
+  const show=value=>typeof value==='number'?fmt(value,3):'未记录';
+  return `<tr><td>${esc(config.title||config.run_id.slice(0,8))}</td><td>${show(config.sharpe)}</td><td>${show(psr.psr)}</td><td>${show(dsr.dsr)}</td><td>${config.observations}</td><td><small class="muted">${esc(config.return_source||'未记录')}</small></td></tr>`;
+ }).join('');
+ const pbo=report.pbo||{};
+ const leakage=report.leakage||{};
+ const uniqueness=leakage.uniqueness||{};
+ const folds=(leakage.purged_folds||{}).folds||[];
+ const purgedRatio=folds.length?folds.reduce((sum,fold)=>sum+(fold.purged_ratio||0),0)/folds.length:null;
+ const unavailable=(report.not_available||[]).map(item=>`${esc(item.metric)}（${esc(item.reason)}）`).join('；');
+ const body=`<div class="table-scroll"><table class="table"><thead><tr><th>配置</th><th>Sharpe</th><th>PSR</th><th>DSR</th><th>观测</th><th>收益来源</th></tr></thead><tbody>${rows}</tbody></table></div>
+ <div class="metric-row"><div class="metric-box"><small>PBO（过拟合概率）</small><strong>${pbo.degenerate?'不适用':(typeof pbo.pbo==='number'?fmt(pbo.pbo,3):'未计算')}</strong></div><div class="metric-box"><small>折内平均剔除比例</small><strong>${purgedRatio===null?'未记录':fmt(purgedRatio*100,1)+'%'}</strong></div><div class="metric-box"><small>有效样本数</small><strong>${uniqueness.effective_samples===undefined?'未记录':fmt(uniqueness.effective_samples,1)}/${uniqueness.samples??'未记录'}</strong></div><div class="metric-box"><small>时间块</small><strong>${pbo.blocks??'未计算'}</strong></div></div>
+ ${pbo.note?`<p class="warning">${esc(pbo.note)}</p>`:''}
+ <p class="panel-note">PBO 越高说明"样本内挑出来的最好配置"在样本外越可能失效；DSR 以试验次数为基准，比 PSR 保守。样本内剔除比例来自 h=1 的 purged/embargo 折，有效样本数小于观测数是因为标签重叠。${unavailable?' 未接入：'+unavailable:''}</p>`;
+ return card('验证：过拟合与多重检验',body,'工作台计算；不能替代前瞻验证','validation.card');
+}
 async function renderCompare(){
   const choices=state.runs.map(item=>`<label class="compare-choice"><input type="checkbox" data-compare-run="${esc(item.run_id)}" ${state.compareIds.includes(item.run_id)?'checked':''}><span><strong>${esc(item.display_title||item.run.title)}</strong><small>${esc(item.run.engine.id)} · ${esc(item.run.dataset.id)} · ${esc(item.run.dataset.version||'版本未知')} ${sample(item.run)}</small></span></label>`).join('');
   const picker=card('选择运行',`<p class="panel-note">选择 2 至 10 个运行。比较依据为平台标准指标，原生指标保留各自定义。</p><div class="compare-choices">${choices||empty('还没有导入运行')}</div>`);
@@ -345,6 +380,7 @@ async function renderCompare(){
   const tableQuery=new URLSearchParams();
   state.compareIds.forEach(id=>tableQuery.append('run_id',id));
   const table=await api(`/v1/compare/table?${tableQuery}`);
+  const validation=await renderValidationCard(state.compareIds);
   const reasons=assessment.reasons.map(compareReasonLabel);
   const rankable=table.rows.filter(row=>row.ranking_allowed).length;
   const tone=rankable?'assessment-ok':'assessment-caution';
@@ -369,7 +405,7 @@ async function renderCompare(){
     return card(selectedRun.display_title||selectedRun.title,heading+facts+context+seriesPanel(result),esc(selectedRun.created_at.slice(0,10)),'page.compare');
   }));
   const tableCard=card('比较表（一行一指标）',compareTableHtml(table),'红=最优，绿=最劣；只在该行口径允许时着色','compare.table');
-  document.getElementById('content').innerHTML=`<div class="stack">${picker}${card('口径检查',assessmentBody)}${tableCard}<details class="compare-details"><summary>逐运行明细与曲线（${state.compareIds.length} 个运行）</summary><div class="compare-grid">${panels.join('')}</div></details></div>`;
+  document.getElementById('content').innerHTML=`<div class="stack">${picker}${card('口径检查',assessmentBody)}${validation}${tableCard}<details class="compare-details"><summary>逐运行明细与曲线（${state.compareIds.length} 个运行）</summary><div class="compare-grid">${panels.join('')}</div></details></div>`;
   bindCompare();
   document.querySelectorAll('[data-open-run]').forEach(button=>button.onclick=()=>{selectRun(button.dataset.openRun);setView('backtest');});
   bindResearch();
@@ -690,6 +726,120 @@ function bindFactorGroups(){
   state.factorGroup=button.dataset.factorGroup;render();
  });
 }
+// -- attention chip and command palette (UI07 / U21) -------------------------
+function updateAttentionChip(attention){
+ const chip=document.getElementById('attention-chip');
+ if(!chip)return;
+ const total=attention?.total||0;
+ chip.hidden=!total;
+ chip.textContent=`待处理 ${total}（高 ${attention?.counts?.high||0}）`;
+}
+async function refreshAttention(){
+ try{updateAttentionChip(await api('/v1/attention?limit=1'));}catch(error){updateAttentionChip(null);}
+}
+const PALETTE_COMMANDS=[
+ {label:'总览',sub:'待处理事项与最近研究',go:()=>setView('overview')},
+ {label:'回测',sub:'权益、回撤、费用与来源证据',go:()=>setView('backtest')},
+ {label:'训练',sub:'训练指标与阶段状态',go:()=>setView('training')},
+ {label:'比较',sub:'比较表、分组与验证',go:()=>setView('compare')},
+ {label:'研究中心',sub:'执行记录与研究记录',go:()=>setView('agent')},
+ {label:'因子',sub:'因子面板、统计、重叠与增量',go:()=>setView('factors')},
+ {label:'数据',sub:'数据证据与来源',go:()=>setView('data')},
+ {label:'系统',sub:'HTTP 与任务观测',go:()=>setView('system')},
+ {label:'刷新运行列表',sub:'重新读取结果库',go:async()=>{await refreshRuns();render();}},
+ {label:'刷新当前页面',sub:'重新取数并重绘',go:()=>render()},
+];
+async function paletteIndex(){
+ const now=Date.now();
+ if(state.paletteIndex&&now-state.paletteFetchedAt<60000)return state.paletteIndex;
+ const [research,factors]=await Promise.all([
+  api('/v1/research?limit=50').catch(()=>({items:[]})),
+  api('/v1/factors').catch(()=>({items:[]})),
+ ]);
+ const entries=[...PALETTE_COMMANDS.map(command=>({kind:'命令',label:command.label,sub:command.sub,go:command.go}))];
+ (state.runs||[]).slice(0,100).forEach(item=>entries.push({kind:'运行',label:item.display_title||item.run.title,
+  sub:`${item.run.engine.id} · ${item.run.status} · 数据版本 ${esc(String((item.run.dataset.version||'未记录')).slice(0,10))}`,
+  go:()=>selectRun(item.run_id)}));
+ (research.items||[]).forEach(item=>entries.push({kind:'研究',label:item.title,
+  sub:`${item.status} · 因子 ${item.factor_count??'未记录'}`,go:()=>openResearch(item.id)}));
+ (factors.items||[]).forEach(item=>entries.push({kind:'因子',label:item.name,
+  sub:`面板 ${item.panel_count} · ${item.source_instance_id}`,go:()=>{state.factorGroup=null;setView('factors');}}));
+ state.paletteIndex=entries;state.paletteFetchedAt=now;
+ state.paletteScope=`索引覆盖：命令 ${PALETTE_COMMANDS.length} 条、运行最多 100 个、研究最多 50 条、全部已入库因子；不是全库检索。`;
+ return entries;
+}
+function renderPaletteResults(query){
+ const box=document.getElementById('command-results');
+ const scope=document.getElementById('command-scope');
+ if(!box)return;
+ const needle=(query||'').toLocaleLowerCase().trim();
+ const matched=(state.paletteIndex||[]).filter(entry=>!needle||
+  `${entry.kind} ${entry.label} ${entry.sub}`.toLocaleLowerCase().includes(needle));
+ // label hits first, then shorter labels: research/factor entries stay reachable within the cap
+ const entries=needle?[...matched].sort((left,right)=>{
+  const leftHit=left.label.toLocaleLowerCase().includes(needle)?0:1;
+  const rightHit=right.label.toLocaleLowerCase().includes(needle)?0:1;
+  return leftHit-rightHit||left.label.length-right.label.length;
+ }):matched;
+ state.paletteResults=entries.slice(0,20);
+ if(!state.paletteResults.length){
+  box.innerHTML=`<div class="empty">没有匹配项。可以试试运行名、研究标题、因子名，或输入"因子"/"比较"切换视图。</div>`;
+ }else{
+  box.innerHTML=state.paletteResults.map((entry,index)=>`<button type="button" class="command-item ${index===state.paletteSelection?'active':''}" data-command="${index}"><span class="command-kind">${esc(entry.kind)}</span><strong>${esc(entry.label)}</strong><small class="block muted">${entry.sub}</small></button>`).join('');
+  box.querySelectorAll('[data-command]').forEach(button=>{
+   button.onmouseenter=()=>{state.paletteSelection=Number(button.dataset.command);renderPaletteResults(query);};
+   button.onclick=()=>runPaletteEntry(Number(button.dataset.command));
+  });
+ }
+ if(scope)scope.textContent=state.paletteScope||'';
+}
+function runPaletteEntry(index){
+ const entry=(state.paletteResults||[])[index];
+ closePalette();
+ if(entry&&entry.go)entry.go();
+}
+function closePalette(){
+ const modal=document.getElementById('command-modal');
+ if(modal)modal.hidden=true;
+}
+async function openPalette(){
+ const modal=document.getElementById('command-modal');
+ if(!modal)return;
+ modal.hidden=false;
+ state.paletteSelection=0;
+ const input=document.getElementById('command-input');
+ if(input){input.value='';if(input.focus)input.focus();}
+ document.getElementById('command-results').innerHTML='正在建立索引…';
+ try{await paletteIndex();}catch(error){document.getElementById('command-results').innerHTML=`<p class="warning">索引失败：${esc(error.message)}</p>`;return;}
+ renderPaletteResults('');
+}
+function bindPalette(){
+ const button=document.getElementById('palette-button');
+ if(button)button.onclick=()=>openPalette();
+ const close=document.getElementById('command-close');
+ if(close)close.onclick=()=>closePalette();
+ const chip=document.getElementById('attention-chip');
+ if(chip)chip.onclick=()=>setView('overview');
+ const modal=document.getElementById('command-modal');
+ if(modal)modal.onclick=event=>{const target=event.target;const inCard=target&&target.closest&&target.closest('.command-card');if(!inCard)closePalette();};
+ const input=document.getElementById('command-input');
+ if(input){
+  input.oninput=()=>{state.paletteSelection=0;renderPaletteResults(input.value);};
+  input.onkeydown=event=>{
+   const results=state.paletteResults||[];
+   if(event.key==='ArrowDown'){state.paletteSelection=Math.min(state.paletteSelection+1,Math.max(results.length-1,0));renderPaletteResults(input.value);event.preventDefault();}
+   else if(event.key==='ArrowUp'){state.paletteSelection=Math.max(state.paletteSelection-1,0);renderPaletteResults(input.value);event.preventDefault();}
+   else if(event.key==='Enter'){runPaletteEntry(state.paletteSelection);event.preventDefault();}
+   else if(event.key==='Escape'){closePalette();}
+  };
+ }
+ if(state.paletteBound||!document.addEventListener)return;
+ state.paletteBound=true;
+ document.addEventListener('keydown',event=>{
+  if((event.metaKey||event.ctrlKey)&&String(event.key).toLowerCase()==='k'){event.preventDefault();openPalette();}
+  else if(event.key==='Escape'){closePalette();}
+ });
+}
 async function renderSystem(){
  const [stats,health]=await Promise.all([api('/v1/observability'),api('/v1/health')]);
  const attempts=stats.attempts||{};
@@ -727,12 +877,15 @@ async function render(){
     else renderUnavailable(state.view);
     bindSeriesPages();
     bindHelp();
+    bindPalette();
   }catch(error){if(generation!==state.renderGeneration||error.name==='StaleRender')return;setNotice(error.message);document.getElementById('content').innerHTML=empty('页面加载失败，请重试。')+'<button class="action" id="retry-page">重试</button>';document.getElementById('retry-page').onclick=()=>render();}
 }
 async function init(){
   document.querySelectorAll('.nav').forEach(button=>button.onclick=()=>setView(button.dataset.view));
   document.getElementById('source-legend-help').innerHTML=help('source.legend');
   document.getElementById('run-search').oninput=event=>{state.search=event.target.value.toLocaleLowerCase().trim();renderRuns();};
+  bindPalette();
+  refreshAttention();
   window.addEventListener('hashchange',()=>{const view=location.hash.slice(1)||'overview';if(view!==state.view)setView(view);});
   try{
     const [runs,health]=await Promise.all([api('/v1/runs?limit=30'),api('/v1/health')]);

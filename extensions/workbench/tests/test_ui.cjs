@@ -10,7 +10,10 @@ function ui(fetch,options={}){
   const elements={};
   const declared=new Set(STATIC_IDS);
   const make=id=>{
-    const el={textContent:''};
+    // close enough to a real element that missing DOM APIs do not look like app bugs
+    const el={textContent:'',hidden:false,value:'',dataset:{},style:{},
+      querySelectorAll:()=>[],querySelector:()=>null,setAttribute(){},getAttribute(){return null;},
+      focus(){},classList:{toggle(){},add(){},remove(){},contains(){return false;}}};
     let html='';
     Object.defineProperty(el,'innerHTML',{get:()=>html,set:value=>{html=String(value);htmlIds(html).forEach(x=>declared.add(x));}});
     return el;
@@ -20,7 +23,7 @@ function ui(fetch,options={}){
     if(strict&&!declared.has(id))return null;
     return elements[id]=make(id);
   },querySelectorAll:()=>[],querySelector:()=>null};
-  const context={URLSearchParams,URL,location:{search:'',hash:'',href:'http://localhost/'},Intl,fetch,document,crypto:require('node:crypto').webcrypto};
+  const context={URLSearchParams,URL,location:{search:'',hash:'',href:'http://localhost/'},Intl,fetch,document,history:{replaceState(){},pushState(){}},window:{addEventListener(){},innerWidth:1280,location:{hash:''}},crypto:require('node:crypto').webcrypto};
   vm.createContext(context);vm.runInContext(source,context);return {context,elements,run:code=>vm.runInContext(code,context)};
 }
 const response=(data,status=200)=>({ok:status===200,status,json:async()=>data});
@@ -156,7 +159,7 @@ test('U14: hover summary and click dialog share one registry entry',()=>{
   const button={dataset:{help:'exec.status'},attrs:{},setAttribute(name,value){this.attrs[name]=value;},focus(){this.focused=true;}};
   x.context.helpButton=button;
   assert.equal(x.run("openHelp('not.a.key', helpButton)"),false);
-  assert.equal(x.elements['help-modal'].hidden,undefined);
+  assert.equal(x.elements['help-modal'].hidden,false);
   assert.equal(x.run("openHelp('exec.status', helpButton)"),true);
   assert.equal(x.elements['help-modal'].hidden,false);
   assert.equal(x.elements['help-modal-title'].textContent,'执行状态含义');
@@ -372,4 +375,56 @@ test('U18/U19: compare rows carry groups and the factor view renders statistics'
   assert.match(tableHtml,/group-tag">训练组/);
   assert.match(tableHtml,/训练组只并排，不做排名/);
   assert.equal((tableHtml.match(/cell-best|cell-worst/g)||[]).length,0,'非回测组不得着色');
+});
+
+test('U20/U21: attention chip, command palette and the validation card',async()=>{
+  const attention={total:2,counts:{high:1,medium:1,low:0},scope:'来自已记录状态',
+    items:[{kind:'execution_failed',severity:'high',title:'执行失败：Qlib CN 合成行情训练+回测',detail:'nonzero_exit: exit 1',target:{view:'agent',history:'attempts'},ref:'abc12345'},
+           {kind:'result_not_imported',severity:'medium',title:'结果未入库：基线回测',detail:'manual_import_required',target:{view:'agent',history:'attempts'},ref:'def67890'}]};
+  const runs={items:[{run_id:'run-1',display_title:'Qlib CN 回测 · 2026-09-26',run:{title:'mlflow_recorder',engine:{id:'qlib'},status:'succeeded',dataset:{version:'v1'}}}]};
+  const research={items:[{id:'r1',title:'因子研究 · mom_5d',status:'result_available',factor_count:3}],total:1,next_offset:null};
+  const factors={items:[{factor_id:'f1',name:'mom_5d',panel_count:1,source_instance_id:'rdagent-local'}]};
+  const validation={basis:{parameters:{horizon:1,blocks:4},sample:{observations:120},configs:[]},
+    configs:[{run_id:'a',title:'运行 A',observations:120,sharpe:0.4,psr:{psr:0.7},dsr:{dsr:0.55},return_source:'derived: platform.equity 日收益（平台计算）'},
+             {run_id:'b',title:'运行 B',observations:120,sharpe:0.1,psr:{psr:0.4},dsr:{dsr:0.3},return_source:'native.qlib.return（引擎报告日收益）'}],
+    pbo:{pbo:0.42,blocks:4,splits:6,configurations:2,observations:120},
+    leakage:{purged_folds:{folds:[{purged_ratio:0.2},{purged_ratio:0.4}]},uniqueness:{effective_samples:80,samples:119}},
+    not_available:[{metric:'live_out_of_sample',reason:'尚无前瞻/实盘样本'}],limitations:['x']};
+  const x=ui(async path=>{
+    if(path.startsWith('/v1/attention'))return response(attention);
+    if(path.startsWith('/v1/runs'))return response(runs);
+    if(path.startsWith('/v1/research'))return response(research);
+    if(path==='/v1/factors')return response(factors);
+    if(path.startsWith('/v1/validation'))return response(validation);
+    return response({items:[]});
+  });
+  // attention chip
+  x.context.runs=runs;
+  x.run('state.runs=runs.items');
+  await x.run('refreshAttention()');
+  assert.equal(x.elements['attention-chip'].hidden,false);
+  assert.match(x.elements['attention-chip'].textContent,/待处理 2/);
+
+  // command palette index and filtering
+  await x.run('openPalette()');
+  const kinds=x.run('[...new Set(state.paletteIndex.map(entry=>entry.kind))]');
+  assert.deepEqual([...kinds],['命令','运行','研究','因子']);
+  assert.match(x.run("(state.paletteIndex.find(entry=>entry.kind==='运行')||{}).label"),/Qlib CN 回测/);
+  x.run("renderPaletteResults('因子研究')");
+  assert.equal(x.run('state.paletteResults.length'),1);
+  assert.equal(x.run('state.paletteResults[0].kind'),'研究');
+  x.run("state.paletteSelection=0;runPaletteEntry(0)");
+  assert.equal(x.run('state.researchId'),'r1');
+  assert.equal(x.elements['command-modal'].hidden,true);
+
+  // validation card
+  const card=x.run("renderValidationCard(['a','b'])");
+  return card.then(html=>{
+    assert.match(html,/PSR/);
+    assert.match(html,/DSR/);
+    assert.match(html,/PBO（过拟合概率）/);
+    assert.match(html,/有效样本数/);
+    assert.match(html,/尚未前瞻|尚无前瞻/);
+    assert.match(html,/工作台计算；不能替代前瞻验证/);
+  });
 });

@@ -93,6 +93,13 @@ def parser() -> argparse.ArgumentParser:
     a = sub.add_parser("factor-analysis", help="single-factor statistics, overlap and increment")
     a.add_argument("factor_ids", nargs="+")
     a.add_argument("--horizons", default="1,5,10,20")
+    a = sub.add_parser("validate", help="PSR/DSR/PBO validation for one or more runs")
+    a.add_argument("run_ids", nargs="+")
+    a.add_argument("--horizon", type=int, default=1)
+    a.add_argument("--splits", type=int, default=5)
+    a.add_argument("--embargo", type=int)
+    a.add_argument("--trials", type=int)
+    a.add_argument("--blocks", type=int, default=8)
     a = sub.add_parser('review')
     a.add_argument('run_id')
     a.add_argument("--revision-id")
@@ -180,6 +187,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == 'factor-analysis':
             horizons = [int(value) for value in str(args.horizons).split(',') if value.strip()]
             result = service.factor_analysis(args.factor_ids, horizons)
+        elif args.command == 'validate':
+            result = service.strategy_validation(args.run_ids, args.horizon, args.splits,
+                                                 args.embargo, args.trials, args.blocks)
         elif args.command == 'review':
             result = service.review(args.run_id, args.revision_id)
         elif args.command == 'execution-catalog':

@@ -12,6 +12,7 @@ from .metrics import (
     metric_group, rank, row_value, summarize,
 )
 from . import factors as factor_layer
+from . import validation as validation_layer
 
 
 def display_run_title(run: dict[str, Any] | None) -> str:
@@ -223,6 +224,83 @@ class WorkbenchService:
         data_path = Path(load_profile(default_profile_path())["research"]["data_path"])
         base = data_path if data_path.is_absolute() else (root / data_path)
         return (base / label).resolve()
+
+    # -- validation (VALIDATION.md U20) ------------------------------------
+    def strategy_validation(self, run_ids: list[str], horizon: int = 1, splits: int = 5,
+                            embargo: int | None = None, trials: int | None = None,
+                            blocks: int = 8) -> dict[str, Any]:
+        requested = list(dict.fromkeys(run_ids or []))
+        if not requested:
+            raise validation_layer.ValidationError("run_id is required")
+        if len(requested) > 20:
+            raise validation_layer.ValidationError("at most 20 configurations per validation")
+        configs = []
+        for run_id in requested:
+            revision = self.get_revision(run_id)
+            if revision is None:
+                raise LookupError(f"run not found: {run_id}")
+            series = {item["metric_id"]: item for item in revision["result"]["series"]}
+            points, source = [], None
+            native = series.get("native.qlib.return")
+            if native and native.get("availability") == "available":
+                points = [(point["x"], point["value"]) for point in native["points"]
+                          if point.get("value") is not None]
+                source = "native.qlib.return（引擎报告日收益）"
+            if not points:
+                equity = series.get("platform.equity")
+                if equity and equity.get("availability") == "available":
+                    values = [(point["x"], point["value"]) for point in equity["points"]
+                              if point.get("value") is not None]
+                    points = [(values[index][0], values[index][1] / values[index - 1][1] - 1)
+                              for index in range(1, len(values)) if values[index - 1][1]]
+                    source = "derived: platform.equity 日收益（平台计算）"
+            if len(points) < 20:
+                raise validation_layer.ValidationError(
+                    f"run {run_id} has no usable return series (need at least 20 observations)")
+            configs.append({"run_id": run_id, "title": revision["result"]["run"]["title"],
+                            "dates": [point[0] for point in points],
+                            "returns": [point[1] for point in points],
+                            "return_source": source,
+                            "dataset": revision["result"]["run"].get("dataset") or {}})
+        return validation_layer.validation_report(configs, horizon=horizon, splits=splits,
+                                                  embargo=embargo, trials=trials, blocks=blocks)
+
+    # -- attention centre (UI07 / U21) -------------------------------------
+    def attention(self, limit: int = 20) -> dict[str, Any]:
+        """What the operator should look at next, from state we actually have."""
+        items: list[dict[str, Any]] = []
+        if self.execution_service is not None:
+            for row in self.repository.list_attempts(limit=100)["items"]:
+                outcome = row.get("outcome") or {}
+                imported = outcome.get("result_import") if isinstance(outcome, dict) else None
+                attempt = row["attempt_id"][:8]
+                if row["status"] in ("failed", "interrupted"):
+                    items.append({"kind": "execution_failed", "severity": "high",
+                                  "title": f"执行{ '失败' if row['status']=='failed' else '中断'}：{row['label']}",
+                                  "detail": row.get("error_message") or row.get("error_code") or "原因未记录",
+                                  "target": {"view": "agent", "history": "attempts"}, "ref": attempt})
+                elif row["status"] == "running" and row.get("cancel_requested_at"):
+                    items.append({"kind": "cancel_pending", "severity": "medium",
+                                  "title": f"取消请求中：{row['label']}",
+                                  "detail": "等待执行器确认进程结束；未确认前状态仍是运行中",
+                                  "target": {"view": "agent", "history": "attempts"}, "ref": attempt})
+                elif row["status"] == "succeeded" and isinstance(imported, dict) and \
+                        imported.get("status") in ("failed", "manual_import_required"):
+                    items.append({"kind": "result_not_imported", "severity": "medium",
+                                  "title": f"结果未入库：{row['label']}",
+                                  "detail": imported.get("reason") or "需要显式导入或可信离线导出",
+                                  "target": {"view": "agent", "history": "attempts"}, "ref": attempt})
+                elif row["status"] == "succeeded" and row.get("probe"):
+                    items.append({"kind": "probe_result", "severity": "low",
+                                  "title": f"探针结果：{row['label']}",
+                                  "detail": "集成探针只验证链路，不代表研究成果",
+                                  "target": {"view": "agent", "history": "attempts"}, "ref": attempt})
+        counts = {"high": 0, "medium": 0, "low": 0}
+        for item in items:
+            counts[item["severity"]] = counts.get(item["severity"], 0) + 1
+        return {"items": items[:limit], "total": len(items), "counts": counts,
+                "scope": "来自已记录的执行与结果状态；未接入项（数据新鲜度、实时行情）不在此列",
+                "generated_at": factor_layer.utc_now()}
 
     def get_revision(self, run_id: str, revision_id: str | None = None) -> dict[str, Any] | None:
         revision = self.repository.get_revision(run_id, revision_id)
