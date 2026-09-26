@@ -27,6 +27,8 @@ const HELP = {
   body:['因子值相关性：逐日横截面秩相关的均值，回答“两个因子是不是在排同一批股票”；|相关| ≥ 0.7 标记为高重叠。','共线性：由相关矩阵算 VIF，>10 说明该因子与其它因子高度共线（冗余），不构成独立信息；完全共线会单独标明。','正交增量：把新因子对已有因子横截面回归后取残差再算 IC，回答“去掉已有因子能解释的部分，还剩多少信息”。','组合增量：等权合成（横截面标准化后取均值）中加入/去掉该因子的 IC 变化；接近 0 说明被已有因子解释。','未接入：持仓重叠需要逐日持仓明细，拥挤度需要市场层面的因子使用数据；两者都显式标注而不是填 0。']},
  'attention.list':{title:'待处理事项',summary:'失败执行、未入库结果、探针结果与取消请求中；来自已记录状态。',ref:'UI07 / U21',
   body:['这里只列已有状态能判断的事项：失败/中断的执行、已成功但未入库的结果、集成探针结果、取消请求中。','每条给出原因与跳转目标；没有事项时显示空态，不隐藏也不假装有内容。','数据新鲜度、实时行情等未接入能力不会进入此列表（否则会变成无法处理的噪声）。']},
+ 'risk.card':{title:'风险与绩效怎么读',summary:'Sharpe/Sortino/Calmar、VaR/CVaR、回撤期与月度收益，全部由平台按公式计算。',ref:'RESULT_CONTRACT.md（绩效与风险指标族）',
+  body:['年化收益按 (1+总收益)^(ppy/N)-1，ppy 取配置中的年化交易日（CN 情景 238），不额外假设。','Sharpe = mean/std×√ppy；Sortino 的分母只算负收益；Calmar = 年化收益/|最大回撤|。离散度低于 1e-12 或没有负收益/回撤时返回"不可用"并说明，不算出无穷大。','VaR/CVaR 是历史法：5% 分位与分位以下均值，只描述样本内尾部，不是未来损失保证。','回撤期给出开始、谷底、恢复日期、深度与持续天数；未回到前高的标为"未恢复"。','月度/年度收益按日历聚合，缺月显示 null；分红再投资与真实成本细分仍未接入。']},
  'validation.card':{title:'验证卡怎么读',summary:'PSR/DSR 修正选择偏差，PBO 估计过拟合概率，purge 与唯一性说明样本泄漏。',ref:'VALIDATION.md',
   body:['PSR：Sharpe 大于基准的概率（偏度/峰度修正）；DSR：以"试了 N 个配置后的期望最大 Sharpe"为基准，比 PSR 更保守。','PBO（CSCV）：把收益矩阵切成时间块，样本内最优配置在样本外的分位低于中位的比例；越高说明越可能是挑出来的。','purge/embargo：训练集剔除与测试窗口标签重叠的样本及其后若干样本；唯一性权重说明重叠标签让有效样本数小于观测数。','这些都不能替代前瞻/实盘验证：结果里固定列出"缺少前瞻样本"这条未接入项。']},
  'page.live':{title:'实时页为什么是空的',summary:'行情流尚未接入，没有连接记录时不显示 0。',ref:'LIVE01 / UI01',
@@ -306,7 +308,29 @@ async function renderBacktest(){
   const kpis=`<div class="metric-row"><div class="metric-box"><small>期末权益 ${originBadge(equity?.series?.provenance)}</small><strong>${fmt(last)} <small>${esc(equity?.series?.unit||'币种未记录')}</small></strong></div><div class="metric-box"><small>首末观测权益变化 ${badge('derived')}</small><strong>${typeof review.facts.observed_equity_change==='number'?fmt(review.facts.observed_equity_change*100)+'%':'未知'}</strong></div><div class="metric-box"><small>最大观测权益回撤 ${badge('derived')}</small><strong>${typeof dd==='number'?fmt(dd*100)+'%':'未知'}</strong></div><div class="metric-box"><small>引擎</small><strong>${esc(summary.run.engine.id)}</strong></div></div>`;
   const heading=`<div class="heading-row"><div><h2>${esc(summary.display_title||summary.run.title)}</h2><p class="panel-note">${statusLabel(summary.run.status)} ${sample(summary.run)} · 结果版本 ${esc(summary.revision_id.slice(0,12))} · 数据版本 ${esc(summary.run.dataset.version||'未知')}</p></div></div>`;
   const misc=`<p class="panel-note">${originBadge(cost?.series?.provenance)} 累计费用（源报告末点）：${fmt(totalCost)} ${esc(cost?.series?.unit||'币种未记录')}（${availabilityLabel(cost?.series.availability)}）<br>换手序列：${availabilityLabel(turnover?.series.availability)} · 撮合与费用口径请查原运行配置。</p>`;
-  document.getElementById('content').innerHTML=`<div class="stack">${card('运行概况',heading+kpis)}${provenancePanel(detail)}${reviewPanel(review,detail.evidence)}${card('权益曲线',seriesPanel(equity),equity?.series?.provenance?.source||'来源未核实')}${card('成本与换手',misc)}${card('来源证据',`<details><summary>展开原始证据</summary><pre class="panel-note">${esc(JSON.stringify(detail.evidence,null,2))}</pre></details>`,'未知事实保留为空')}</div>`;
+  const risk=await renderRiskCard(id);
+  document.getElementById('content').innerHTML=`<div class="stack">${card('运行概况',heading+kpis)}${risk}${provenancePanel(detail)}${reviewPanel(review,detail.evidence)}${card('权益曲线',seriesPanel(equity),equity?.series?.provenance?.source||'来源未核实')}${card('成本与换手',misc)}${card('来源证据',`<details><summary>展开原始证据</summary><pre class="panel-note">${esc(JSON.stringify(detail.evidence,null,2))}</pre></details>`,'未知事实保留为空')}</div>`;
+}
+async function renderRiskCard(runId){
+ let report=null,reason=null;
+ try{report=(await api(`/v1/risk?run_id=${encodeURIComponent(runId)}`)).items[0];}catch(error){reason=error.message;}
+ if(reason)return card('风险与绩效',`<p class="warning">无法计算：${esc(reason)}</p><p class="panel-note">需要至少 20 个观测的收益序列（优先 native.qlib.return，缺失时由平台按权益推导）。</p>`,'工作台计算','risk.card');
+ const m=report.metrics||{};
+ const show=(value,digits=3)=>typeof value==='number'?fmt(value,digits):'不可用';
+ const pct=value=>typeof value==='number'?fmt(value*100,2)+'%':'不可用';
+ const boxes=[['年化收益',pct(m.annualised_return)],['波动（年化）',pct(m.volatility)],['Sharpe',show(m.sharpe)],
+   ['Sortino',show(m.sortino)],['Calmar',show(m.calmar)],['最大回撤',pct(m.max_drawdown)],
+   ['VaR 5%',pct(m.var)],['CVaR 5%',pct(m.cvar)]].map(([label,value])=>`<div class="metric-box"><small>${label}</small><strong>${value}</strong></div>`).join('');
+ const episodes=(report.drawdown_episodes||[]).map(item=>`<li>${esc(item.start)} → ${item.recovery?esc(item.recovery):'未恢复（'+esc(item.status)+'）'} · 深度 ${pct(item.depth)} · ${item.length_days} 个交易日</li>`).join('');
+ const monthly=report.calendar?.monthly||{};
+ const months=['01','02','03','04','05','06','07','08','09','10','11','12'];
+ const monthlyRows=Object.keys(monthly).sort().map(year=>`<tr><th>${esc(year)}</th>${months.map(month=>{const value=monthly[year][month];return `<td>${typeof value==='number'?pct(value):'<small class="muted">缺月</small>'}</td>`;}).join('')}</tr>`).join('');
+ const unavailable=(report.not_available||[]).map(item=>`${esc(item.metric)}（${esc(item.reason)}）`).join('；');
+ return card('风险与绩效',`${badge('derived')}<div class="metric-row">${boxes}</div>
+ <p class="panel-note">样本 ${esc(report.basis.sample.start)} → ${esc(report.basis.sample.end)}（${report.basis.sample.observations} 个观测）· 年化参数 ${report.basis.parameters.periods_per_year} 个交易日 · 收益来源 ${esc(report.return_source||'未记录')}</p>
+ <details><summary>回撤期（按深度）</summary><ul class="stack li">${episodes||'<li>样本内没有回撤</li>'}</ul></details>
+ <details><summary>月度收益（缺月为 null，不填 0）</summary><div class="table-scroll"><table class="table compare-table"><thead><tr><th>年</th>${months.map(month=>`<th>${month}月</th>`).join('')}</tr></thead><tbody>${monthlyRows||'<tr><td colspan="13">无记录</td></tr>'}</tbody></table></div></details>
+ <p class="panel-note">未接入：${unavailable||'无'}</p>`,'工作台计算；年化使用配置中的交易日数','risk.card');
 }
 async function renderTraining(){
   const selected=await selectedRevision();if(!selected){document.getElementById('content').innerHTML=empty('请先选择一个运行');return;}

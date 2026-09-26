@@ -166,6 +166,11 @@ def create_app(service: WorkbenchService):
         """VALIDATION U20: PSR/DSR per run, PBO across runs and the leakage summary."""
         return service.strategy_validation(run_id, horizon, splits, embargo, trials, blocks)
 
+    @app.get("/v1/risk")
+    def risk(run_id: list[str] = Query(...), periods_per_year: int | None = Query(None, ge=1, le=1000)):
+        """U22: performance and risk metrics for one or more recorded runs."""
+        return service.risk_report(run_id, periods_per_year)
+
     @app.get("/v1/attention")
     def attention(limit: int = Query(20, ge=1, le=100)):
         """UI07:待处理事项（失败执行、未入库结果、探针结果、取消请求中）。"""

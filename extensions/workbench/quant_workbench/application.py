@@ -13,6 +13,7 @@ from .metrics import (
 )
 from . import factors as factor_layer
 from . import validation as validation_layer
+from . import risk as risk_layer
 
 
 def display_run_title(run: dict[str, Any] | None) -> str:
@@ -264,6 +265,52 @@ class WorkbenchService:
                             "dataset": revision["result"]["run"].get("dataset") or {}})
         return validation_layer.validation_report(configs, horizon=horizon, splits=splits,
                                                   embargo=embargo, trials=trials, blocks=blocks)
+
+    # -- performance and risk (U22) ----------------------------------------
+    def risk_report(self, run_ids: list[str], periods_per_year: int | None = None) -> dict[str, Any]:
+        requested = list(dict.fromkeys(run_ids or []))
+        if not requested:
+            raise risk_layer.RiskError("run_id is required")
+        if periods_per_year is None:
+            try:
+                from .cn_market import default_profile_path, load_profile
+                periods_per_year = int(load_profile(default_profile_path())["research"]["annualization"]
+                                       ["native_portfolio_days"])
+            except Exception:
+                periods_per_year = 238
+        reports = []
+        for run_id in requested:
+            revision = self.get_revision(run_id)
+            if revision is None:
+                raise LookupError(f"run not found: {run_id}")
+            series = {item["metric_id"]: item for item in revision["result"]["series"]}
+            dates, values, source = [], [], None
+            native = series.get("native.qlib.return")
+            if native and native.get("availability") == "available":
+                dates = [point["x"] for point in native["points"] if point.get("value") is not None]
+                values = [point["value"] for point in native["points"] if point.get("value") is not None]
+                source = "native.qlib.return（引擎报告日收益）"
+            if not values:
+                equity = series.get("platform.equity")
+                if equity and equity.get("availability") == "available":
+                    points = [(point["x"], point["value"]) for point in equity["points"]
+                              if point.get("value") is not None]
+                    dates = [points[index][0] for index in range(1, len(points))]
+                    values = [points[index][1] / points[index - 1][1] - 1
+                              for index in range(1, len(points)) if points[index - 1][1]]
+                    source = "derived: platform.equity 日收益（平台计算）"
+            if len(values) < risk_layer.MIN_OBSERVATIONS:
+                raise risk_layer.RiskError(
+                    f"run {run_id} has no usable return series (need at least {risk_layer.MIN_OBSERVATIONS} observations)")
+            report = risk_layer.performance_report(dates, values, periods_per_year=periods_per_year)
+            report["run_id"] = run_id
+            report["title"] = revision["result"]["run"]["title"]
+            report["return_source"] = source
+            report["basis"]["dataset"] = revision["result"]["run"].get("dataset") or {}
+            reports.append(report)
+        return {"items": reports, "count": len(reports),
+                "periods_per_year": periods_per_year,
+                "scope": "每个运行独立计算；未接入项见各自的 not_available 列表"}
 
     # -- attention centre (UI07 / U21) -------------------------------------
     def attention(self, limit: int = 20) -> dict[str, Any]:

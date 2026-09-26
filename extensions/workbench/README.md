@@ -124,3 +124,5 @@ extensions/workbench/.venv/bin/qwb factor-analysis <FACTOR_ID> [<FACTOR_ID> ...]
 新增回归：`node --test extensions/workbench/tests/test_ui.cjs`；Python仍用上述unittest发现命令（2026-09-26含16项执行层回归）。详见[修复与验收](../../docs/spec/FIXES_20260926.md)与[执行层规范](../../docs/spec/EXECUTION.md)；不代表完整实时/数据目录/多数据库已经支持。
 
 验证与任务中心（U20/U21）：比较页在口径检查后会给出验证卡（每个运行的 Sharpe/PSR/DSR、配置间的 PBO、purged 折剔除比例与有效样本数）；命令行为 `qwb validate <RUN_ID>... [--horizon 1 --splits 5 --embargo 1 --blocks 8]`。PBO 只有在配置之间确有差异时才有意义，完全相同的配置（例如同情景重复运行）会标记为退化并说明不可区分。顶栏"待处理 N"来自 `/v1/attention`（失败执行、未入库结果、探针结果、取消请求中）；`Ctrl/⌘ + K` 打开命令面板，可跳转运行/研究/因子或执行命令，索引范围为命令 + 最近 100 个运行 + 最近 50 条研究 + 已入库因子。
+
+风险与绩效（U22）：回测页有「风险与绩效」卡（年化收益/波动/Sharpe/Sortino/Calmar/最大回撤/VaR/CVaR、按深度的回撤期、月度收益矩阵）。命令行 `qwb risk <RUN_ID>... [--periods-per-year 238]`；年化参数默认取 `configs/cn/profile.json` 的年化交易日（238），不可用或退化情形（无负收益、无回撤、离散度近零、缺月）返回"不可用"或 `null`，不用无穷大或 0 代替。

@@ -93,6 +93,9 @@ def parser() -> argparse.ArgumentParser:
     a = sub.add_parser("factor-analysis", help="single-factor statistics, overlap and increment")
     a.add_argument("factor_ids", nargs="+")
     a.add_argument("--horizons", default="1,5,10,20")
+    a = sub.add_parser("risk", help="performance and risk metrics for one or more runs")
+    a.add_argument("run_ids", nargs="+")
+    a.add_argument("--periods-per-year", type=int)
     a = sub.add_parser("validate", help="PSR/DSR/PBO validation for one or more runs")
     a.add_argument("run_ids", nargs="+")
     a.add_argument("--horizon", type=int, default=1)
@@ -187,6 +190,8 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == 'factor-analysis':
             horizons = [int(value) for value in str(args.horizons).split(',') if value.strip()]
             result = service.factor_analysis(args.factor_ids, horizons)
+        elif args.command == 'risk':
+            result = service.risk_report(args.run_ids, args.periods_per_year)
         elif args.command == 'validate':
             result = service.strategy_validation(args.run_ids, args.horizon, args.splits,
                                                  args.embargo, args.trials, args.blocks)
