@@ -199,3 +199,59 @@ test('U15: the research centre renders sub-tabs with a scrolling, folded pane',a
   assert.match(html,/展开全部（共 25 条）/);
   assert.match(html,/class="subtab active"[^>]*data-history-tab="research"|data-history-tab="research"[^>]*class="subtab active"|data-history-tab="research"/);
 });
+
+const catalogFixture={items:[
+  {kind:'qlib.cn_synthetic_backtest',executor_id:'qlib_subprocess',label:'Qlib CN 合成行情训练+回测',probe:false,
+   data_nature:'synthetic_current_rules_counterfactual',description:'编译独立工作目录并用 Qlib 运行',available:true,checks:[],reasons:[]},
+  {kind:'rdagent.factor.baseline',executor_id:'rdagent_subprocess',label:'RD-Agent 因子基线（集成探针）',probe:true,
+   data_nature:'synthetic_scenario',description:'本地因子基线回测',available:true,checks:[],reasons:[]},
+  {kind:'rdagent.factor.loop',executor_id:'rdagent_subprocess',label:'RD-Agent 单轮因子循环（集成探针）',probe:true,
+   data_nature:'synthetic_scenario',description:'单轮因子演化循环',available:true,checks:[],reasons:[]},
+]};
+
+test('U16: every execution entry explains itself and the choice survives a re-render',()=>{
+  const x=ui();
+  const panel=x.run(`executionPanel(${JSON.stringify(catalogFixture)},{items:[]})`);
+  catalogFixture.items.forEach(entry=>{
+    assert.match(panel,new RegExp(`data-help="exec.kind.${entry.kind.replace(/\./g,'\\.')}"`),`${entry.kind} needs a help entry`);
+  });
+  assert.match(panel,/成功后自动入库/);
+  assert.match(panel,/需可信离线导出后入库/);
+  assert.match(panel,/训练 LightGBM/);
+  assert.match(panel,/不发聊天请求/);
+  assert.match(panel,/耗时几分钟/);
+
+  x.context.catalog=catalogFixture;
+  x.run("state.executionKind='rdagent.factor.loop'");
+  const rerendered=x.run('executionPanel(catalog,{items:[]})');
+  assert.match(rerendered,/value="rdagent\.factor\.loop" selected/,'选中的入口必须在重新渲染后保留');
+  assert.match(rerendered,/value="qlib\.cn_synthetic_backtest"/);
+  assert.ok(!/value="qlib\.cn_synthetic_backtest" selected/.test(rerendered));
+  const feedback=x.run("entryFeedback('rdagent.factor.loop')");
+  assert.match(feedback,/让 Agent 生成并回测新因子/);
+});
+
+test('U16: history controls stay outside the scrolling pane',async()=>{
+  const attempts=[{attempt_id:'attempt-0001-1111-2222-333333333333',kind:'qlib.cn_synthetic_backtest',label:'回测',
+    probe:false,status:'succeeded',has_log:true,cancel_pending:false,exit_code:0,started_at:'2026-09-26T00:00:00Z',
+    created_at:'2026-09-26T00:00:00Z',ended_at:'2026-09-26T00:01:00Z',outcome:null,error_code:null,
+    error_message:null,config_fingerprint:'f'.repeat(64),workspace_label:'ws'}];
+  const research=Array.from({length:12},(_,i)=>({id:`research-${i}`,title:`研究 ${i}`,session:'Loop_0',
+    status:'result_available',factor_count:1,synthetic:true,facts:{},metrics:{}}));
+  const x=ui(async path=>{
+    if(path.startsWith('/v1/research?'))return response({items:research,total:12,next_offset:null});
+    if(path.startsWith('/v1/agents/'))return response({chat:{},embedding:{},runtime:{},execution:{reasons:[]}});
+    if(path==='/v1/executions/catalog')return response(catalogFixture);
+    if(path.startsWith('/v1/executions'))return response({items:attempts,next_cursor:null});
+    return response({items:[]});
+  });
+  await x.run("state.view='agent';state.historyTab='research';state.historyExpanded=false;renderAgent()");
+  const html=x.elements['content'].innerHTML;
+  const toolbarAt=html.indexOf('id="research-search"');
+  const scrollerAt=html.indexOf('class="history-scroll"');
+  const pagerAt=html.indexOf('id="research-next"');
+  assert.ok(toolbarAt>=0&&scrollerAt>=0,'搜索栏与滚动区都必须渲染');
+  assert.ok(toolbarAt<scrollerAt,'搜索栏必须在滚动区之外，不能被一起滚动');
+  assert.ok(pagerAt>scrollerAt,'翻页按钮固定在滚动区下方');
+  assert.match(html,/id="execution-kind"/);
+});

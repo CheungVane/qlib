@@ -2,7 +2,7 @@ const initialQuery = new URLSearchParams(location.search);
 const hasCompareQuery = initialQuery.has('compare');
 const HISTORY_PREVIEW = 8;
 const historyTabParam = initialQuery.get('history');
-const state = {renderGeneration:0, revision: initialQuery.get("revision"), seriesOffsets:{}, runs: [], selected: initialQuery.get('run'), compareIds: (initialQuery.get('compare') || '').split(',').filter(Boolean), researchId: initialQuery.get('research'), researchOffset:0, researchQuery:'', search: '', executionKey:null, helpTrigger:null, helpBound:false, historyTab: historyTabParam==='research'?'research':'attempts', historyExpanded:false, attemptCursor:null, attemptCursors:[], runsExpanded:false, overviewExpanded:false, view: location.hash.slice(1) || 'overview'};
+const state = {renderGeneration:0, revision: initialQuery.get("revision"), seriesOffsets:{}, runs: [], selected: initialQuery.get('run'), compareIds: (initialQuery.get('compare') || '').split(',').filter(Boolean), researchId: initialQuery.get('research'), researchOffset:0, researchQuery:'', search: '', executionKey:null, executionKind:null, helpTrigger:null, helpBound:false, historyTab: historyTabParam==='research'?'research':'attempts', historyExpanded:false, historyScrollTop:0, attemptCursor:null, attemptCursors:[], runsExpanded:false, overviewExpanded:false, view: location.hash.slice(1) || 'overview'};
 const titles = {overview:['总览','研究运行、数据状态与系统观察'],backtest:['回测','权益、回撤、费用与来源证据'],training:['训练','指标曲线、阶段状态与来源证据'],compare:['比较','并列查看运行，先核对数据与指标口径'],agent:['研究中心','研究结果、因子内容、过程追踪与下一步'],live:['实时','行情连接与数据新鲜度'],data:['数据','数据集来源、覆盖与质量'],system:['系统','任务状态、请求与错误观察']};
 const HELP = {
  'page.overview':{title:'总览怎么读',summary:'先看来源与能力边界，再看最近研究与已采集的观察指标。',ref:'UI01 / ARC08',
@@ -45,6 +45,12 @@ const HELP = {
   body:['检查输出 comparable / partial / incompatible 及原因，例如数据版本、日历、初始资金或费用情景不同。','模拟与真实结果、手写样本不参与排名。']},
  'exec.launch':{title:'启动研究（隔离进程）',summary:'每次启动都是一次独立进程，有独立工作目录与日志。',ref:'EXECUTION.md EXEC03 / EXEC04',
   body:['执行入口按 kind 选择；提交前会逐项检查前置条件，缺任一项就拒绝启动且不产生 Attempt。','同一提交期间复用同一幂等键以吸收重复点击；启动成功或去重后自动换新键，可以再次启动。']},
+ 'exec.kind.qlib.cn_synthetic_backtest':{title:'Qlib CN 合成行情训练+回测',summary:'训练 LightGBM 并在合成行情上回测，结果会自动入库。',ref:'EXEC12 / CN01—03 / UI05',
+  body:['做什么：按 configs/cn/profile.json 编译独立工作流，在模拟 A 股行情上训练并回测，产出权益、回撤、费用台账与质量检查。','需要什么：本机 Qlib 虚拟环境与该情景的数据快照；不需要聊天模型。','产出与去向：本次运行在自己的 MLflow 库里生成记录，成功后平台自动导入结果库，可在“历史记录 → 执行记录”看到“已入库 · 运行 xxxx”。','大致耗时：本机合成数据实测约 10—20 秒。','数据性质：模拟行情、当前规则回放；通过质量检查不等于真实市场有效。']},
+ 'exec.kind.rdagent.factor.baseline':{title:'RD-Agent 因子基线（集成探针）',summary:'只跑基线因子回测，不发聊天请求，用来确认链路可用。',ref:'RDAGENT_INTEGRATION.md / EXEC12',
+  body:['做什么：在 RD-Agent 因子模板上跑一次基线回测，验证容器、模板、数据与回测链路是否打通。','需要什么：Linux Docker（本机 Colima）与已构建的因子镜像、情景数据快照；不需要聊天模型。','产出与去向：产出研究会话快照与少量指标；结果不自动入库，需要可信离线导出后再走导入流程。','大致耗时：本机实测约 19 秒。','这是集成探针：通过只说明链路可用，不代表研究成果或因子有效。']},
+ 'exec.kind.rdagent.factor.loop':{title:'RD-Agent 单轮因子循环（集成探针）',summary:'让 Agent 生成并回测新因子，耗时几分钟，结果是研究快照。',ref:'RDAGENT_INTEGRATION.md / EXEC12',
+  body:['做什么：跑一轮“假设 → 生成因子代码 → 回测 → 评审”的演化循环，使用本机 .env 中的聊天与 embedding 配置。','需要什么：聊天模型与 embedding 服务可用、Linux Docker 与因子镜像就绪；缺任一项会被前置条件挡下。','产出与去向：产出研究会话、因子定义与代码、回测指标；结果不自动入库，需可信离线导出后发布。','大致耗时：本机实测一轮 3 分 29 秒，通常 3—10 分钟。','这是集成探针：Agent 生成的内容属于意见类证据，不等于已验证的因子。']},
  'exec.preconditions':{title:'前置条件怎么读',summary:'每项检查都给出状态与依据；阻塞项会阻止启动。',ref:'EXECUTION.md EXEC06',
   body:['检查覆盖引擎运行时、聊天与 embedding 可达性、数据快照指纹、日历、费用情景、容器资源与 Attempt 存储。','标“该入口非必需”的项目不影响这个入口；标“阻塞启动”的必须解决。']},
  'exec.attempts':{title:'执行记录怎么读',summary:'一行是一次真实进程；执行状态与是否入库是两件事。',ref:'EXECUTION.md EXEC02 / EXEC08',
@@ -195,9 +201,11 @@ function renderRuns(){
   const toggle=document.getElementById('run-list-toggle');
   if(toggle){
     toggle.hidden=visible.length<=HISTORY_PREVIEW;
-    toggle.textContent=state.runsExpanded?`收起，只看最近 ${HISTORY_PREVIEW} 条`:`展开全部（共 ${visible.length} 条）`;
+    toggle.textContent=state.runsExpanded?`收起（当前显示 ${visible.length} 条）`:`展开全部（共 ${visible.length} 条，当前显示 ${shown.length} 条）`;
     toggle.onclick=()=>{state.runsExpanded=!state.runsExpanded;renderRuns();};
   }
+  const sidebar=document.querySelector?document.querySelector('.sidebar'):null;
+  if(sidebar&&sidebar.classList)sidebar.classList.toggle('expanded',state.runsExpanded);
 }
 function renderWidget(widget,payload){
   let body;
@@ -364,10 +372,26 @@ function executionChecks(entry){
 }
 function executionPanel(catalog,attempts){
  const available=catalog.items.filter(x=>x.available);
- const options=catalog.items.map(x=>`<option value="${esc(x.kind)}" ${x.available?'':'disabled'}>${esc(x.label)}${x.available?'':'（前置条件未满足）'}</option>`).join('');
- const form=`<form id="execution-form" class="toolbar"><label class="sr-only" for="execution-kind">执行入口</label><select id="execution-kind" aria-label="执行入口" ${available.length?'':'disabled'}>${options}</select><input id="execution-note" aria-label="备注" placeholder="可选备注（随 Attempt 保存）"><button class="action" id="execution-submit" ${available.length?'':'disabled'}>启动研究</button><small>启动请求期间复用同一幂等键（重复点击不会产生第二个进程）；启动成功或去重后自动换用新键，可再次启动新 Attempt。</small></form><p id="execution-feedback" class="panel-note">${available.length?'前置条件已满足，可启动隔离进程执行。':'当前没有可用执行入口；下方逐项列出缺失条件，不会提供假启动。'}</p>`;
- const entries=catalog.items.map(x=>`<details class="execution-entry" ${x.available?'':'open'}><summary>${esc(x.label)} ${x.probe?badge('limited'):''} ${x.available?badge('measured'):badge('unsupported')}</summary><p class="panel-note">执行器 <code>${esc(x.executor_id)}</code> · 数据性质 ${esc(x.data_nature||'未记录')}<br>${esc(x.description||'')}</p>${executionChecks(x)}</details>`).join('');
- return card('启动研究（隔离进程）',form+entries,'前置条件逐项核对；探针类执行标记为集成探针');
+ const fallback=(catalog.items.find(x=>x.available)||catalog.items[0]||{}).kind;
+ const remembered=catalog.items.some(x=>x.kind===state.executionKind)?state.executionKind:fallback;
+ state.executionKind=remembered;
+ const options=catalog.items.map(x=>`<option value="${esc(x.kind)}" ${x.kind===remembered?'selected':''} ${x.available?'':'disabled'}>${esc(x.label)}${x.available?'':'（前置条件未满足）'}</option>`).join('');
+ const form=`<form id="execution-form" class="toolbar"><label class="sr-only" for="execution-kind">执行入口</label><select id="execution-kind" aria-label="执行入口" ${available.length?'':'disabled'}>${options}</select><input id="execution-note" aria-label="备注" placeholder="可选备注（随 Attempt 保存）"><button class="action" id="execution-submit" ${available.length?'':'disabled'}>启动研究</button><small>启动请求期间复用同一幂等键（重复点击不会产生第二个进程）；启动成功或去重后自动换用新键，可再次启动新 Attempt。</small></form><p id="execution-feedback" class="panel-note">${entryFeedback(remembered)}</p>`;
+ const entries=catalog.items.map(x=>{
+  const meta=execEntryMeta(x.kind)||{};
+  const importer=x.kind.startsWith('qlib.')?'成功后自动入库':'需可信离线导出后入库';
+  return `<details class="execution-entry" ${x.available?'':'open'}><summary><span class="entry-title">${esc(x.label)} ${x.probe?badge('limited'):''} ${x.available?badge('measured'):badge('unsupported')}${help('exec.kind.'+x.kind,x.label)}</span><small class="block muted">${esc(meta.summary||x.description||'')}</small></summary><p class="panel-note">执行器 <code>${esc(x.executor_id)}</code> · 数据性质 ${esc(x.data_nature||'未记录')} · 结果去向 ${esc(importer)}<br>${esc(x.description||'')}</p>${executionChecks(x)}</details>`;
+ }).join('');
+ return card('启动研究（隔离进程）',form+entries,'三种入口的用途、数据性质与结果去向都写在下面；点问号看完整说明');
+}
+function entryFeedback(kind){
+ const item=execEntryMeta(kind);
+ const head=item?esc(item.summary):'当前没有可用执行入口；下方逐项列出缺失条件，不会提供假启动。';
+ return `${help('exec.kind.'+kind,item?item.title:kind)} ${head}`;
+}
+function execEntryMeta(kind){
+ const item=HELP['exec.kind.'+kind];
+ return item?{title:item.title,summary:item.summary}:null;
 }
 function attemptTable(attempts){
  if(!attempts.length)return empty('还没有执行记录。启动一次研究后，这里会显示状态、退出码、结果摘要与日志入口。');
@@ -390,6 +414,7 @@ function bindExecution(catalog){
   const kind=document.getElementById('execution-kind').value;
   const note=document.getElementById('execution-note').value.trim();
   const button=document.getElementById('execution-submit');
+  state.executionKind=kind;
   button.disabled=true;
   try{
    const response=await fetch('/v1/executions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,params:note?{note}:{},idempotency_key:state.executionKey})});
@@ -404,7 +429,13 @@ function bindExecution(catalog){
   }catch(error){setNotice(error.message);button.disabled=false;}
  };
  const select=document.getElementById('execution-kind');
- if(select)select.onchange=()=>{state.executionKey=newIdempotencyKey();render();};
+ if(select)select.onchange=()=>{
+  // keep the choice and the pane in place: re-rendering here used to reset the dropdown
+  state.executionKind=select.value;
+  state.executionKey=newIdempotencyKey();
+  const feedback=document.getElementById('execution-feedback');
+  if(feedback)feedback.innerHTML=entryFeedback(state.executionKind);
+ };
  document.querySelectorAll('[data-attempt-cancel]').forEach(button=>button.onclick=async()=>{
   if(!window.confirm('取消需要执行器确认进程结束后才落终态；确认请求取消？'))return;
   button.disabled=true;
@@ -506,11 +537,16 @@ async function renderAgent(){
  const shownResearch=foldRows(list.items,state.historyExpanded,HISTORY_PREVIEW);
  const tabs=`<div class="subtabs" role="tablist" aria-label="历史记录"><button type="button" role="tab" class="subtab ${tab==='attempts'?'active':''}" data-history-tab="attempts" aria-selected="${tab==='attempts'}">执行记录 <small>${attempts.items.length}</small></button><button type="button" role="tab" class="subtab ${tab==='research'?'active':''}" data-history-tab="research" aria-selected="${tab==='research'}">研究记录 <small>${list.total}</small></button></div>`;
  const attemptPager=`<div class="toolbar"><button class="action secondary" id="attempt-prev" ${state.attemptCursors.length?'':'disabled'}>较新一页</button><button class="action secondary" id="attempt-next" ${attempts.next_cursor?'':'disabled'}>更早的记录</button><small>每页 20 条；翻页不改变排序与筛选。</small></div>`;
- const pane=tab==='attempts'
-  ? attemptTable(shownAttempts)+foldToggle('history',attempts.items.length,shownAttempts.length,state.historyExpanded)+attemptPager
-  : toolbar+researchTable(shownResearch)+foldToggle('history',list.items.length,shownResearch.length,state.historyExpanded,'',`全库 ${list.total} 条`)+pager;
- const historyCard=card('历史记录',`${tabs}<div class="history-scroll" id="history-scroll">${pane}</div>`,'子tab切换；列表在面板内滚动，默认折叠为最近记录');
+ // controls stay outside the scroller so searching and paging never scroll away
+ const paneRows=tab==='attempts'?attemptTable(shownAttempts):researchTable(shownResearch);
+ const paneControls=tab==='attempts'
+  ? foldToggle('history',attempts.items.length,shownAttempts.length,state.historyExpanded)+attemptPager
+  : foldToggle('history',list.items.length,shownResearch.length,state.historyExpanded,'',`全库 ${list.total} 条`)+pager;
+ const paneToolbar=tab==='research'?toolbar:'';
+ const historyCard=card('历史记录',`${tabs}${paneToolbar}<div class="history-scroll" id="history-scroll">${paneRows}</div>${paneControls}`,'子tab切换；操作栏固定，列表在面板内滚动，默认折叠为最近记录');
  document.getElementById('content').innerHTML=`<div class="stack">${executionPanel(catalog,attempts.items)}${historyCard}${card('运行环境',ready)}</div>`;
+ const scroller=document.getElementById('history-scroll');
+ if(scroller&&state.historyScrollTop)scroller.scrollTop=state.historyScrollTop;
  const search=document.getElementById('research-search');
  if(search)search.onsubmit=e=>{e.preventDefault();state.researchQuery=document.getElementById('research-query').value;state.researchOffset=0;render();};
  const prev=document.getElementById('research-prev');
@@ -536,7 +572,11 @@ async function renderAgent(){
    render();
  };
  bindExecution(catalog);bindResearch();bindHistory();
- if(attempts.items.some(x=>['queued','running'].includes(x.status)))setTimeout(()=>{if(state.view==='agent'&&!state.researchId)render();},5000);
+ if(attempts.items.some(x=>['queued','running'].includes(x.status)))setTimeout(()=>{
+  const active=document.activeElement;
+  const typing=active&&active.id==='execution-note';
+  if(state.view==='agent'&&!state.researchId&&!typing)render();
+ },5000);
 }
 async function refreshRuns(){
  let items=[],cursor=null;
@@ -566,6 +606,8 @@ function renderUnavailable(view){
 }
 async function render(){
   const generation=++state.renderGeneration;
+  const scroller=document.getElementById('history-scroll');
+  if(scroller)state.historyScrollTop=scroller.scrollTop;
   setNotice();document.getElementById('content').innerHTML='<div class="loading">加载中…</div>';
   try{
     if(state.view==='overview')await renderOverview();

@@ -33,7 +33,12 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.65;
 .modal-body .panel-note{margin-bottom:0}
 @media(max-width:650px){.help-tip{width:196px}}
 
-.sidebar{height:100vh;position:sticky;top:0;overflow:hidden}
+.sidebar{height:100vh;position:sticky;top:0;overflow-y:auto}
+.brand{padding:20px 20px 22px}
+.recent-label{margin-top:18px}
+.nav{padding:10px 14px}
+.run-list{flex:none;height:240px;min-height:240px;max-height:240px}
+.sidebar.expanded .run-list{height:62vh;min-height:240px;max-height:62vh}
 .run-toggle{margin:6px 14px 0;background:#1d3b49;border:1px solid #355566;color:#cfe6e2;border-radius:7px;padding:7px 10px;font:inherit;font-size:11px;cursor:pointer}
 .run-toggle:hover,.run-toggle:focus-visible{border-color:#40d1b6;color:#fff;outline:none}
 .subtabs{display:flex;gap:6px;border-bottom:1px solid #e4ecee;margin-bottom:12px;flex-wrap:wrap}
