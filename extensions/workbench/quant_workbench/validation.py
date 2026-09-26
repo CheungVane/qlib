@@ -11,6 +11,9 @@ from itertools import combinations
 from statistics import NormalDist
 from typing import Any
 
+from . import numeric
+from .dto import json_safe
+
 MAX_COMBINATIONS = 5000
 
 
@@ -19,11 +22,7 @@ class ValidationError(ValueError):
 
 
 def _numpy():
-    try:
-        import numpy as np
-    except ImportError as exc:  # pragma: no cover - declared in the analysis extra
-        raise ValidationError("validation needs numpy (install the 'analysis' extra)") from exc
-    return np
+    return numeric.numpy(ValidationError, "validation needs numpy (install the 'analysis' extra)")
 
 
 # -- data leakage -------------------------------------------------------------
@@ -99,14 +98,10 @@ def uniqueness_weights(spans) -> dict[str, Any]:
 
 # -- Sharpe inference ---------------------------------------------------------
 def _sharpe(returns) -> float:
-    np = _numpy()
-    values = np.asarray(returns, dtype=float)
-    if len(values) < 2:
-        raise ValidationError("at least two observations are required")
-    std = values.std(ddof=1)
-    if std == 0:
-        raise ValidationError("returns have zero variance")
-    return float(values.mean() / std)
+    value = numeric.sharpe(returns)
+    if value is None:
+        raise ValidationError("returns have zero variance or fewer than two observations")
+    return value
 
 
 def probabilistic_sharpe(returns, benchmark: float = 0.0) -> dict[str, Any]:
@@ -297,14 +292,3 @@ def validation_report(configs: list[dict[str, Any]], *, horizon: int = 1, splits
             "没有前瞻样本，历史 PBO 与 DSR 不能替代实盘验证",
         ],
     })
-
-
-def json_safe(value):
-    """Non-finite floats become null so DTOs stay JSON compliant (allow_nan=False)."""
-    if isinstance(value, float):
-        return value if math.isfinite(value) else None
-    if isinstance(value, dict):
-        return {key: json_safe(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [json_safe(item) for item in value]
-    return value

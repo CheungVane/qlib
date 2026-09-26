@@ -2,6 +2,14 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-26 — 第三轮重构：共享数值/DTO/序列视图（C2/C3/C9）
+
+- 来源：用户确认"代码优化"并强调测试同步；按第三轮审查顺序处理 C2 第一批、C3、C9。
+- 实现：新增 `numeric.py`（lazy numpy、`sharpe(values, periods_per_year=None)`、`moment_stats`、`RANK_TOLERANCE=1e-9`、`ZERO_TOLERANCE=1e-12`）、`dto.py`（唯一的 `json_safe`）与 `series_view.py`（`return_series()`：优先引擎日收益，缺失时按权益派生，并返回来源标签）。`factors.py`/`validation.py`/`risk.py` 改为复用这三处实现（各域只保留按自身错误类型的适配），`metrics.py` 的容差改为引用 `numeric`；`WorkbenchService.strategy_validation` 与 `risk_report` 的重复抽取合并为一次 `series_view.return_series()` 调用。
+- 规范：`VALIDATION.md` 与 `RESULT_CONTRACT.md` 写明最小样本按估计量分别定义（PSR/DSR ≥10、PBO ≥2 配置且观测 ≥2 块、风险指标族 ≥20）以及容差只保留一份实现的理由——避免把"同一份口径"误读成"可以共用阈值"。
+- 验证：Python 116项测试115通过、1项环境隔离跳过（新增 `test_shared_helpers.py` 8项：numpy 缺失时的错误类型透传、Sharpe 年化/非年化与退化、矩统计、容差同源、`json_safe` 递归与非有限值、`return_series` 三种来源与空序列）；JS回归16项通过；门禁脚本通过。重构前后全量测试结果一致（行为不变）。
+- 限制：C2 只完成"序列抽取去重"这一批，`WorkbenchService` 仍包含比较与任务中心编排；C4（存储拆分）、C7（前端拆分）、C10（测试分层）按审查顺序保留。
+
 ## 2026-09-26 — 第三轮审查修复：验证/风险口径收敛与契约覆盖
 
 - 来源：用户要求"去修 bug"；本轮按第三轮审查顺序处理可确认为缺陷或治理漏洞的条目。

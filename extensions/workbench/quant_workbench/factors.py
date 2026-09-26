@@ -12,6 +12,9 @@ import math
 from pathlib import Path
 from typing import Any
 
+from . import numeric
+from .dto import json_safe
+
 PANEL_LIMITS = {"dates": 2000, "instruments": 2000, "cells": 400_000, "bytes": 16 * 1024 * 1024}
 DEFAULT_HORIZONS = (1, 5, 10, 20)
 MIN_CROSS_SECTION = 5
@@ -159,11 +162,7 @@ def verify_snapshot(snapshot: Path, dataset: dict[str, Any]) -> dict[str, Any]:
 
 
 def _numpy():
-    try:
-        import numpy as np
-    except ImportError as exc:  # pragma: no cover - declared in the analysis extra
-        raise FactorError("factor analysis needs numpy (install the 'analysis' extra)") from exc
-    return np
+    return numeric.numpy(FactorError, "factor analysis needs numpy (install the 'analysis' extra)")
 
 
 # -- statistics ---------------------------------------------------------------
@@ -642,12 +641,3 @@ def analyze(entries: list[dict[str, Any]], returns_by_horizon: dict[int, Any], *
     })
 
 
-def json_safe(value):
-    """Non-finite floats become null: DTOs must stay JSON compliant (allow_nan=False)."""
-    if isinstance(value, float):
-        return value if math.isfinite(value) else None
-    if isinstance(value, dict):
-        return {key: json_safe(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [json_safe(item) for item in value]
-    return value

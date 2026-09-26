@@ -14,6 +14,7 @@ from .metrics import (
 from . import factors as factor_layer
 from . import validation as validation_layer
 from . import risk as risk_layer
+from . import series_view
 
 
 def display_run_title(run: dict[str, Any] | None) -> str:
@@ -240,28 +241,13 @@ class WorkbenchService:
             revision = self.get_revision(run_id)
             if revision is None:
                 raise LookupError(f"run not found: {run_id}")
-            series = {item["metric_id"]: item for item in revision["result"]["series"]}
-            points, source = [], None
-            native = series.get("native.qlib.return")
-            if native and native.get("availability") == "available":
-                points = [(point["x"], point["value"]) for point in native["points"]
-                          if point.get("value") is not None]
-                source = "native.qlib.return（引擎报告日收益）"
-            if not points:
-                equity = series.get("platform.equity")
-                if equity and equity.get("availability") == "available":
-                    values = [(point["x"], point["value"]) for point in equity["points"]
-                              if point.get("value") is not None]
-                    points = [(values[index][0], values[index][1] / values[index - 1][1] - 1)
-                              for index in range(1, len(values)) if values[index - 1][1]]
-                    source = "derived: platform.equity 日收益（平台计算）"
-            if len(points) < 20:
+            view = series_view.return_series(revision)
+            if view is None or len(view["values"]) < 20:
                 raise validation_layer.ValidationError(
                     f"run {run_id} has no usable return series (need at least 20 observations)")
             configs.append({"run_id": run_id, "title": revision["result"]["run"]["title"],
-                            "dates": [point[0] for point in points],
-                            "returns": [point[1] for point in points],
-                            "return_source": source,
+                            "dates": view["dates"], "returns": view["values"],
+                            "return_source": view["source"],
                             "dataset": revision["result"]["run"].get("dataset") or {}})
         return validation_layer.validation_report(configs, horizon=horizon, splits=splits,
                                                   embargo=embargo, trials=trials, blocks=blocks)
@@ -290,29 +276,15 @@ class WorkbenchService:
             revision = self.get_revision(run_id)
             if revision is None:
                 raise LookupError(f"run not found: {run_id}")
-            series = {item["metric_id"]: item for item in revision["result"]["series"]}
-            dates, values, source = [], [], None
-            native = series.get("native.qlib.return")
-            if native and native.get("availability") == "available":
-                dates = [point["x"] for point in native["points"] if point.get("value") is not None]
-                values = [point["value"] for point in native["points"] if point.get("value") is not None]
-                source = "native.qlib.return（引擎报告日收益）"
-            if not values:
-                equity = series.get("platform.equity")
-                if equity and equity.get("availability") == "available":
-                    points = [(point["x"], point["value"]) for point in equity["points"]
-                              if point.get("value") is not None]
-                    dates = [points[index][0] for index in range(1, len(points))]
-                    values = [points[index][1] / points[index - 1][1] - 1
-                              for index in range(1, len(points)) if points[index - 1][1]]
-                    source = "derived: platform.equity 日收益（平台计算）"
-            if len(values) < risk_layer.MIN_OBSERVATIONS:
+            view = series_view.return_series(revision)
+            if view is None or len(view["values"]) < risk_layer.MIN_OBSERVATIONS:
                 raise risk_layer.RiskError(
                     f"run {run_id} has no usable return series (need at least {risk_layer.MIN_OBSERVATIONS} observations)")
-            report = risk_layer.performance_report(dates, values, periods_per_year=periods_per_year)
+            report = risk_layer.performance_report(view["dates"], view["values"],
+                                                   periods_per_year=periods_per_year)
             report["run_id"] = run_id
             report["title"] = revision["result"]["run"]["title"]
-            report["return_source"] = source
+            report["return_source"] = view["source"]
             report["basis"]["dataset"] = revision["result"]["run"].get("dataset") or {}
             report["basis"]["periods_per_year_source"] = annualisation_source
             reports.append(report)

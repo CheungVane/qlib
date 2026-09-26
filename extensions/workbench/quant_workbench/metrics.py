@@ -1,5 +1,6 @@
 """Engine-neutral calculations on a complete immutable result revision."""
 from .model import _instant
+from .numeric import RANK_TOLERANCE
 
 
 # Declared comparison rows: metric id, label, aggregation over the series and the direction of
@@ -18,9 +19,6 @@ COMPARE_ROWS = (
 )
 EXTRA_ROW_LIMIT = 6
 DIRECTIONS = {"higher_better": "越高越好", "lower_better": "越低越好", "unknown": "方向未登记"}
-# Relative tolerance for "same value" in a comparison row. It only suppresses floating point
-# noise; it must never be used to judge economic significance.
-RANK_TOLERANCE = 1e-9
 
 # Comparison groups (FACTOR_ANALYSIS §2): only backtest rows may be ranked; training and
 # research rows exist in different groups whose metric sets are not interchangeable.

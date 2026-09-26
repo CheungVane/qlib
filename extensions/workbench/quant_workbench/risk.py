@@ -9,8 +9,11 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from . import numeric
+from .dto import json_safe
+
 MIN_OBSERVATIONS = 20
-ZERO_TOLERANCE = 1e-12
+ZERO_TOLERANCE = numeric.ZERO_TOLERANCE
 
 
 class RiskError(ValueError):
@@ -18,11 +21,7 @@ class RiskError(ValueError):
 
 
 def _numpy():
-    try:
-        import numpy as np
-    except ImportError as exc:  # pragma: no cover - declared in the analysis extra
-        raise RiskError("risk metrics need numpy (install the 'analysis' extra)") from exc
-    return np
+    return numeric.numpy(RiskError, "risk metrics need numpy (install the 'analysis' extra)")
 
 
 def performance_report(dates: list[str], returns: list[float], *, periods_per_year: int = 238,
@@ -148,13 +147,3 @@ def _calendar_returns(dates, values) -> tuple[dict[str, Any], dict[str, Any]]:
     months = [f"{index:02d}" for index in range(1, 13)]
     return annual, {year: {month: months_map.get(month) for month in months}
                     for year, months_map in monthly.items()}
-
-
-def json_safe(value):
-    if isinstance(value, float):
-        return value if math.isfinite(value) else None
-    if isinstance(value, dict):
-        return {key: json_safe(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [json_safe(item) for item in value]
-    return value
