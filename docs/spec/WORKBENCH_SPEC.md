@@ -57,6 +57,10 @@
 
 采用模块化单体 + 本地执行进程。包内推荐目录：`domain/`、`application/`、`ports/`、`adapters/`、`api/`、`cli/`、`ui/`、`migrations/`、`tests/`。组合根负责选定适配器；不先建设通用插件市场或任意动态代码加载系统。
 
+当前实现与推荐目录的差异（2026-09-26 登记）：核心包为扁平模块（`application.py`、`storage_*.py`、`execution.py`、`factors.py`、`validation.py`、`risk.py`、`ports.py` 等）加 `adapters/` 与 `ui/` 子包，未建 `domain/`、`migrations/` 目录。存储侧已完成一次拆分：`storage_base.py`（schema/连接/`LocalObjectStore`）与 `storage_results.py`/`storage_attempts.py`/`storage_factors.py` 三个域 mixin，`storage.py` 只做组合；**对象存储通过 `object_store=` 可注入**，换云端对象存储只需实现 `write/read`。
+
+仍未消除的偏差：SQLite 与本地对象存储代码仍在核心包（不是 `adapters/`），只是通过 `SqliteStore`/`LocalObjectStore` 注入点隔离；完全迁移到适配器目录属后续项，不得据此声称已支持第二数据库。
+
 ```mermaid
 flowchart TD
   CLI[CLI] --> APP[应用服务 / 领域规则]

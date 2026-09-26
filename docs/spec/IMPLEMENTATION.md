@@ -141,6 +141,10 @@ M2正式验收以M1完成为前提；允许为验证用户流程提前建设明�
 | U20 验证口径 | purged/embargo、唯一性、PSR/DSR/PBO 与退化标注 | 无前瞻样本 |
 | U21 任务中心 | 待处理胶囊/卡片与 ⌘K 面板（索引有界并披露） | 统一对象表与保存视图（UI07 其余部分） |
 | U22 风险绩效 | Sharpe/Sortino/Calmar、VaR/CVaR、回撤期、月度矩阵 | 分红再投资与真实成本细分 |
+| 第三轮审查修复 | C1 撤回（误报）、C5 年化 fail-closed、C6 契约覆盖新接口、C8 死代码清理 | C2 剩余编排、C7、C10 |
+| 第三轮重构 | C3/C9 共享 `numeric`/`dto`；C2 抽 `series_view`；C4 存储拆分 + 对象存储可注入（`LocalResultRepository` 公开面不变） | 前端拆分（C7）、测试分层（C10） |
+
+本机演示数据集（2026-09-26 按“可演示最小集合”裁剪）：平台库 runs 21→5、revisions 27→7、attempts 13→6、imports 5→2，因子与面板 10/10 全保留；`.data/cn_runs` 16→4 个目录、RD-Agent 会话工作区 78→6 个、阶段日志 31→1 个，并删除可再生的构建目录与审计期 MLflow 副本；裁剪前备份为 `.data/workbench/workbench.sqlite3.bak-prune-20260926T230919`。保留集合覆盖：跨引擎可比对（Qlib vs RD-Agent 同情景 4/9 行可排名）、不可比对反例（旧内容摘要/旧日历）、手写样本、因子重叠演示、风险与验证卡、待处理事项（1 高 2 低）。再生方式：`scripts/run_cn_demo.sh`、`scripts/make_cn_current_data.py` 与 RD-Agent 研究导出脚本；数据集内容摘要变化后需重新物化快照。
 
 ## Spec治理交付门槛（GOV01 / U11）
 
