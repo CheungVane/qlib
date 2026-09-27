@@ -6,10 +6,15 @@ from .model import _instant  # star-import skips private names
 from .storage_base import *  # noqa: F401,F403 - moved code keeps its original scope
 
 
+class StorageCapacityExceeded(RuntimeError):
+    """Raised inside the write transaction when the bounded admission is already full."""
+
+
 class AttemptsMixin:
     """Attempt lifecycle, import receipts and attempt statistics."""
 
-    def create_attempt(self, record: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    def create_attempt(self, record: dict[str, Any], *,
+                       max_concurrent: int | None = None) -> tuple[dict[str, Any], bool]:
         """Insert one attempt; a duplicate idempotency key returns the existing row."""
         required = ("attempt_id", "kind", "executor_id", "label", "params", "created_at")
         if not all(record.get(key) not in (None, "") for key in required):
@@ -33,6 +38,16 @@ class AttemptsMixin:
         )
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
+            # EXEC13: the slot check runs inside the same write transaction as the insert, so two
+            # concurrent submissions cannot both take the last slot.
+            if max_concurrent is not None:
+                placeholders = ",".join("?" for _ in ATTEMPT_OPEN_STATUSES)
+                active = conn.execute(
+                    f"SELECT COUNT(*) AS n FROM attempts WHERE status IN ({placeholders})",
+                    ATTEMPT_OPEN_STATUSES).fetchone()["n"]
+                if active >= max_concurrent:
+                    raise StorageCapacityExceeded(
+                        f"execution capacity is full ({max_concurrent} concurrent attempts)")
             try:
                 conn.execute(
                     """INSERT INTO attempts(attempt_id,kind,executor_id,label,probe,status,params_json,

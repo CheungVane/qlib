@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from .source_safety import Sanitizer
+from .storage_attempts import StorageCapacityExceeded
 
 TERMINAL_STATUSES = ("succeeded", "failed", "cancelled", "interrupted")
 OPEN_STATUSES = ("queued", "running")
@@ -286,14 +287,19 @@ class ExecutionService:
         prepared = executor.prepare(attempt_id, kind, params)
         meta = executor.describe(kind)
         created_at = utc_now()
-        row, created = self.repository.create_attempt({
-            "attempt_id": attempt_id, "kind": kind, "executor_id": executor.executor_id,
-            "label": meta.get("label", kind), "probe": bool(meta.get("probe")), "status": "queued",
-            "params": prepared.get("params", params), "idempotency_key": idempotency_key, "request_id": request_id,
-            "config_fingerprint": prepared.get("config_fingerprint"), "workspace": prepared.get("workspace"),
-            "log_path": prepared.get("log_path"), "created_at": created_at, "queued_at": created_at,
-            "policy_revision": self.policy.revision() if self.policy else None,
-        })
+        try:
+            row, created = self.repository.create_attempt({
+                "attempt_id": attempt_id, "kind": kind, "executor_id": executor.executor_id,
+                "label": meta.get("label", kind), "probe": bool(meta.get("probe")), "status": "queued",
+                "params": prepared.get("params", params), "idempotency_key": idempotency_key,
+                "request_id": request_id,
+                "config_fingerprint": prepared.get("config_fingerprint"),
+                "workspace": prepared.get("workspace"),
+                "log_path": prepared.get("log_path"), "created_at": created_at, "queued_at": created_at,
+                "policy_revision": self.policy.revision() if self.policy else None,
+            }, max_concurrent=self.policy.max_concurrent if self.policy else None)
+        except StorageCapacityExceeded as exc:
+            raise CapacityExceeded(str(exc)) from exc
         if not created:
             return {"attempt": attempt_dto(row), "created": False}
         try:

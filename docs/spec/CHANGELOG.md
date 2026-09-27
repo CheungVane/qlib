@@ -2,6 +2,13 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — T04 第8片：槽位的单事务预留
+
+- 来源：用户授权20:30前自主推进。
+- 实现：`storage_attempts.create_attempt(..., max_concurrent=)` 在**同一个 `BEGIN IMMEDIATE` 写事务内**统计未终态Attempt，超限即抛 `StorageCapacityExceeded`（事务回滚，不产生记录）；`ExecutionService.submit()` 传入 `policy.max_concurrent` 并把该异常映射为 `CapacityExceeded`(409)。保留提交前的快速预检（避免满槽时白跑 preflight），但**权威判定在事务内**。
+- 意义：此前是"插入前查数量"，并发提交存在两个请求都拿到最后一个槽的窗口；现在槽位判定与插入在同一写事务，窗口消除（EXEC13"并发槽在持久化事务中预留"）。单进程下 `BEGIN IMMEDIATE` 会串行化写者，语义成立。
+- 测试：并发准入5项保持通过（含槽满拒绝不创建Attempt、取消释放、幂等重放不占槽）；全量门禁 `[gate] ok`。
+
 ## 2026-09-27 — T04 第7片：持久化 deadline 与 policy_revision（schema V6）
 
 - 来源：用户授权在20:30前自主推进并实时刷新spec。
