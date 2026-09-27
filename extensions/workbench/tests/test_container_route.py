@@ -8,6 +8,7 @@ not `nonzero_exit`.
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 import time
 import unittest
@@ -180,6 +181,32 @@ class ContainerLimitTests(unittest.TestCase):
         state = self.run_attempt(executor, "container-cpu")
         self.assertEqual((state["state"], state["error_code"]), ("failed", "resource_limit"), state)
         self.assertIn(state["exit_code"], (137, 152), state)
+
+    def test_cancel_removes_the_container_not_just_the_client(self):
+        limits = {"memory_bytes": (536870912, 536870912), "cpu_seconds": (60, 60)}
+        executor = HogExecutor(self.root, limits, hog="\nimport time\nwhile True: time.sleep(1)")
+        prepared = executor.prepare("container-cancel", "stub.container.hog", {})
+        started = executor.start("container-cancel", prepared)
+        name = container_name(executor.executor_id, "container-cancel")
+        deadline = time.time() + 60
+        while time.time() < deadline and not self.container_listed(name):
+            time.sleep(0.5)
+        self.assertTrue(self.container_listed(name), "container never started")
+        result = executor.cancel({"attempt_id": "container-cancel",
+                                  "workspace": prepared["workspace"], "pid": started["pid"]})
+        self.assertTrue(result["confirmed"], result)
+        for _ in range(20):
+            if not self.container_listed(name):
+                break
+            time.sleep(0.5)
+        self.assertFalse(self.container_listed(name),
+                         "killing the docker client must not leave the container running")
+
+    @staticmethod
+    def container_listed(name: str) -> bool:
+        finished = subprocess.run(["docker", "ps", "-a", "--filter", f"name=^/{name}$",
+                                   "--format", "{{.Names}}"], capture_output=True, text=True)
+        return bool(finished.stdout.strip())
 
     def test_container_check_and_policy_are_recorded_as_evidence(self):
         policy = load_policy()

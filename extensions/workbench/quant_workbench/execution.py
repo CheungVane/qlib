@@ -227,8 +227,8 @@ class ExecutionService:
                       "scope": self.policy.agent_scope, "used": used,
                       "calls_enforced": any(self._agent_call_enforcement(executor)
                                             for executor in self.executors)},
-            "notes": {"memory": "内存硬上限由容器 cgroup 强制（Qlib 入口）；RD-Agent 入口尚未"
-                                "容器化，因此在 memory 属必须项期间拒绝准入",
+            "notes": {"memory": "内存硬上限由容器 cgroup 强制：Qlib 入口在 qwb-qlib-cpu:local，"
+                                "RD-Agent 整个 Attempt（驱动+因子代码）在 qwb-rdagent-cpu:local",
                       "calls": "调用次数由执行期文件账本强制（sitecustomize 包装 litellm."
                                "completion），终态核对进本表"},
         }

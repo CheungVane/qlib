@@ -17,7 +17,7 @@
 
 范围内：执行入口与 Attempt 生命周期，以及**由执行结果触发的自动入库**（EXEC12）：执行器声明导入候选、平台按导入适配器发布结果并记录 ImportReceipt。
 
-当前实现未覆盖：任务队列与调度、资源配额/并发上限、远程或云执行器、子进程内存/CPU硬限制、日志流式推送。LIFE06将并发/超时/Agent预算列为后续个人研究执行要求，AGENT04的资源上限要求继续有效；资源下限检查不构成上限验收。券商下单属于独立交易领域（见TRADING_BOUNDARY），不复用研究Attempt状态机。以上缺口必须保持可见，不能以按钮存在代替能力。
+当前实现未覆盖：任务队列与调度、远程或云执行器、日志流式推送。并发上限、超时终止、Agent试验/调用预算与内存/CPU硬上限已按 EXEC13 落地（两条入口都走容器，见 §4 与 [IMPLEMENTATION](IMPLEMENTATION.md) 的 A41）；资源下限检查仍然不构成上限验收——本机可强制不等于其它环境可强制，缺 Docker 的环境按设计拒绝准入。券商下单属于独立交易领域（见TRADING_BOUNDARY），不复用研究Attempt状态机。以上缺口必须保持可见，不能以按钮存在代替能力。
 
 执行产生的原始产物（MLflow 目录、RD-Agent 会话目录、费用台账、质量 JSON）保留在其工作目录；自动入库只发布执行器产出且通过校验的产物，无法导入时保留 `manual_import_required` 或 `failed` 并给出原因，且两者都继续遵循来源标记与手写样本规则。
 
@@ -133,7 +133,7 @@ EXEC12（执行结果自动入库，U15）：自动入库是执行链路的一�
 - 提供显式重试入口（CLI 与 HTTP 写接口，走同一服务）：仅对没有 `imported/reused` 回执的 Attempt 执行；重试失败保留最后一次原因。
 - 执行成功、结果入库与结果可信是三件事：`succeeded` 不保证 `imported`，`imported` 也不等于研究有效。
 
-EXEC13（执行政策与预算，LIFE06/AGENT04，待实现）：
+EXEC13（执行政策与预算，LIFE06/AGENT04；**已实现，2026-09-27**）：
 
 - 提交前冻结execution_policy_revision：max_concurrent、timeout_seconds、terminate_grace_seconds、CPU/内存硬上限，以及Agent入口的max_trials/max_calls和各自计数范围。数值为显式配置的正数，不在spec中伪造账户/机器参数；缺失、无效或执行器不能强制实施必须项则拒绝。
 - 首版本地采用有界准入，无调度队列：并发槽在持久化事务中预留；槽满返回409/capacity_exceeded且不创建新任务。queued仅表示已准入尚未启动，不承诺长期排队。读取不得触发启动；跨CLI/API/进程共享计数，确认未启动或已结束后释放；失联但不能确认结束的任务继续占槽并提示核对，重启先核对再开放槽。
@@ -157,6 +157,30 @@ EXEC11（演进，GOV-UPSTREAM）：Qlib 与 RD-Agent 保持外部引擎边界�
 
 ## 5. 验收映射
 
+### 5.1 容器路线运行手册（EXEC13 / A41）
+
+前提：`colima` 的 `rdagent` profile 在运行（`bash scripts/start_research_runtime.sh`；池为 4 CPU / 6 GiB，`max_concurrent × memory_bytes` 必须留在池内）。
+
+```bash
+# 引擎镜像：Qlib 入口（本仓库 Qlib 源码 + qrun/tables/LightGBM）
+scripts/build_rdagent_cpu_image.sh          # -> qwb-qlib-cpu:local
+# RD-Agent 入口：只装上游 requirements.txt；检出运行时挂载，上游代码变化无需重建
+QWB_RDAGENT_ROOT=../RD-Agent scripts/build_rdagent_runner_image.sh   # -> qwb-rdagent-cpu:local
+```
+
+验证上限确实生效（不是只看配置）：
+
+```bash
+# 运行中的 Attempt 容器：内存与 CPU 上限
+docker ps --format '{{.Names}}' | grep qwb
+docker inspect -f 'Memory={{.HostConfig.Memory}} Swap={{.HostConfig.MemorySwap}} Ulimits={{.HostConfig.Ulimits}}' <name>
+# 强制与归类：门禁默认跑离线用例；带容器用例需显式开启
+QWB_CONTAINER_TESTS=1 extensions/workbench/.venv/bin/python -m unittest \
+  tests.test_container_route tests.test_agent_call_budget     # 在 extensions/workbench 下执行
+```
+
+入口前提由 `execution-catalog` 逐项给出（`cn.container`、`rdagent.limits`、`rdagent.call_budget`）；缺 Docker、缺镜像或池内存不足都会**拒绝准入**而不是无上限运行。RD-Agent 宿主 `.venv` 与 `agent_call_enforcement` 的钩子目录只影响本地调试与计数注入，不再作为执行前提。
+
 | 验收 | 条件 | 证据位置 |
 | --- | --- | --- |
 | A18 | 两个不同 Qlib 配置进程互不污染；进程崩溃标 `interrupted`；重复提交不产生双任务；重试保留 Attempt | 单元/回归测试 + 本机真实 Attempt 记录 |
@@ -167,5 +191,6 @@ EXEC11（演进，GOV-UPSTREAM）：Qlib 与 RD-Agent 保持外部引擎边界�
 | EXEC12 | 成功 Attempt 自动发布结果并写 ImportReceipt；无候选保留 `manual_import_required`；导入失败保留原因；重复核对不重复发布；DTO 不泄漏跟踪库路径 | 回归测试 + 本机真实 Attempt 记录 |
 | EXEC09 | 执行目录逐入口说明用途/依赖/产出/结果去向/耗时；前置条件缺失时不提供假启动；自动刷新不重置入口选择、不在备注输入时抢焦点 | `test_ui.cjs`（U16 回归）+ 浏览器检查 |
 | EXEC11 | 执行器为适配层，不修改上游源码；上游更新后重验执行器命令、前置条件与适配器契约 | 上游合并检查清单（无自动门禁，见 IMPLEMENTATION） |
+| EXEC13 / A41 | 并发准入、超时终止、试验/调用预算、内存/CPU硬上限与 `resource_limit` 归类；两条入口都在容器内运行 | [container-route](evidence/20260927-container-route.json)、[agent-call-budget](evidence/20260927-agent-call-budget.json)、§5.1 手册 |
 
 完成状态与实测证据记录在 [IMPLEMENTATION.md](IMPLEMENTATION.md)，变更历史记录在 [CHANGELOG.md](CHANGELOG.md)。通过测试不等于执行器已覆盖真实数据或生产部署。

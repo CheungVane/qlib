@@ -8,7 +8,7 @@
   "memory_bytes": 2147483648,
   "enforce": ["cpu", "memory"],
   "container": {
-    "note": "内存上限只能由容器 cgroup 强制（macOS rlimit 不可用，实测 ulimit -v/-d/-m 全为 Invalid argument）。Qlib 入口走容器镜像 qwb-qlib-cpu:local；池为 colima rdagent（4 CPU / 6 GiB=aarch64），2 × 2 GiB 上限加 VM 开销仍需低于池内存，否则准入拒绝。RD-Agent 入口尚未接容器，因此在 memory 属于必须项期间会被前置检查拒绝。"
+    "note": "内存上限只能由容器 cgroup 强制（macOS rlimit 不可用，实测 ulimit -v/-d/-m 全为 Invalid argument）。两条入口都在容器内运行：Qlib 用 qwb-qlib-cpu:local（挂载 /qwb/{run,data,src}），RD-Agent 用 qwb-rdagent-cpu:local（整个 Attempt：驱动+因子代码，挂载 /qwb/{agent,repo,hooks,platform} 与 ~/.qlib）。池为 colima rdagent（4 CPU / 6 GiB=aarch64），max_concurrent × memory_bytes 加 VM 开销必须低于池内存，否则准入拒绝（当前 2 × 2 GiB）。"
   },
   "agent_budget": {
     "max_trials": 12,

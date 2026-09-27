@@ -2,6 +2,17 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — review 修正批次：容器路线的一致性、打包与文档可执行性
+
+- 来源：用户要求"先review，看实现与 spec 是否无遗漏、能否指导下一个人继续"。review 以实际重跑为准，发现并修复下列问题。
+- 代码缺陷①：`RDAgentExecutor.checks()` 仍把宿主 `.venv/bin/python` 当作**硬前置**（`required_for` 覆盖两个入口）。容器路线下它只影响宿主调试；不修的话，只有容器运行时的机器会被以错误理由拒绝准入。现改为 `required_for=[]` 的信息项。
+- 代码缺陷②：`agent_max_calls` 的钩子目录 `extensions/workbench/hooks/` 不在打包范围内（`pyproject` 只收 `quant_workbench*`），独立安装时会缺文件。现把钩子移入包内 `quant_workbench/hooks/agent_budget/`（含 `__init__.py`，随包分发），执行器只把该目录挂到子进程 `PYTHONPATH`。
+- 代码缺陷③：容器启动缺少"清理同名残留"步骤。确定性容器名在重试时复用，上一次崩溃留下的容器会让 `docker run` 直接以 125 失败（review 中真实复现）；现在 `start()` 先做一次 best-effort `docker rm -f`。另把重复的账本加载逻辑收敛为 `_agent_budget_module()`。
+- 测试补充：新增"取消必须移除容器而不只是杀掉 docker 客户端"的容器用例（`QWB_CONTAINER_TESTS=1`），并确认容器测试可在重复运行后仍然通过。
+- 文档过时更正（此前会误导下一位执行者）：`EXECUTION.md` 的"当前实现未覆盖…资源配额/并发上限…子进程内存/CPU硬限制"与"EXEC13 待实现"已按实况改写；`RESEARCH_LIFECYCLE.md` 的"当前保护未实现"改为已实现并指向证据；`RDAGENT_INTEGRATION.md` 的"资源上限未满足"与宿主 `.venv` 复现路径改写为两条路径（平台入口受政策约束、宿主直跑仅调试）；`IMPLEMENTATION.md` 的 U13 行更正；政策配置 `container.note` 与 `policy_summary().notes.memory` 里"RD-Agent 尚未接容器"的旧文案更正。
+- 文档补充：`EXECUTION.md` 新增 §5.1"容器路线运行手册"（构建两个镜像、用 `docker inspect` 核验上限、如何跑容器用例与看入口前置），并在验收映射表加入 EXEC13/A41 行。
+- 验证：门禁 `[gate] ok`（Python 290 项 + JS 25 项）；`QWB_CONTAINER_TESTS=1` 下容器与预算用例 19 项全通过；证据文件的 Attempt ID 由截断改为完整。
+
 ## 2026-09-27 — T04 第12片：RD-Agent 入口容器化，A41 通过
 
 - 来源：用户"那就给他上容器吧"（承接 `agent_max_calls` 之后 T04 的最后一项）。

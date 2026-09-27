@@ -44,7 +44,9 @@ CONTAINER_REPO_DIR = "/qwb/repo"
 CONTAINER_HOOK_DIR = "/qwb/hooks"
 CONTAINER_PLATFORM_DIR = "/qwb/platform"
 CONTAINER_HOME_QLIB = "/root/.qlib"
-AGENT_BUDGET_HOOK_DIR = Path(__file__).resolve().parents[2] / "hooks" / "agent_budget"
+# Inside the package so it travels with a build; the executor only ever puts this directory
+# on the child's PYTHONPATH.
+AGENT_BUDGET_HOOK_DIR = Path(__file__).resolve().parents[1] / "hooks" / "agent_budget"
 
 
 def container_name(executor_id: str, attempt_id: str) -> str:
@@ -320,6 +322,12 @@ class SubprocessExecutor:
         log_path = Path(prepared["log_path"])
         marker = Path(prepared["exit_marker"])
         log_path.touch(exist_ok=True)
+        container = prepared.get("container") or {}
+        if container:
+            # Deterministic names are reused on retry; a container left behind by a crashed
+            # platform process would make `docker run` fail with a name conflict (exit 125).
+            self._remove_container(container.get("name")
+                                   or container_name(self.executor_id, attempt_id))
         preamble = "umask 022\n"
         cpu_limit = (self.limits.get("cpu_seconds") or (None,))[0]
         # A containerized attempt carries RLIMIT_CPU through `docker run --ulimit cpu=`, so the
@@ -916,24 +924,25 @@ class RDAgentExecutor(SubprocessExecutor):
 
         Imported lazily so the platform package never imports the hook at module load.
         """
+        module = self._agent_budget_module()
+        return module.seed(path=self.call_ledger_path(), limit=self.call_limit(),
+                           used=attempts_seen, scope=str((self.limits.get("agent_scope")
+                                                          or ("policy_revision",))[0]))
+
+    def _agent_budget_module(self):
+        """Load the hook helper by path: the platform must not import it as a package module."""
         import importlib.util
         spec = importlib.util.spec_from_file_location(
             "qwb_agent_budget", AGENT_BUDGET_HOOK_DIR / "qwb_agent_budget.py")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)  # type: ignore[union-attr]
-        return module.seed(path=self.call_ledger_path(), limit=self.call_limit(),
-                           used=attempts_seen, scope=str((self.limits.get("agent_scope")
-                                                          or ("policy_revision",))[0]))
+        return module
 
     def agent_budget_report(self, attempt: dict[str, Any]) -> dict[str, Any] | None:
         """EXEC13: what the execution-time ledger says about this scope, for reconciliation."""
         if not self.agent_call_enforcement():
             return None
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            "qwb_agent_budget", AGENT_BUDGET_HOOK_DIR / "qwb_agent_budget.py")
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)  # type: ignore[union-attr]
+        module = self._agent_budget_module()
         state = module.read_state(self.call_ledger_path())
         events = [event for event in state.get("events", [])
                   if event.get("attempt_id") == attempt.get("attempt_id")]
@@ -1050,8 +1059,14 @@ class RDAgentExecutor(SubprocessExecutor):
         else:
             add("rdagent.checkout", "missing", "RD-Agent checkout not found (set QWB_RDAGENT_ROOT)")
         python = self.agent_root / ".venv/bin/python"
+        # Informational only: the Attempt runs in the runner image, so this host virtualenv is
+        # for local debugging, not for execution. Requiring it would block machines that only
+        # have the container runtime.
         add("rdagent.venv", "ok" if python.is_file() else "missing",
-            "RD-Agent virtualenv present" if python.is_file() else "RD-Agent .venv/bin/python is missing")
+            "host RD-Agent venv present (not used by the containerised Attempt)"
+            if python.is_file() else
+            "host RD-Agent venv absent; the Attempt runs in the runner image, this only affects "
+            "host-side debugging", required_for=[])
         config = _read_env_file(self.agent_root / ".env")
         chat_model = config.get("CHAT_MODEL")
         chat_key = bool(config.get("DEEPSEEK_API_KEY") or config.get("OPENAI_API_KEY"))

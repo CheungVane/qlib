@@ -72,7 +72,7 @@
     },
     "platform_attempts": [
       {
-        "attempt_id": "231ed548-0984-4aa9-957d-5068e…",
+        "attempt_id": "231ed548-0984-4aa9-957d-5068e403758d",
         "kind": "rdagent.factor.baseline",
         "status": "succeeded",
         "exit_code": 0,
@@ -88,7 +88,7 @@
         }
       },
       {
-        "attempt_id": "55be1db2…",
+        "attempt_id": "55be1db2-5355-4278-8f60-dec565d7e6dd",
         "kind": "rdagent.factor.loop",
         "status": "failed",
         "exit_code": 1,
@@ -101,7 +101,14 @@
           "blocked_by_this_attempt": true,
           "durable_used": 4
         },
-        "note": "temporary policy value for the check; it was restored to 200 right after"
+        "note": "temporary policy value for the check; restored to 200 right after"
+      },
+      {
+        "attempt_id": "af242397-8cf1-4e8b-bcc1-ee2fc5e144a0",
+        "kind": "rdagent.factor.baseline",
+        "status": "failed",
+        "exit_code": 1,
+        "note": "pre-fix run: the workspace tried a nested docker engine (MODEL_COSTEER_ENV_TYPE=docker); kept as the counter-example that led to the in-container QTDockerEnv substitution"
       }
     ],
     "in_container_call_budget_check": {
@@ -114,6 +121,15 @@
       "the probe overrides QTDockerEnv with the same-container LocalEnv because the local .env sets MODEL_COSTEER_ENV_TYPE=docker; without it the workspace tries a nested docker engine",
       "the container is not network-restricted (factor code plus host-served embeddings need it)",
       "rebuild qwb-rdagent-cpu:local only when RD-Agent's requirements.txt changes"
+    ]
+  },
+  "hook_location": "extensions/workbench/quant_workbench/hooks/agent_budget/ (inside the package)",
+  "review_followups": {
+    "2026-09-27": [
+      "host .venv is informational only for the container route",
+      "hooks moved into the package so a built wheel still ships them",
+      "start() removes a leftover container before docker run (was exiting 125)",
+      "new container test: cancel must remove the container, not just the client"
     ]
   }
 }
