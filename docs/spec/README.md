@@ -14,7 +14,7 @@
 
 事实基线：`IMPLEMENTATION.md` 顶部的"当前执行里程碑"是唯一权威状态；历史基线 `58fdeeb3` 及其后的逐批交付列在该处与 [CHANGELOG](CHANGELOG.md)。文档批次不替代功能验收。
 
-下一位执行者先读 [IMPLEMENTATION中的T01—T10](IMPLEMENTATION.md) 与顶部状态，按其中的"下一步"继续；验证 v2 的口径/证据见[验证口径](VALIDATION.md) §2A，数据源与替换路径见[数据源清单](DATA_SOURCES.md)。规格0.2.1修订记录见 [交接复审](review-20260927.md)。
+下一位执行者先读 [IMPLEMENTATION](IMPLEMENTATION.md) 的顶部状态、“实现者交接入口”及T01—T10，按“下一步”执行；SR01—06已有明确修复判定，后续T06/T07/T10须经过各自详细设计门；验证 v2 的口径/证据见[验证口径](VALIDATION.md) §2A，数据源与替换路径见[数据源清单](DATA_SOURCES.md)。规格0.2.1修订记录见 [交接复审](review-20260927.md)。
 
 ## 专题与证据索引
 

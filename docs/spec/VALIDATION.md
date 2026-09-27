@@ -93,6 +93,17 @@ DSR的试验信息要求参考 [Bailey与López de Prado原论文](https://www.d
 - rf：v2 不扣减无风险利率。`SR` 就是所声明序列的均值/标准差，`SR*=0` 表示“同频收益均值高于 0”，不是“高于无风险利率”。需要 rf 口径必须已有登记为已扣减的序列，另立定义版本。
 - 同质性：进入 DSR 离散度与 PBO 的配置必须共享 cost basis 与 `calendar_id`。混用返回 `mixed_return_basis`/`mixed_calendar`，对应统计不可用；单配置 PSR 仍可返回。
 
+### 2A.3A 同质性错误与响应判定（SR04，生效补充）
+
+- 先按§2A.2解析确切revision，再校验各输入并排除本身不合格者，最后对剩余配置检查同质性。`calendar_id`或收益口径缺失/unknown不能当作彼此相等；该配置排除并分别给`calendar_unknown`或`return_basis_unknown`，同时进入excluded和not_available。
+- 不同成本或日历但各自合法的配置不属于“无效输入”，不得任选某一组丢弃其它组来算DSR/PBO。共同轴满足最低观测数时返回HTTP 200；所有配置的DSR与整请求PBO均为not_available、值为null。PSR按同一请求共同轴分别计算，仍须满足自身矩与样本条件。
+- 两种混用同时存在时，主reason固定为`mixed_return_basis`，`limitations`同时列出`mixed_return_basis`和`mixed_calendar`；仅日历不同则主reason为`mixed_calendar`。单项排除与整组统计不可用须分别记录，不把合法混用项列成excluded。
+- §2A.2的请求级错误优先：全排除、共同轴少于10条分别返回400/no_usable_configurations、400/insufficient_common_observations，不返回200空报告。共同轴≥10但某估计量条件不足（如PBO T<2S）为200加该统计not_available。CLI同一服务判定，请求错误非零退出；合法不可用报告正常输出。
+- `basis.return_basis`表达共同口径：有共同值时填值，混用字段为null，不能复制第一条冒充共同值；每个`configs[]`增加`input_basis`，逐项保留§2A.8列出的六个收益口径字段及calendar_id。`basis.window.calendar_ids`是剩余配置calendar_id去重排序后的集合。默认embargo须在实际参数中写入horizon数值，而非null。
+- 显式run/revision先按原始顺序配对再去重完全相同的配对；同一run配不同revision在当前接口拒绝400/ambiguous_revision_selection。未传revision时仅对run去重保序。禁止先去重run再错配revision。
+
+最低验收矩阵：同口径正常、异成本、异日历、两者同时不同、未知身份被排除、全排除、9条/10条共同轴、PBO单独样本不足、同run不同revision、默认参数实值；服务/API/CLI及UI不可用展示保持一致。已有§2A.9数值参考必须继续通过，新增DTO字段不得改变v1。
+
 ### 2A.4 Sharpe 与矩的估计量约定
 
 - 频率：逐期、不年化。本版本不接受年化 SR 或 ppy 参数；年化值只作展示，不得进入任何公式。
