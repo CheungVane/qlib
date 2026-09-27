@@ -30,7 +30,11 @@ BROWSER_HEADERS = {
 
 BAOSTOCK_SNIPPET = r"""
 import json
+import time
 import baostock as bs
+
+# BaoStock blacklists by IP on concurrency: stay sequential and pause between queries.
+PAUSE_SECONDS = 1.0
 
 result = {"login": None, "latest_daily": None, "calendar_tail": None,
           "adjust_factors": None, "financial": None}
@@ -45,16 +49,19 @@ try:
         rows.append(rs.get_row_data())
     if rows:
         result["latest_daily"] = {"first": rows[0], "last": rows[-1], "rows": len(rows)}
+    time.sleep(PAUSE_SECONDS)
     cal = bs.query_trade_dates(start_date="2026-09-20", end_date="2026-10-02")
     cal_rows = []
     while cal.error_code == "0" and cal.next():
         cal_rows.append(cal.get_row_data())
     result["calendar_tail"] = cal_rows
+    time.sleep(PAUSE_SECONDS)
     adj = bs.query_adjust_factor(code="sh.600000", start_date="2026-01-01", end_date="2026-12-31")
     adj_rows = []
     while adj.error_code == "0" and adj.next():
         adj_rows.append(adj.get_row_data())
     result["adjust_factors"] = {"count": len(adj_rows), "last": adj_rows[-1] if adj_rows else None}
+    time.sleep(PAUSE_SECONDS)
     fin = bs.query_profit_data(code="sh.600000", year=2026, quarter=2)
     fin_rows = []
     while fin.error_code == "0" and fin.next():

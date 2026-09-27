@@ -2,6 +2,13 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — BaoStock 访问规则写入代码：单只顺序 + 强制 sleep + 遇封即停
+
+- 来源：用户明确要求"baostock 适合单只循环，必须加 sleep，禁止多线程并发。这个写到代码里，然后同步到spec"。
+- 实现：`scripts/fetch_csi500_turnover.py` 重写为**纯顺序**抓取——删除 `ProcessPoolExecutor`/`--workers` 及全部并发原语，改为单进程逐只循环；`--sleep` 默认0.5s且**下限强制**（<0.5含0在联网前退出码2）；查询间必 sleep；源端返回 `10001011`/含"黑名单"时**立即停止**并保留已写文件（退出码3），不循环重试；保留父进程预检、断点续跑与 `unsupported_symbols.json`。`scripts/probe_data_sources.py` 的BaoStock探测也在每次查询间暂停1秒。
+- 测试：新增 `test_fetch_pacing.py` 3项（离线：sleep下限在联网前拒绝、`--help`无`--workers`、源码不含`concurrent.futures`/`multiprocessing`/`ThreadPool`等并发原语）。
+- spec：DATA_SOURCES 新增"BaoStock 访问规则（硬约束）"四条，并更新 §7 重建手册的采集命令（去掉`--workers`、写明sleep下限与遇封即停）。
+
 ## 2026-09-27 — A40 修正：legacy 登记不得混入快照列表
 
 - 来源：用真实注册表做A40端到端演示时发现——`list_snapshots()` 的 `*.json` 通配把 `*.legacy.json` 也当成快照列出，于是 `cn_data.legacy`/`qwb_cn_current.legacy` 会以"不可读快照"出现在接口与页面上。

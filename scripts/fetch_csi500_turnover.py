@@ -4,8 +4,20 @@
 Why: the FINV archive ships adjusted OHLCV only (no turnover/shares), and daily float
 market cap needs turnover. This script caches the gap-filling fields outside the snapshot.
 
-Contract: docs/spec/DATA_SOURCES.md §1B. BaoStock is `free_community_unverified`:
-record it in provenance, never present it as official.
+**Pacing is mandatory, not tunable.** BaoStock is a free community source that blacklists
+by public IP when it sees concurrency: the 2026-09-27 full fetch used 6 processes and got
+this host blacklisted (`10001011`). The upstream docs publish no policy or unblock time, and
+community reports show the trigger is concurrency and that recovery needs a new IP or days
+of waiting. Therefore this script:
+
+* walks the universe **one symbol at a time in a single process** — there is no worker or
+  thread option, by design;
+* **sleeps between symbols** (``--sleep``, default 0.5s, values below the floor are refused
+  before any network call);
+* stops immediately if the source reports the blacklist instead of retrying in a loop.
+
+Contract: docs/spec/DATA_SOURCES.md (free source rules + the 2026-09-27 incident).
+BaoStock is `free_community_unverified`: record it in provenance, never call it official.
 
 Output: <out>/turnover/<SYMBOL>.csv with header `date,turn,tradestatus,isST`, plus
 <out>/unsupported_symbols.json for symbols BaoStock does not serve (e.g. Beijing).
@@ -15,7 +27,7 @@ Usage:
   python3 scripts/fetch_csi500_turnover.py \
     --instruments ~/.qlib/qlib_data/free_cn_20260924/instruments/csi500.txt \
     --out ~/.qlib/qlib_data/free_cn_20260924_enrichment \
-    --start 2015-01-01 --end 2026-09-30 --workers 4 [--limit N]
+    --start 2015-01-01 --end 2026-09-30 [--sleep 0.5] [--limit N]
 """
 
 from __future__ import annotations
@@ -25,11 +37,10 @@ import json
 import os
 import sys
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
-from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 
-_STATE: dict = {}
+MIN_SLEEP_SECONDS = 0.5
+BLACKLIST_CODES = {"10001011"}
 
 
 def archive_symbol_to_baostock(symbol: str) -> str | None:
@@ -52,23 +63,30 @@ def load_universe(path: Path) -> list[str]:
     return sorted(set(symbols))
 
 
-def _init_worker() -> None:
-    import baostock as bs
-    login = bs.login()
-    if login.error_code != "0":
-        raise RuntimeError(f"baostock login failed: {login.error_msg}")
-    _STATE["bs"] = bs
+def validate_pacing(sleep: float) -> float:
+    """Refuse to run without a real pause: concurrency/pacing is what triggers blacklisting."""
+    if isinstance(sleep, bool) or not isinstance(sleep, (int, float)):
+        raise ValueError("--sleep must be a number")
+    if float(sleep) < MIN_SLEEP_SECONDS:
+        raise ValueError(f"--sleep must be >= {MIN_SLEEP_SECONDS} seconds; BaoStock blacklists "
+                         "by IP when requests are issued without a pause")
+    return float(sleep)
 
 
-def _fetch_symbol(task: tuple[str, str, str, str, str]) -> tuple[str, str]:
-    symbol, code, start, end, directory = task
-    bs = _STATE["bs"]
-    target = Path(directory) / f"{symbol}.csv"
+def is_blacklist(error_code: str, error_message: str) -> bool:
+    return str(error_code) in BLACKLIST_CODES or "黑名单" in str(error_message)
+
+
+def _write_symbol(bs, symbol: str, code: str, start: str, end: str, directory: Path) -> tuple[str, str]:
+    """One sequential query; the caller owns pacing and blacklist handling."""
+    target = directory / f"{symbol}.csv"
     if target.exists() and target.stat().st_size > 0:
         return symbol, "skipped"
     result = bs.query_history_k_data_plus(
         code, "date,turn,tradestatus,isST", start_date=start, end_date=end,
         frequency="d", adjustflag="3")
+    if is_blacklist(result.error_code, result.error_msg):
+        return symbol, f"blacklisted:{result.error_code}:{result.error_msg}"
     if result.error_code != "0":
         return symbol, f"error:{result.error_code}:{result.error_msg}"
     rows = []
@@ -91,12 +109,16 @@ def main() -> int:
     parser.add_argument("--out", required=True)
     parser.add_argument("--start", default="2015-01-01")
     parser.add_argument("--end", default="2026-09-30")
-    parser.add_argument("--workers", type=int, default=2,
-                        help="keep this low: heavy concurrency got this IP blacklisted once")
-    parser.add_argument("--sleep", type=float, default=0.0,
-                        help="seconds to sleep between submissions (be a considerate client)")
+    parser.add_argument("--sleep", type=float, default=MIN_SLEEP_SECONDS,
+                        help=f"seconds between symbols; must be >= {MIN_SLEEP_SECONDS}")
     parser.add_argument("--limit", type=int, default=0, help="0 means all")
     args = parser.parse_args()
+
+    try:
+        pause = validate_pacing(args.sleep)
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 2
 
     try:
         import baostock
@@ -107,11 +129,10 @@ def main() -> int:
     preflight = baostock.login()
     if preflight.error_code != "0":
         print(f"baostock refused the connection: {preflight.error_code} {preflight.error_msg}\n"
-              "the free source is unavailable (rate limiting or blacklisting); the cached "
-              "turnover files remain usable, retry later with lower --workers",
-              file=sys.stderr)
+              "the free source is unavailable (rate limiting or IP blacklisting); the cached "
+              "turnover files remain usable. Recovery needs a changed public IP or waiting; "
+              "see docs/spec/DATA_SOURCES.md", file=sys.stderr)
         return 3
-    baostock.logout()
 
     universe = load_universe(Path(args.instruments).expanduser())
     if args.limit:
@@ -120,41 +141,38 @@ def main() -> int:
     turnover_dir = out_dir / "turnover"
     turnover_dir.mkdir(parents=True, exist_ok=True)
 
-    tasks, unsupported = [], []
+    pending, unsupported = [], []
     for symbol in universe:
         code = archive_symbol_to_baostock(symbol)
-        if code is None:
-            unsupported.append(symbol)
-        else:
-            tasks.append((symbol, code, args.start, args.end, str(turnover_dir)))
+        (unsupported if code is None else pending).append((symbol, code))
 
     (out_dir / "unsupported_symbols.json").write_text(
         json.dumps({"reason": "baostock does not serve this exchange",
-                    "symbols": unsupported}, ensure_ascii=False, indent=2) + "\n")
+                    "symbols": [symbol for symbol, _ in unsupported]},
+                   ensure_ascii=False, indent=2) + "\n")
 
     done = errors = 0
     try:
-        with ProcessPoolExecutor(max_workers=max(1, args.workers), initializer=_init_worker) as pool:
-            futures = {}
-            for task in tasks:
-                futures[pool.submit(_fetch_symbol, task)] = task[0]
-                if args.sleep:
-                    time.sleep(args.sleep)
-            for future in as_completed(futures):
-                symbol, status = future.result()
-                done += 1
-                if not status.startswith(("ok", "skipped")):
-                    errors += 1
-                    print(f"[warn] {symbol}: {status}", file=sys.stderr)
-                if done % 25 == 0 or done == len(tasks):
-                    print(f"[progress] {done}/{len(tasks)} symbols, errors={errors}", flush=True)
-    except BrokenProcessPool:
-        print(f"worker pool died after {done} symbols (likely a refused login); "
-              "already-written files are kept, rerun later", file=sys.stderr)
-        return 3
+        for index, (symbol, code) in enumerate(pending, start=1):
+            symbol_name, status = _write_symbol(baostock, symbol, code, args.start, args.end,
+                                                turnover_dir)
+            done += 1
+            if status.startswith("blacklisted"):
+                print(f"[stop] {symbol_name}: {status}\n"
+                      f"paused after {done} symbols; already-written files are kept. "
+                      "Do not retry in a loop — see docs/spec/DATA_SOURCES.md", file=sys.stderr)
+                return 3
+            if not status.startswith(("ok", "skipped")):
+                errors += 1
+                print(f"[warn] {symbol_name}: {status}", file=sys.stderr)
+            if index % 25 == 0 or index == len(pending):
+                print(f"[progress] {index}/{len(pending)} symbols, errors={errors}", flush=True)
+            time.sleep(pause)
+    finally:
+        baostock.logout()
 
-    print(json.dumps({"symbols": len(universe), "fetched_or_skipped": done,
-                      "errors": errors, "unsupported": len(unsupported),
+    print(json.dumps({"symbols": len(universe), "fetched_or_skipped": done, "errors": errors,
+                      "unsupported": len(unsupported), "sleep_seconds": pause,
                       "out_dir": str(out_dir)}, ensure_ascii=False))
     return 0
 

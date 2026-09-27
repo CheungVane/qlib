@@ -168,7 +168,14 @@ Tushare Pro 是 FINV 的日常上游，直连可获得每日指标（市值/换�
 
 **BaoStock 可用性事件（2026-09-27）**：为 csi500 全量抓取换手率时使用 **6 进程、1,802 只**，抓取完成后源端开始返回 `10001011 黑名单用户，请与管理员联系`，此后登录一律失败。已抓取缓存（1,791 只、4,601,971 行）完整保留且因子研究不依赖源端在线；采集脚本已改为**父进程预检 + 明确失败**（退出码3）并把默认并发降到2、提供 `--sleep`。这直接印证 §2 的 C 级判定：免费来源不可当作长期依赖，**缓存必须保全**，替换源应视为常态而非例外。
 
-**解封时长的核查结论（2026-09-27 20:18 复核）**：官方文档与官网**没有发布任何"黑名单"政策或解封时长**；实测此刻仍返回 `10001011`。社区同类报告（GitHub issue：`sngyai/Sequoia-X#109`、`#127`）给出的经验是：①触发原因是**并发过高**，有用户把8进程改为单进程后"IP就不会被拉黑"；②它是**IP级**封禁（运营商大内网共享出口也会被连带）；③**没有固定时长**——有人次日重试恢复，也有人相隔数周仍在报同一错误；④最快的恢复办法是**更换公网IP**（重启光猫/路由器），其次才是等待。工程含义：不要把BaoStock当作可用性有保证的来源，**以缓存为冻结产物**；若将来需要重取，用并发1 + 增量更新，或改用其它来源（AkShare/Tushare）补同类字段。
+**解封时长的核查结论（2026-09-27 20:18 复核）**：官方文档与官网**没有发布任何"黑名单"政策或解封时长**；实测此刻仍返回 `10001011`。社区同类报告（GitHub issue：`sngyai/Sequoia-X#109`、`#127`）给出的经验是：①触发原因是**并发过高**，有用户把8进程改为单进程后"IP就不会被拉黑"；②它是**IP级**封禁（运营商大内网共享出口也会被连带）；③**没有固定时长**——有人次日重试恢复，也有人相隔数周仍在报同一错误；④最快的恢复办法是**更换公网IP**（重启光猫/路由器），其次才是等待。工程含义：不要把BaoStock当作可用性有保证的来源，**以缓存为冻结产物**；若将来需要重取，用单并发 + 增量更新，或改用其它来源（AkShare/Tushare）补同类字段。
+
+**BaoStock 访问规则（用户2026-09-27明确要求，硬约束）**：
+
+1. **单只顺序循环**：一次只取一只标的，**禁止多线程/多进程并发**；采集脚本不再提供任何并发参数。
+2. **必须加 sleep**：请求之间必须有间隔，默认 `0.5s`，低于该下限（含0）在**任何网络调用之前**即拒绝运行（退出码2）。
+3. **遇黑名单立即停**：源端返回 `10001011`/含"黑名单"时立刻停止并保留已写文件，退出码3，**不得循环重试**。
+4. 这三条已写入 `scripts/fetch_csi500_turnover.py` 并有其回归测试（`test_fetch_pacing.py`：sleep下限、无`--workers`、源码中不出现任何并发原语）；`scripts/probe_data_sources.py` 的BaoStock探测同样改为顺序并在每次查询间暂停1秒。
 
 ### T05 目录端口与快照登记（2026-09-27）
 
@@ -234,7 +241,7 @@ Tushare Pro 是 FINV 的日常上游，直连可获得每日指标（市值/换�
 ### 7.2 从零重建顺序（每步可独立验证）
 
 1. 校验归档并生成快照记录：`python3 scripts/verify_free_snapshot.py --data-root ~/.qlib/qlib_data --snapshot … --manifest … --archive … --enrichment … --universe csi500 --output <登记> --record-output <快照记录>`
-2. 采集换手率（源端不可用时退出码3，已写入的文件保留）：`python3 scripts/fetch_csi500_turnover.py --instruments <快照>/instruments/csi500.txt --out <enrichment> --workers 2`
+2. 采集换手率（**单只顺序、强制 sleep、禁止并发**；源端不可用时退出码3且保留已写文件）：`python3 scripts/fetch_csi500_turnover.py --instruments <快照>/instruments/csi500.txt --out <enrichment> --sleep 0.5`（`--sleep` 低于0.5会被拒绝；脚本没有并发参数）
 3. 发布快照、登记旧路径、跑质量门禁与物化：`python3 scripts/register_free_snapshot.py --data-root … --registry … --record … --legacy cn_data --legacy qwb_cn_current`
 4. 研究链路：`run_factor_slice.py` → `run_factor_research.py` → `run_factor_walkforward.py`
 5. 交付门禁：`scripts/workbench_gate.sh`（Python 全量 + JS）
