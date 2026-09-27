@@ -2,6 +2,14 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — 免费数据源登记（因子研究用）
+
+- 来源：用户要求寻找免费开源数据接入，至少满足中低频因子训练与因子挖掘、尽量覆盖到2026年9月，并登记哪些是免费但精度/可信度不足的来源以便后续替换；回测成交细节明确不在本批。
+- 实测（2026-09-27，只读探测）：FINV `chenditc/investment_data` release `2026-09-27`，清单 `target_trade_date=2026-09-24`，带 archive SHA-256、Dolt/Qlib 提交号与 `validate_archive.py`；BAO 实测日线、日历、复权因子与带 pubDate 的2026Q2财务到 `2026-09-24`；EM 东财接口实测178行到 `2026-09-24`，总股本与 BAO 一致；CSI 中证成分表 HTTP 200；YF 三次探测为 429/200/429；QLIB-EX 最新 release 为 2024-05-22 静态快照；TS 未验证。
+- 产物：新增[数据源清单](DATA_SOURCES.md)（字段需求、来源总表、逐源评估、`free_community_unverified`分类、推荐组合与替换路径、未验证项、验收映射）；新增只读探测脚本 `scripts/probe_data_sources.py` 与证据[20260927-free-data-probe.json](evidence/20260927-free-data-probe.json)。[来源审计](PROVENANCE_AUDIT.md)新增免费来源类别，README登记索引，IMPLEMENTATION更新D05/DEC01/T05。
+- 结论与边界：建议 FINV 作日线主源、BAO 作校验、EM 作行业与补充、CSI 作 universe 对照；免费来源不稳定（EM 一次断连、YF 限流），必须带重试、失败留痕与降级路径。未下载数据包、未落库、未创建 snapshot、未接数据目录；A16/A17/A37 与 T05 仍待实现，DEC01 的股票池/起始区间/下载授权待确认。
+- 验证：只读网络探测（脚本可复跑）＋文档链接/表格/diff范围检查。未修改 `extensions/workbench/` 运行代码；新增的 `scripts/probe_data_sources.py` 只做只读探测。
+
 ## 2026-09-27 — T02-D 验证 v2 定义冻结（仅文档）
 
 - 来源：用户确认继续推进；按IMPLEMENTATION的T02-D设计门先冻结口径再进入实现。核对代码基线58fdeeb3，本批只改 docs/spec。

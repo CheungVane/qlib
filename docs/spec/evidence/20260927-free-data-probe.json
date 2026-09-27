@@ -1,0 +1,229 @@
+{
+  "contract": "docs/spec/DATA_SOURCES.md",
+  "host": "local",
+  "notes": [
+    "read-only probe; no data package downloaded, no snapshot created",
+    "paths, hostnames and credentials are not recorded"
+  ],
+  "probe": "free-data-sources",
+  "sources": [
+    {
+      "id": "FINV",
+      "license": "repo Apache-2.0; upstream data terms unverified",
+      "observed": {
+        "assets": {
+          "qlib_bin.manifest.json": 511,
+          "qlib_bin.tar.gz": 566505035
+        },
+        "manifest": {
+          "archive_sha256": "sha256:4ce65c37755265bec24266e922468195e66166e5f91996595ac8eaade6db85fa",
+          "archive_size_bytes": 566505035,
+          "dolt_commit": "6a34i0k99nu6kae95gsd3njrh1u0b9gm",
+          "future_end_date": "2026-12-31",
+          "future_start_date": "2026-09-28",
+          "image_digest": "sha256:499bf932b7b967b6e5a06d120577a3fbed9d4fcf851dc0f6a1564d052e129f4e",
+          "investment_data_commit": "b8c129b4d9b838f050eac8b1135111b3b79fc894",
+          "qlib_commit": "b87a2c294d364a33fb739359886acffe8ec907d1",
+          "release_tag": "2026-09-27",
+          "target_trade_date": "2026-09-24"
+        },
+        "published_at": "2026-09-26T17:45:20Z",
+        "release_tag": "2026-09-27"
+      },
+      "status": "ok"
+    },
+    {
+      "id": "BAO",
+      "notes": [
+        "verified through an isolated interpreter; path not recorded"
+      ],
+      "observed": {
+        "adjust_factors": {
+          "count": 1,
+          "last": [
+            "sh.600000",
+            "2026-07-16",
+            "1.000000",
+            "13.367013",
+            "13.367013"
+          ]
+        },
+        "calendar_tail": [
+          [
+            "2026-09-20",
+            "0"
+          ],
+          [
+            "2026-09-21",
+            "1"
+          ],
+          [
+            "2026-09-22",
+            "1"
+          ],
+          [
+            "2026-09-23",
+            "1"
+          ],
+          [
+            "2026-09-24",
+            "1"
+          ],
+          [
+            "2026-09-25",
+            "0"
+          ],
+          [
+            "2026-09-26",
+            "0"
+          ],
+          [
+            "2026-09-27",
+            "0"
+          ],
+          [
+            "2026-09-28",
+            "1"
+          ],
+          [
+            "2026-09-29",
+            "1"
+          ],
+          [
+            "2026-09-30",
+            "1"
+          ],
+          [
+            "2026-10-01",
+            "0"
+          ],
+          [
+            "2026-10-02",
+            "0"
+          ]
+        ],
+        "financial": {
+          "fields": [
+            "code",
+            "pubDate",
+            "statDate",
+            "roeAvg",
+            "npMargin",
+            "gpMargin",
+            "netProfit",
+            "epsTTM",
+            "MBRevenue",
+            "totalShare",
+            "liqaShare"
+          ],
+          "row": [
+            "sh.600000",
+            "2026-08-28",
+            "2026-06-30",
+            "0.037501",
+            "0.334346",
+            "",
+            "31354000000.000000",
+            "1.538199",
+            "93777000000.000000",
+            "33305838300.00",
+            "33305838300.00"
+          ]
+        },
+        "latest_daily": {
+          "first": [
+            "2026-01-05",
+            "sh.600000",
+            "11.8200",
+            "122284342",
+            "1459886350.3400"
+          ],
+          "last": [
+            "2026-09-24",
+            "sh.600000",
+            "9.0000",
+            "52836397",
+            "475964884.0700"
+          ],
+          "rows": 178
+        },
+        "login": {
+          "code": "0",
+          "message": "success"
+        }
+      },
+      "status": "ok"
+    },
+    {
+      "id": "EM",
+      "notes": [
+        "unofficial public endpoint; automated-collection terms unverified",
+        "flaky in practice: retries required"
+      ],
+      "observed": {
+        "attempts": 1,
+        "first": "2026-01-05,12.05,11.40,12.06,11.38,1222843,1459886350.00,5.66",
+        "last": "2026-09-24,8.99,9.00,9.05,8.97,528364,475964884.00,0.89",
+        "rows": 178,
+        "snapshot": {
+          "f116": 299752544700.0,
+          "f117": 299752544700.0,
+          "f57": "600000",
+          "f58": "浦发银行",
+          "f84": 33305838300.0,
+          "f85": 33305838300.0
+        }
+      },
+      "status": "ok"
+    },
+    {
+      "id": "CSI",
+      "notes": [
+        "official index constituent file for CSI300"
+      ],
+      "observed": {
+        "bytes": 67072,
+        "content_type": "application/vnd.ms-excel",
+        "http_status": 200
+      },
+      "status": "ok"
+    },
+    {
+      "id": "YF",
+      "notes": [
+        "non-official endpoint; rate limiting observed"
+      ],
+      "observed": {
+        "http_status": 429
+      },
+      "status": "fail"
+    },
+    {
+      "id": "QLIB-EX",
+      "notes": [
+        "static snapshot; cannot satisfy a 2026-09 coverage requirement"
+      ],
+      "observed": {
+        "assets": {
+          "qlib_data_cn_1d_latest.zip": 240739135,
+          "qlib_data_hs300_5min_latest.zip": 2061341210,
+          "qlib_data_us_1d_latest.zip": 450094816
+        },
+        "published_at": "2024-05-22T09:12:09Z",
+        "release_tag": "v3"
+      },
+      "status": "ok"
+    },
+    {
+      "id": "TS",
+      "notes": [
+        "registration and point thresholds must be checked on the official site; no token is used by this probe"
+      ],
+      "observed": {
+        "token_present": false
+      },
+      "status": "skipped"
+    }
+  ],
+  "verified_at": "2026-09-27T09:51:29Z"
+}
