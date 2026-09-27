@@ -333,7 +333,7 @@ test('U16b: strict DOM mode fails on missing-element bindings',async()=>{
 
 test('U18/U19: compare rows carry groups and the factor view renders statistics',async()=>{
   const x=ui(async path=>{
-    if(path.startsWith('/v1/factor-analysis'))return response({basis:{sample:{start:'2019-10-08',end:'2022-01-10',dates:552,instruments:16},
+    if(path.startsWith('/v1/factor-analysis')){assert.match(path,/analysis_version=2/);return response({schema_version:2,basis:{sample:{start:'2019-10-08',end:'2022-01-10',dates:552,instruments:16},
       factor_count:2,horizons:[1,5,10]},factors:[
       {factor_id:'f1',name:'mom_5d',coverage:0.98,rank_ic:{ic_mean:0.01,t_stat:1.2,p_value:0.2,icir:0.05,days:540},
        ic:{ic_mean:0.011},quantile_spread:{top_minus_bottom:0.0004,monotonic:false},turnover:{turnover:0.25},fdr_q:0.4},
@@ -346,7 +346,7 @@ test('U18/U19: compare rows carry groups and the factor view renders statistics'
         combined_ic:{days:540,ic_mean:0.006},
         ic_series_correlation:{labels:['mom_5d','vol_10d'],matrix:[[1,0.2],[0.2,1]]},
         not_available:[{metric:'holding_overlap',reason:'缺少持仓/成交明细'},{metric:'crowding',reason:'缺少市场层面数据'}]},
-      limitations:['因子面板来自已导入的记录']});
+      limitations:['因子面板来自已导入的记录']});}
     if(path==='/v1/factors')return response({items:[
       {factor_id:'f1',name:'mom_5d',source_instance_id:'rdagent-local',panel_count:1,dataset:{id:'cn-current-synthetic',version:'eb27e8cc5b04a9761381af168958ff5d6291db7bc5f58e34ca72b08058ecd9ca'},
        definition:{formulation:'Close_t/Close_{t-5}-1'},provenance:{experiment_key:'Loop_0:runner'}},
@@ -357,10 +357,10 @@ test('U18/U19: compare rows carry groups and the factor view renders statistics'
   await x.run("state.view='factors';renderFactors()");
   const html=x.elements['content'].innerHTML;
   assert.match(html,/单因子统计/);
-  assert.match(html,/旧定义，未满足当前纠正合同/);
+  assert.match(html,/探索性分析/);
   assert.match(html,/Rank IC/);
   assert.match(html,/FDR q/);
-  assert.match(html,/重叠性：相关性、共线性与冗余/);
+  assert.match(html,/重叠性：相关、相似度与距离/);
   assert.match(html,/持仓重叠|holding_overlap/);
   assert.match(html,/拥挤|holding|not_available/);
   assert.match(html,/增量贡献/);
@@ -434,4 +434,45 @@ test('T01-R: legacy risk presentation discloses its definition limit',async()=>{
   const x=ui(async()=>response({items:[{metrics:{sortino:1},basis:{sample:{},parameters:{}},calendar:{}}]}));
   const html=await x.run("renderRiskCard('r')");
   assert.match(html,/旧定义，未满足当前纠正合同/);
+});
+
+test('T01-U: risk requests v2, shows corrected zero, assumptions and exact inputs',async()=>{
+ const x=ui(async path=>{
+  assert.match(path,/analysis_version=2/);
+  return response({items:[{schema_version:2,revision_id:'immutable-revision',metrics:{sortino_target_downside:0,sortino:99},
+   provenance:{data_nature:'handwritten_fixture'},return_source:'recorded',basis:{sample:{observations:20},parameters:{risk_free_rate:{value:0,source:'default'},target_return:{value:0.01,source:'caller'},periods_per_year:238}},
+   definitions:{drawdown_episodes:{availability:'available'},sharpe:{input_basis:{cost_basis:'before_cost'}}},calendar:{},limitations:['限制样例']}]});
+ });
+ const html=await x.run("renderRiskCard('r')");
+ assert.match(html,/Sortino（目标下行偏差）<\/small><strong>0/);
+ assert.doesNotMatch(html,/>99/);
+ assert.match(html,/immutable-revision/);assert.match(html,/默认假设/);assert.match(html,/本次指定/);
+ assert.match(html,/手写演示样本/);assert.match(html,/成本前/);assert.match(html,/限制样例/);
+});
+
+test('T01-U: unavailable risk does not imply zero or no drawdown',async()=>{
+ const x=ui(async()=>response({items:[{schema_version:2,metrics:{},basis:{sample:{observations:null},parameters:{}},
+  definitions:{drawdown_episodes:{availability:'unavailable',reason:'missing_or_nonfinite_observation'}},
+  not_available:[{metric:'sharpe',reason:'missing_or_nonfinite_observation'}],calendar:{}}]}));
+ const html=await x.run("renderRiskCard('r')");
+ assert.match(html,/存在缺测或非有限观测/);assert.match(html,/来源性质未知/);
+ assert.doesNotMatch(html,/样本内没有观测回撤/);assert.doesNotMatch(html,/0 个观测/);
+});
+
+test('T01-U: factor significance and pair values follow server definitions',()=>{
+ const x=ui();
+ const row=x.run(`factorStatsRow({name:'<unsafe>',rank_ic:{ic_mean:0,significance_available:false,significance_reason:'missing_trading_day_ic',t_stat:99,p_value:0},fdr_q:0})`);
+ assert.match(row,/&lt;unsafe&gt;/);assert.match(row,/检验窗口内有交易日缺少有效 IC/);
+ assert.doesNotMatch(row,/>99/);assert.match(row,/来源性质未知/);
+ const pair=x.run(`factorCorrelationTable({labels:['a','b'],matrix:[[1,0],[0,1]]},{pairs:[{left:'a',right:'b',correlation:0,value:0,valid_days:20}]},{pairs:[{left:'a',right:'b',value:1}]})`);
+ assert.match(pair,/相似度 0/);assert.match(pair,/距离 1/);assert.match(pair,/有效 20 天/);
+ assert.doesNotMatch(pair,/冗余度/);
+});
+
+
+test('T01-U: selected historical revision never displays latest risk values',async()=>{
+ const x=ui(async()=>response({items:[{schema_version:2,revision_id:'latest',metrics:{sharpe:99}}]}));
+ const html=await x.run("renderRiskCard('r','historical')");
+ assert.match(html,/版本与页面选择不一致/);assert.match(html,/historical/);assert.match(html,/latest/);
+ assert.doesNotMatch(html,/>99/);
 });

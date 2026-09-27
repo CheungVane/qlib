@@ -22,13 +22,13 @@ const HELP = {
  'page.factors':{title:'因子页怎么读',summary:'按因子（而不是按运行）看预测力、显著性与重叠性。',ref:'FACTOR_ANALYSIS.md',
   body:['因子页回答“这个因子有没有用、和别的因子有多像”，与“某个回测跑出什么组合结果”是两个层次的问题。','只有同一数据集内容版本、同一日历的因子才能一起分析；不同版本需要分别查看。','所有数字都是工作台计算，附公式、样本区间与数据版本；未接入的指标会写明缺什么数据，不用 0 代替。']},
  'factor.stats':{title:'单因子统计口径',summary:'Rank IC、t 值、p 值、FDR、分位差与换手，都是平台计算。',ref:'FACTOR_ANALYSIS.md §4.1',
-  body:['Rank IC：每个交易日横截面秩相关（因子 vs 未来收益）的均值；IC 为 Pearson 版本。','显著性：t = 均值 /（Newey-West 标准误 / √N），滞后取 h−1；p 为双侧正态近似。因子同时检验很多个时看 FDR q 值，只用 p 值容易“试出显著”。','分位差：按因子分 5 组的平均未来收益 Q5−Q1，并判断分组收益是否单调；单调性比单点数字更能说明方向是否稳定。','换手：相邻交易日横截面秩的变动；换手接近 1 表示因子排序几乎每天翻转，交易成本会很敏感。','收益标签由平台按 close（含复权因子）计算 r=close_{t+h}/close_t−1，只用同一数据内容版本的快照。']},
- 'factor.overlap':{title:'重叠性怎么读',summary:'相关、共线性、冗余、正交与增量；持仓重叠和拥挤度当前未接入。',ref:'FACTOR_ANALYSIS.md §4.2',
-  body:['因子值相关性：逐日横截面秩相关的均值，回答“两个因子是不是在排同一批股票”；|相关| ≥ 0.7 标记为高重叠。','共线性：由相关矩阵算 VIF，>10 说明该因子与其它因子高度共线（冗余），不构成独立信息；完全共线会单独标明。','正交增量：把新因子对已有因子横截面回归后取残差再算 IC，回答“去掉已有因子能解释的部分，还剩多少信息”。','组合增量：等权合成（横截面标准化后取均值）中加入/去掉该因子的 IC 变化；接近 0 说明被已有因子解释。','未接入：持仓重叠需要逐日持仓明细，拥挤度需要市场层面的因子使用数据；两者都显式标注而不是填 0。']},
+  body:['Rank IC：每个交易日横截面秩相关（因子 vs 未来收益）的均值；IC 为 Pearson 版本。','显著性：t = 均值 / 均值标准误 se_mean；se_mean 已包含 N，不能再除 √N。滞后取 min(h−1,N−1)；p 为双侧正态近似。因子同时检验很多个时看 FDR q 值，只用 p 值容易“试出显著”。','分位差：按因子分5组的平均未来收益Q5−Q1；单调性仅为组号与组收益相关的阈值代理，不保证各组严格单调或样本外方向稳定。','换手当前沿用相邻有效横截面的秩变化，可能跨缺口，仍待修正；不是实际持仓换手或成本。','收益标签从同一内容版本快照按声明价格规则计算；完整复权/PIT及历史修订语义未认证。']},
+ 'factor.overlap':{title:'重叠性怎么读',summary:'相关、相似度、距离与增量；持仓重叠和拥挤度未接入。',ref:'FACTOR_ANALYSIS.md §4.2',
+  body:['因子值相关性：逐日横截面秩相关的均值，回答“两个因子是不是在排同一批股票”；相关绝对值越高，线性秩关联越强。','相似度为abs(corr)，距离为1-abs(corr)，先逐日平均再取绝对值。VIF是线性共线性诊断，不能证明非线性冗余。','正交增量：把新因子对已有因子横截面回归后取残差再算 IC，回答“去掉已有因子能解释的部分，还剩多少信息”。','组合增量：等权组合加入/去掉因子的IC变化；当前留一组合样本可能不同，不作独立信息的确定结论。','未接入：持仓重叠需要逐日持仓明细，拥挤度需要市场层面的因子使用数据；两者都显式标注而不是填 0。']},
  'attention.list':{title:'待处理事项',summary:'失败执行、未入库结果、探针结果与取消请求中；来自已记录状态。',ref:'UI07 / U21',
   body:['这里只列已有状态能判断的事项：失败/中断的执行、已成功但未入库的结果、集成探针结果、取消请求中。','每条给出原因与跳转目标；没有事项时显示空态，不隐藏也不假装有内容。','数据新鲜度、实时行情等未接入能力不会进入此列表（否则会变成无法处理的噪声）。']},
  'risk.card':{title:'风险与绩效怎么读',summary:'Sharpe/Sortino/Calmar、VaR/CVaR、回撤期与月度收益，全部由平台按公式计算。',ref:'RESULT_CONTRACT.md（绩效与风险指标族）',
-  body:['年化收益按 (1+总收益)^(ppy/N)-1，ppy 取配置中的年化交易日（CN 情景 238），不额外假设。','Sharpe = mean/std×√ppy；Sortino 的分母只算负收益；Calmar = 年化收益/|最大回撤|。离散度低于 1e-12 或没有负收益/回撤时返回"不可用"并说明，不算出无穷大。','VaR/CVaR 是历史法：5% 分位与分位以下均值，只描述样本内尾部，不是未来损失保证。','回撤期给出开始、谷底、恢复日期、深度与持续天数；未回到前高的标为"未恢复"。','月度/年度收益按日历聚合，缺月显示 null；分红再投资与真实成本细分仍未接入。']},
+  body:['年化收益按 (1+总收益)^(ppy/N)-1，ppy取本次配置中的年化交易日（CN情景238）；这是分析参数，不代表历史运行配置已核验。','Sharpe按同频rf计算；Sortino按相对目标T的全样本下行均方根计算，分母包含全部观测。rf/T默认0会明确标为假设；零下行偏差返回不可用。确切公式与输入见定义卡。','VaR/CVaR 是历史法：5% 分位与分位以下均值，只描述样本内尾部，不是未来损失保证。','回撤期给出开始、谷底、恢复日期、深度与持续天数；未回到前高的标为"未恢复"。','月度/年度收益按日历聚合，缺月显示 null；分红再投资与真实成本细分仍未接入。']},
  'validation.card':{title:'验证卡怎么读',summary:'PSR/DSR 修正选择偏差，PBO 估计过拟合概率，purge 与唯一性说明样本泄漏。',ref:'VALIDATION.md',
   body:['PSR：Sharpe 大于基准的概率（偏度/峰度修正）；DSR：以"试了 N 个配置后的期望最大 Sharpe"为基准，比 PSR 更保守。','PBO（CSCV）：把收益矩阵切成时间块，样本内最优配置在样本外的分位低于中位的比例；越高说明越可能是挑出来的。','purge/embargo：训练集剔除与测试窗口标签重叠的样本及其后若干样本；唯一性权重说明重叠标签让有效样本数小于观测数。','这些都不能替代前瞻/实盘验证：结果里固定列出"缺少前瞻样本"这条未接入项。']},
  'page.live':{title:'实时页为什么是空的',summary:'行情流尚未接入，没有连接记录时不显示 0。',ref:'LIVE01 / UI01',
@@ -308,29 +308,40 @@ async function renderBacktest(){
   const kpis=`<div class="metric-row"><div class="metric-box"><small>期末权益 ${originBadge(equity?.series?.provenance)}</small><strong>${fmt(last)} <small>${esc(equity?.series?.unit||'币种未记录')}</small></strong></div><div class="metric-box"><small>首末观测权益变化 ${badge('derived')}</small><strong>${typeof review.facts.observed_equity_change==='number'?fmt(review.facts.observed_equity_change*100)+'%':'未知'}</strong></div><div class="metric-box"><small>最大观测权益回撤 ${badge('derived')}</small><strong>${typeof dd==='number'?fmt(dd*100)+'%':'未知'}</strong></div><div class="metric-box"><small>引擎</small><strong>${esc(summary.run.engine.id)}</strong></div></div>`;
   const heading=`<div class="heading-row"><div><h2>${esc(summary.display_title||summary.run.title)}</h2><p class="panel-note">${statusLabel(summary.run.status)} ${sample(summary.run)} · 结果版本 ${esc(summary.revision_id.slice(0,12))} · 数据版本 ${esc(summary.run.dataset.version||'未知')}</p></div></div>`;
   const misc=`<p class="panel-note">${originBadge(cost?.series?.provenance)} 累计费用（源报告末点）：${fmt(totalCost)} ${esc(cost?.series?.unit||'币种未记录')}（${availabilityLabel(cost?.series.availability)}）<br>换手序列：${availabilityLabel(turnover?.series.availability)} · 撮合与费用口径请查原运行配置。</p>`;
-  const risk=await renderRiskCard(id);
+  const risk=await renderRiskCard(id,summary.revision_id);
   document.getElementById('content').innerHTML=`<div class="stack">${card('运行概况',heading+kpis)}${risk}${provenancePanel(detail)}${reviewPanel(review,detail.evidence)}${card('权益曲线',seriesPanel(equity),equity?.series?.provenance?.source||'来源未核实')}${card('成本与换手',misc)}${card('来源证据',`<details><summary>展开原始证据</summary><pre class="panel-note">${esc(JSON.stringify(detail.evidence,null,2))}</pre></details>`,'未知事实保留为空')}</div>`;
 }
-async function renderRiskCard(runId){
+const analysisReasons={missing_trading_day_ic:'检验窗口内有交易日缺少有效 IC',insufficient_observations:'样本不足',nonpositive_long_run_variance:'长期方差为零或非正，显著性无定义',nonfinite_standard_error:'标准误无法计算',no_downside_deviation:'没有相对目标的下行偏差',zero_return_dispersion:'收益离散度为零',cashflow_policy_unknown_or_unsupported:'现金流口径未知或不支持',return_basis_unknown:'收益定义未登记',missing_or_nonfinite_observation:'存在缺测或非有限观测',daily_calendar_required:'缺少日频交易日历',return_unit_unsupported:'收益单位不支持',source_unavailable:'源序列不可用',no_return_series:'没有收益或权益序列',nonpositive_equity:'权益非正',nonpositive_wealth_unsupported:'暂不支持财富非正后的风险统计',no_drawdown:'样本内没有观测回撤，Calmar 无定义',insufficient_tail_observations:'尾部观测不足2个',undefined_for_sample:'当前样本下无定义',nonfinite_calculation:'计算结果非有限',not_enough_observations:'有效观测不足'};
+const analysisReason=reason=>analysisReasons[reason]||reason||'原因未记录';
+const analysisNature=value=>({handwritten_fixture:'手写演示样本',synthetic:'模拟数据',synthetic_scenario:'模拟情景',declared_real:'声明为真实，未经认证',real:'声明为真实，未经认证',unknown:'来源性质未知'}[value]||value||'来源性质未知');
+function analysisDetails(definitions,limitations=[]){
+ return `<details><summary>公式、输入版本与限制</summary><pre class="analysis-definitions">${esc(JSON.stringify(definitions||{},null,2))}</pre></details>${limitations.length?`<p class="warning">${limitations.map(esc).join('；')}</p>`:''}`;
+}
+async function renderRiskCard(runId,expectedRevision=null){
  let report=null,reason=null;
- try{report=(await api(`/v1/risk?run_id=${encodeURIComponent(runId)}`)).items[0];}catch(error){reason=error.message;}
- if(reason)return card('风险与绩效',`<p class="warning">无法计算：${esc(reason)}</p><p class="panel-note">需要至少 20 个观测的收益序列（优先 native.qlib.return，缺失时由平台按权益推导）。</p>`,'工作台计算','risk.card');
- const m=report.metrics||{};
+ try{report=(await api(`/v1/risk?run_id=${encodeURIComponent(runId)}&analysis_version=2`)).items[0];}catch(error){reason=error.message;}
+ if(reason)return card('风险与绩效',`<p class="warning">无法计算：${esc(reason)}</p>`,'工作台计算','risk.card');
+ if(report?.schema_version!==2)return card('风险与绩效','<p class="warning">旧定义，未满足当前纠正合同；请使用支持风险 v2 的服务。</p>','无法展示纠正指标','risk.card');
+ if(expectedRevision&&report.revision_id!==expectedRevision)return card('风险与绩效',`<p class="warning">不可用：风险输入版本与页面选择不一致。页面 revision：${esc(expectedRevision)}；风险 revision：${esc(report.revision_id||'未记录')}。当前风险接口仅分析最新版本，请选择最新结果后查看。</p>`,'版本不一致','risk.card');
+ const m=report.metrics||{}, basis=report.basis||{}, parameters=basis.parameters||{}, sample=basis.sample||{};
  const show=(value,digits=3)=>typeof value==='number'?fmt(value,digits):'不可用';
  const pct=value=>typeof value==='number'?fmt(value*100,2)+'%':'不可用';
  const boxes=[['年化收益',pct(m.annualised_return)],['波动（年化）',pct(m.volatility)],['Sharpe',show(m.sharpe)],
-   ['Sortino',show(m.sortino)],['Calmar',show(m.calmar)],['最大回撤',pct(m.max_drawdown)],
+   ['Sortino（目标下行偏差）',show(m.sortino_target_downside)],['Calmar',show(m.calmar)],['最大观测回撤',pct(m.max_drawdown)],
    ['VaR 5%',pct(m.var)],['CVaR 5%',pct(m.cvar)]].map(([label,value])=>`<div class="metric-box"><small>${label}</small><strong>${value}</strong></div>`).join('');
  const episodes=(report.drawdown_episodes||[]).map(item=>`<li>${esc(item.start)} → ${item.recovery?esc(item.recovery):'未恢复（'+esc(item.status)+'）'} · 深度 ${pct(item.depth)} · ${item.length_days} 个交易日</li>`).join('');
- const monthly=report.calendar?.monthly||{};
- const months=['01','02','03','04','05','06','07','08','09','10','11','12'];
+ const episodeEmpty=report.definitions?.drawdown_episodes?.availability==='available'?'样本内没有观测回撤':`不可用：${esc(analysisReason(report.definitions?.drawdown_episodes?.reason))}`;
+ const monthly=report.calendar?.monthly||{},months=['01','02','03','04','05','06','07','08','09','10','11','12'];
  const monthlyRows=Object.keys(monthly).sort().map(year=>`<tr><th>${esc(year)}</th>${months.map(month=>{const value=monthly[year][month];return `<td>${typeof value==='number'?pct(value):'<small class="muted">缺月</small>'}</td>`;}).join('')}</tr>`).join('');
- const unavailable=(report.not_available||[]).map(item=>`${esc(item.metric)}（${esc(item.reason)}）`).join('；');
- return card('风险与绩效',`${badge('derived')}<p class="warning">旧定义，未满足当前纠正合同。目标下行偏差版本已提供 API/CLI，界面切换待验收。</p><div class="metric-row">${boxes}</div>
- <p class="panel-note">样本 ${esc(report.basis.sample.start)} → ${esc(report.basis.sample.end)}（${report.basis.sample.observations} 个观测）· 年化参数 ${report.basis.parameters.periods_per_year} 个交易日 · 收益来源 ${esc(report.return_source||'未记录')}</p>
- <details><summary>回撤期（按深度）</summary><ul class="stack li">${episodes||'<li>样本内没有回撤</li>'}</ul></details>
- <details><summary>月度收益（缺月为 null，不填 0）</summary><div class="table-scroll"><table class="table compare-table"><thead><tr><th>年</th>${months.map(month=>`<th>${month}月</th>`).join('')}</tr></thead><tbody>${monthlyRows||'<tr><td colspan="13">无记录</td></tr>'}</tbody></table></div></details>
- <p class="panel-note">未接入：${unavailable||'无'}</p>`,'工作台计算；年化使用配置中的交易日数','risk.card');
+ const unavailable=(report.not_available||[]).map(item=>`${esc(item.metric)}（${esc(analysisReason(item.reason))}）`).join('；');
+ const parameter=key=>`${show(parameters[key]?.value,4)}（${parameters[key]?.source==='default'?'默认假设':parameters[key]?.source==='caller'?'本次指定':'来源未记录'}，同频小数收益）`;
+ const input=report.definitions?.sharpe?.input_basis||{};
+ const cost=({before_cost:'成本前',after_cost:'成本后'}[input.cost_basis]||'成本口径未知');
+ return card('风险与绩效',`${badge('derived')}<p class="panel-note">分析 v2 · ${esc(analysisNature(report.provenance?.data_nature))} · ${cost} · 输入 revision：<code>${esc(report.revision_id||'未记录')}</code></p><div class="metric-row">${boxes}</div>
+ <p class="panel-note">rf=${parameter('risk_free_rate')}；T=${parameter('target_return')}<br>样本 ${esc(sample.start||'未记录')} → ${esc(sample.end||'未记录')}（${sample.observations??'未记录'} 个观测）· 年化参数 ${parameters.periods_per_year??'未记录'}，来源 ${esc(basis.periods_per_year_source||'未记录')} · 收益来源 ${esc(report.return_source||'未记录')}</p>
+ <details><summary>回撤期（按深度）</summary><ul class="stack li">${episodes||`<li>${episodeEmpty}</li>`}</ul></details>
+ <details><summary>月度收益（缺月为 null，不填 0）</summary><div class="table-scroll"><table class="table compare-table analysis-table"><thead><tr><th>年</th>${months.map(month=>`<th>${month}月</th>`).join('')}</tr></thead><tbody>${monthlyRows||'<tr><td colspan="13">不可用或无记录，见原因</td></tr>'}</tbody></table></div></details>
+ <p class="panel-note">不可用项：${unavailable||'无'}</p>${analysisDetails(report.definitions,report.limitations)}`,'工作台计算；非引擎原生指标','risk.card');
 }
 async function renderTraining(){
   const selected=await selectedRevision();if(!selected){document.getElementById('content').innerHTML=empty('请先选择一个运行');return;}
@@ -691,27 +702,26 @@ async function refreshRuns(){
 }
 
 function factorStatsRow(row){
- const rank=row.rank_ic||{}, spread=row.quantile_spread||{}, turn=row.turnover||{};
- const pct=value=>typeof value==='number'?fmt(value,4):'未记录';
- return `<tr><td><strong>${esc(row.name)}</strong>${row.coverage!==null&&row.coverage!==undefined?`<small class="block muted">覆盖 ${fmt(row.coverage*100,1)}%</small>`:''}</td><td>${pct(rank.ic_mean)}</td><td>${pct(rank.t_stat)}</td><td>${pct(rank.p_value)}</td><td>${pct(row.fdr_q)}</td><td>${pct(rank.icir)}</td><td>${typeof spread.top_minus_bottom==='number'?fmt(spread.top_minus_bottom*100,3)+'%':'未记录'}</td><td>${spread.monotonic===true?'单调':spread.monotonic===false?'非单调':'未知'}</td><td>${typeof turn.turnover==='number'?fmt(turn.turnover,3):'未记录'}</td><td>${rank.days??'未记录'}</td></tr>`;
+ const rank=row.rank_ic||{},spread=row.quantile_spread||{},turn=row.turnover||{};
+ const value=v=>typeof v==='number'?fmt(v,4):'不可用';
+ const inference=v=>rank.significance_available===true?value(v):'不可用';
+ return `<tr><td><strong>${esc(row.name)}</strong><small class="block muted">探索性 · ${esc(analysisNature(row.provenance?.data_nature))}</small>${row.coverage!==null&&row.coverage!==undefined?`<small class="block muted">覆盖 ${fmt(row.coverage*100,1)}%</small>`:''}<small class="block muted">${rank.significance_available===true?'显著性可计算（不代表显著）':esc(analysisReason(rank.significance_reason))}</small></td><td>${value(rank.ic_mean)}</td><td>${inference(rank.nw_se_mean)}</td><td>${inference(rank.t_stat)}</td><td>${inference(rank.p_value)}</td><td>${inference(row.fdr_q)}</td><td>${value(rank.icir)}</td><td>${typeof spread.top_minus_bottom==='number'?fmt(spread.top_minus_bottom*100,3)+'%':'不可用'}</td><td>${spread.monotonic===true?'满足代理阈值':spread.monotonic===false?'不满足代理阈值':'不可用'}</td><td>${value(turn.turnover)}</td><td>${rank.days??'未记录'}</td></tr>`;
 }
-function factorCorrelationTable(correlation,redundancy){
- if(!correlation||!correlation.labels?.length)return empty('没有可计算的重叠：至少需要两个因子面板');
+function factorCorrelationTable(correlation,similarity,distance){
+ if(!correlation||!correlation.labels?.length)return empty('没有可计算的重叠');
  const head=`<tr><th>因子</th>${correlation.labels.map(name=>`<th>${esc(name)}</th>`).join('')}</tr>`;
- const body=correlation.labels.map((name,row)=>`<tr><th class="compare-row-title">${esc(name)}</th>${correlation.matrix[row].map(value=>{
-   if(value===null||value===undefined)return '<td class="cell-missing">未记录</td>';
-   const strong=Math.abs(value)>=0.7?'cell-warn':'';
-   return `<td class="${strong}">${value.toFixed(2)}</td>`;
- }).join('')}</tr>`).join('');
- const pairs=(redundancy?.pairs||[]).filter(pair=>typeof pair.correlation==='number')
-   .sort((a,b)=>Math.abs(b.correlation)-Math.abs(a.correlation)).slice(0,5)
-   .map(pair=>`<li>${esc(pair.left)} ↔ ${esc(pair.right)}：相关 ${pair.correlation.toFixed(3)} · 冗余度 ${pair.redundancy.toFixed(3)}</li>`).join('');
- return `<div class="table-scroll"><table class="table compare-table"><thead>${head}</thead><tbody>${body}</tbody></table></div><p class="panel-note">逐日横截面秩相关的均值；|相关| ≥ 0.7 标记为高重叠（中性色，不代表优劣）。</p>${pairs?`<p class="panel-note">最重叠的因子对：</p><ul class="stack li">${pairs}</ul>`:''}`;
+ const body=correlation.labels.map((name,row)=>`<tr><th>${esc(name)}</th>${correlation.matrix[row].map(value=>typeof value==='number'?`<td>${value.toFixed(2)}</td>`:'<td class="cell-missing">不可用</td>').join('')}</tr>`).join('');
+ const number=value=>typeof value==='number'?fmt(value,3):'不可用';
+ const pairs=(similarity?.pairs||[]).map(pair=>{
+  const other=(distance?.pairs||[]).find(x=>x.left===pair.left&&x.right===pair.right);
+  return `<li>${esc(pair.left)} ↔ ${esc(pair.right)}：相关 ${number(pair.correlation)} · 相似度 ${number(pair.value)} · 距离 ${number(other?.value)} · 有效 ${pair.valid_days??'未记录'} 天</li>`;
+ }).join('');
+ return `<div class="table-scroll"><table class="table compare-table analysis-table"><thead>${head}</thead><tbody>${body}</tbody></table></div><p class="panel-note">有符号相关为逐日秩相关的均值；相似度越大越相似，距离越大越不相似。不能据此排除非线性冗余。</p>${pairs?`<ul class="stack li">${pairs}</ul>`:'<p>没有因子对</p>'}`;
 }
 function factorIncrementTable(incremental,combined){
  if(!incremental||!incremental.length)return empty('至少需要两个因子才能计算增量贡献');
  const rows=incremental.map(item=>`<tr><td>${esc(item.factor)}</td><td>${item.without_ic===null?'未记录':fmt(item.without_ic,4)}</td><td>${item.delta===null?'未记录':fmt(item.delta,4)}</td></tr>`).join('');
- return `<div class="table-scroll"><table class="table"><thead><tr><th>因子</th><th>去掉它后的组合 IC</th><th>加入后的增量</th></tr></thead><tbody>${rows}</tbody></table></div><p class="panel-note">等权合成（横截面标准化后取均值）；组合 IC 全量 ${combined?.ic_mean===undefined||combined?.ic_mean===null?'未记录':fmt(combined.ic_mean,4)}，天数 ${combined?.days??'未记录'}。增量接近 0 说明该因子被已有因子解释。</p>`;
+ return `<div class="table-scroll"><table class="table analysis-table"><thead><tr><th>因子</th><th>去掉它后的组合 IC</th><th>加入后的增量</th></tr></thead><tbody>${rows}</tbody></table></div><p class="panel-note">等权合成（横截面标准化后取均值）；组合 IC 全量 ${combined?.ic_mean===undefined||combined?.ic_mean===null?'未记录':fmt(combined.ic_mean,4)}，天数 ${combined?.days??'未记录'}。留一组合样本可能不同，增量接近 0 不能单独证明因子无独立信息。</p>`;
 }
 async function renderFactors(){
  const list=await api('/v1/factors');
@@ -731,7 +741,7 @@ async function renderFactors(){
  const members=groups[state.factorGroup].slice(0,12);
  const query=members.map(item=>'factor_id='+encodeURIComponent(item.factor_id)).join('&');
  let report=null,error=null;
- try{report=await api(`/v1/factor-analysis?${query}&horizon=1&horizon=5&horizon=10`);}catch(problem){error=problem.message;}
+ try{report=await api(`/v1/factor-analysis?${query}&horizon=1&horizon=5&horizon=10&analysis_version=2`);if(report.schema_version!==2)throw new Error("旧定义，未满足当前纠正合同；需要因子 v2 服务");}catch(problem){error=problem.message;}
  const tabs=`<div class="subtabs" role="tablist" aria-label="因子数据集">${keys.map(key=>`<button type="button" role="tab" class="subtab ${key===state.factorGroup?'active':''}" data-factor-group="${esc(key)}">${esc(key)} <small>${groups[key].length}</small></button>`).join('')}</div>`;
  const membersCard=card('因子面板',`${tabs}<div class="history-scroll">${items.slice(0,40).map(item=>`<p><strong>${esc(item.name)}</strong> <small class="muted">${esc(item.source_instance_id)} · 面板 ${item.panel_count} 个 · ${esc((item.provenance?.experiment_key||'').slice(0,48))}</small>${item.definition?.formulation?`<br><small class="muted">${esc(String(item.definition.formulation).slice(0,90))}</small>`:''}</p>`).join('')}</div>`, '已入库的因子面板；同一数据集版本才能一起分析','factor.stats');
  if(error){
@@ -739,10 +749,10 @@ async function renderFactors(){
   bindFactorGroups();
   return;
  }
- const stats=card('单因子统计',`<p class="warning">旧定义，未满足当前纠正合同；因子 v2 已提供 API/CLI，界面切换待验收。</p><div class="table-scroll"><table class="table"><thead><tr><th>因子</th><th>Rank IC</th><th>t（NW）</th><th>p</th><th>FDR q</th><th>ICIR</th><th>分位差 Q5−Q1</th><th>单调性</th><th>换手</th><th>有效天数</th></tr></thead><tbody>${report.factors.map(factorStatsRow).join('')}</tbody></table></div><p class="panel-note">样本 ${esc(report.basis.sample.start)} → ${esc(report.basis.sample.end)}（${report.basis.sample.dates} 个交易日 × ${report.basis.sample.instruments} 个标的）；收益标签由平台按 close 前复权计算，h=1 为主口径；显著性用 Newey-West 调整并做 BH-FDR（参与检验 ${report.basis.factor_count} 个因子）。</p>`, '工作台计算；不是引擎原生指标', 'factor.stats');
- const overlap=card('重叠性：相关性、共线性与冗余',factorCorrelationTable(report.overlap.value_correlation,report.overlap.redundancy)+`<p class="panel-note">共线性：最大 VIF ${report.overlap.collinearity?.max_vif===null||report.overlap.collinearity?.max_vif===undefined?'未记录':fmt(report.overlap.collinearity.max_vif,2)}${report.overlap.collinearity?.high_collinearity?' · 存在高共线因子':''}${report.overlap.collinearity?.perfect_collinearity?' · 存在完全共线因子':''}。${esc(report.overlap.collinearity?.note||'')}</p>`+`<p class="panel-note">未接入：${(report.overlap.not_available||[]).map(item=>`${esc(item.metric)}（${esc(item.reason)}）`).join('；')||'无'}</p>`, '重叠越高，越不构成独立信息', 'factor.overlap');
+ const stats=card('单因子统计',`<p class="warning">探索性分析；显著性可计算不代表策略有效。换手与增量的既有估计量仍有缺陷，见下方限制。</p><div class="table-scroll"><table class="table analysis-table"><thead><tr><th>因子</th><th>Rank IC</th><th>均值标准误（NW）</th><th>t（NW）</th><th>p</th><th>FDR q</th><th>ICIR</th><th>分位差 Q5−Q1</th><th>单调性代理</th><th>换手</th><th>有效天数</th></tr></thead><tbody>${report.factors.map(factorStatsRow).join('')}</tbody></table></div><p class="panel-note">样本 ${esc(report.basis.sample.start)} → ${esc(report.basis.sample.end)}（${report.basis.sample.dates} 个交易日 × ${report.basis.sample.instruments} 个标的）；主口径 h=${report.basis.primary_horizon??'未记录'}；数据版本 ${esc(report.basis.dataset?.version||'未记录')}；请求 ${report.basis.parameters?.requested_factor_count??'未记录'} 个因子，实际 FDR 检验 ${report.basis.parameters?.tested_factor_count??'未记录'} 个。价格复权/PIT语义未认证。</p>`, '工作台计算；不是引擎原生指标', 'factor.stats');
+ const overlap=card('重叠性：相关、相似度与距离',factorCorrelationTable(report.overlap.value_correlation,report.overlap.absolute_correlation_similarity,report.overlap.correlation_distance)+`<p class="panel-note">共线性：最大 VIF ${report.overlap.collinearity?.max_vif===null||report.overlap.collinearity?.max_vif===undefined?'未记录':fmt(report.overlap.collinearity.max_vif,2)}${report.overlap.collinearity?.high_collinearity?' · 存在高共线因子':''}${report.overlap.collinearity?.perfect_collinearity?' · 存在完全共线因子':''}。${esc(report.overlap.collinearity?.note||'')}</p>`+`<p class="panel-note">未接入：${(report.overlap.not_available||[]).map(item=>`${esc(item.metric)}（${esc(item.reason)}）`).join('；')||'无'}</p>`, '相关结构不等于独立信息证明', 'factor.overlap');
  const increment=card('增量贡献（相对等权组合）',factorIncrementTable(report.overlap.incremental_ic,report.overlap.combined_ic),'组合口径为工作台计算', 'factor.overlap');
- document.getElementById('content').innerHTML=`<div class="stack">${membersCard}${stats}${overlap}${increment}</div>`;
+ document.getElementById('content').innerHTML=`<div class="stack">${membersCard}${stats}${overlap}${increment}${card('分析依据与限制',analysisDetails({basis:report.basis,factors:report.factors,overlap:report.overlap},report.limitations),'原始定义卡与输入版本')}</div>`;
  bindFactorGroups();
 }
 function bindFactorGroups(){

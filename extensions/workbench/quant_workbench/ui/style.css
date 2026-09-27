@@ -83,3 +83,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.65;
 .command-item{display:block;width:100%;text-align:left;background:#fff;border:1px solid #e4ecee;border-radius:8px;padding:9px 12px;margin-bottom:6px;cursor:pointer;font:inherit}
 .command-item:hover,.command-item.active{border-color:#19a98f;background:#f2fbf8}
 .command-kind{display:inline-block;font-size:10px;font-weight:700;color:#3f6b78;background:#eef4f6;border-radius:4px;padding:1px 6px;margin-right:8px}
+
+.analysis-definitions{white-space:pre-wrap;overflow-wrap:anywhere;max-height:24rem;overflow:auto;font-size:.8rem}
+.stack>.card{min-width:0}.card-head{gap:12px;flex-wrap:wrap}.card .panel-note{overflow-wrap:anywhere}
+.analysis-table{min-width:720px}.analysis-table th:nth-child(3),.analysis-table td:nth-child(3){display:table-cell}
