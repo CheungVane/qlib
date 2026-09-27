@@ -269,7 +269,42 @@ class ExecutionService:
             log_path=started.get("log_path", prepared.get("log_path")))
         return {"attempt": attempt_dto(updated or row), "created": True}
 
+    def enforce_timeouts(self, now: str | None = None) -> dict[str, Any]:
+        """EXEC13: terminate attempts past the policy deadline.
+
+        There is no scheduler in this version, so supervision runs on the status-check path
+        (reconcile/list/get). It only ends over-deadline work; it never starts anything.
+        A confirmed end becomes `failed/timeout`; an unconfirmed one keeps `interrupted`
+        plus a recorded timeout request instead of pretending the process is gone.
+        """
+        if not self.policy:
+            return {"checked": 0, "timed_out": [], "reason": self.policy_error or "no_policy"}
+        moment = datetime.fromisoformat((now or utc_now()).replace("Z", "+00:00"))
+        timed_out = []
+        for row in self.repository.list_open_attempts(limit=500):
+            if row.get("status") != "running" or not row.get("started_at"):
+                continue
+            started = datetime.fromisoformat(str(row["started_at"]).replace("Z", "+00:00"))
+            if (moment - started).total_seconds() <= self.policy.timeout_seconds:
+                continue
+            outcome = self.cancel(row["attempt_id"])
+            confirmed = bool(outcome.get("cancel_confirmed"))
+            detail = (f"exceeded the {self.policy.timeout_seconds}s deadline "
+                      f"(policy {self.policy.revision()})")
+            if confirmed:
+                self.repository.update_attempt(
+                    row["attempt_id"], status="failed", error_code="timeout",
+                    error_message=detail, ended_at=utc_now(), cancel_requested_at=utc_now())
+                timed_out.append({"attempt_id": row["attempt_id"], "result": "timed_out"})
+            else:
+                self.repository.update_attempt(
+                    row["attempt_id"], error_code="timeout_unconfirmed",
+                    error_message=detail + "; termination not confirmed", cancel_requested_at=utc_now())
+                timed_out.append({"attempt_id": row["attempt_id"], "result": "timeout_unconfirmed"})
+        return {"checked": 1, "timed_out": timed_out}
+
     def reconcile(self, attempt_ids: list[str] | None = None, limit: int = 100) -> dict[str, Any]:
+        self.enforce_timeouts()
         if attempt_ids:
             rows = [self.repository.get_attempt(attempt_id) for attempt_id in attempt_ids]
         else:

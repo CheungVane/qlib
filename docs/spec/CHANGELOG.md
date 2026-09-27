@@ -2,6 +2,15 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — T04 第4片：超时终止监督
+
+- 来源：用户"可以。记得回写spec"。
+- 实现：`ExecutionService.enforce_timeouts(now=None)` —— 按 `started_at + policy.timeout_seconds` 判定超期，超期调用既有终止流程（SIGTERM→宽限→SIGKILL）；**确认结束才落 `failed` + `error_code=timeout`**，未确认则保留 `interrupted` 并记 `timeout_unconfirmed` 与超时请求（写入`cancel_requested_at`），不假报终止；完成证据早于 deadline 的任务不被追溯改写。
+- 触发方式与理由：本版本无调度器，监督挂在状态核对路径——`list()`/`get()` 都会先 `reconcile()`，故读取时即可收敛超期任务；该路径**只结束超期任务，不创建新任务**，符合"读取接口不启动执行"。
+- 测试：新增2项——超期任务被终止且终态为`failed/timeout`（含早于deadline时不触发）；已成功完成的任务在 deadline 之后也不被追溯改写。共16项政策测试。
+- 边界（如实记录）：①**deadline 是运行时推导**（started_at + 当前政策超时），尚未持久化为列，未达EXEC13"持久化deadline"的字面要求；②无调度器，监督依赖有人触发状态核对（无心跳线程）；③`failed/resource_limit`归类、Agent预算预留、容器路由仍未做。**A41仍不通过**。
+- 验证：全量门禁 `[gate] ok`。
+
 ## 2026-09-27 — T04 第3片：并发准入（槽满拒绝）
 
 - 来源：用户"继续"。

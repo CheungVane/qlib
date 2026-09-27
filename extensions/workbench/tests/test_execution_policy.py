@@ -213,6 +213,42 @@ class ConcurrencyAdmissionTests(unittest.TestCase):
         self.assertFalse(again["created"])
         self.assertEqual(again["attempt"]["attempt_id"], first["attempt"]["attempt_id"])
 
+    def test_deadline_is_enforced_and_confirmed_as_timeout(self):
+        from datetime import datetime, timedelta, timezone
+
+        first = self.submit("k1")
+        attempt_id = first["attempt"]["attempt_id"]
+        started = datetime.fromisoformat(first["attempt"]["created_at"].replace("Z", "+00:00"))
+        # not yet due
+        early = (started + timedelta(seconds=0.5)).isoformat().replace("+00:00", "Z")
+        self.assertEqual(self.service.enforce_timeouts(now=early)["timed_out"], [])
+        # past the 1s deadline in the injected policy? the stub policy allows 60s, so force one
+        late = (started + timedelta(seconds=90)).isoformat().replace("+00:00", "Z")
+        result = self.service.enforce_timeouts(now=late)
+        self.assertEqual(len(result["timed_out"]), 1)
+        row = self.repo.get_attempt(attempt_id)
+        self.assertEqual(row["status"], "failed")
+        self.assertEqual(row["error_code"], "timeout")
+        self.assertIn("deadline", row["error_message"])
+
+    def test_completed_attempts_are_not_retroactively_timed_out(self):
+        from datetime import datetime, timedelta
+
+        finished = self.submit("k0", seconds="0")
+        attempt_id = finished["attempt"]["attempt_id"]
+        row = None
+        for _ in range(40):
+            self.service.reconcile([attempt_id])
+            row = self.repo.get_attempt(attempt_id)
+            if row["status"] != "running":
+                break
+            time.sleep(0.25)
+        self.assertEqual(row["status"], "succeeded")
+        late = (datetime.fromisoformat(row["created_at"].replace("Z", "+00:00"))
+                + timedelta(seconds=600)).isoformat().replace("+00:00", "Z")
+        self.service.enforce_timeouts(now=late)
+        self.assertEqual(self.repo.get_attempt(row["attempt_id"])["status"], "succeeded")
+
 
 if __name__ == "__main__":
     unittest.main()
