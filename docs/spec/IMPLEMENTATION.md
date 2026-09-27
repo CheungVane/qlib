@@ -73,6 +73,7 @@ T01-F证据：`extensions/workbench/.venv/bin/python -m unittest discover -s ext
 | A39-R | 模拟器中覆盖订单超时核对、重复回报、部分成交/撤单竞争、重启对账、陈旧数据与紧急停止；核对账户守恒。仅证明模拟执行协议 | TRADE01—05 |
 | A39-L | 选定券商/账户/环境并获相应授权后，在真实接口验证订单及恢复对账，证据去敏；先完成交易详细设计与A39-F/R，未选择券商时本项保持阻塞 | TRADE06 |
 | A40 | 分析通过数据目录端口按历史snapshot定位；改变当前profile或数据根不改变历史数据身份；服务所需端口完整，CLI/API语义一致；声明的部署方式可启动/恢复，前端拆分保持URL/选择/刷新行为 | ARC10—12 |
+| A40证据（部分，适配器层） | `adapters/local_data_directory.py` 提供按快照ID解析的适配器：列表/加载/摘要/校验，摘要只含身份、组件覆盖、可复现性与日历，**不回传绝对路径**；不可读快照给 `unreadable_reason`；未知快照与空注册表 fail-closed（3项测试）。**未做**：服务/API/CLI装配，分析路径仍读当前CN配置，故A40与ARC11不通过 | ARC10—12 / T05 |
 | A41 | 并发满拒绝新准入；超时终止运行进程并保留证据；Agent到限阻止下一调用；CPU/内存硬限制实测生效，未支持则该环境验收不通过；启动失败/queued取消/迟到退出纠正可追溯；重启/取消不清空同范围预算事实 | LIFE06、EXEC06、AGENT04 |
 | A41证据（部分，T04第1—9片） | 政策：缺字段/非法值拒绝、内容哈希revision、`/v1/executions/catalog`暴露政策与用量。内存：rlimit不可强制但**容器经OOM实测可强制**；Qlib执行器仍未走容器。CPU：`ulimit -t`注入；强制测试确认被限终止。并发：槽满`capacity_exceeded`(409)、**事务内预留**（`create_attempt(max_concurrent=)`）、幂等重放不占槽、取消释放。超时：**deadline在V6落盘并在启动时冻结**（改政策不移动历史deadline），`enforce_timeouts()`确认结束才落`failed/timeout`、未确认留`interrupted`+`timeout_unconfirmed`。预算：V5账本单事务预留，超限`budget_exhausted`(409)不创建Attempt，重试计数、取消/重启不清空。归类：`resource_limit`识别标记或退出码152，**本机因shell先被终止而仍可能落interrupted**（时序依赖）。**仍缺**：`agent_max_calls`未强制（需执行器回报通道）、Qlib容器路由。**A41不通过** | LIFE06、EXEC06、AGENT04 / T04 |
 | A42 | 保存/复制实验、比较配置差异、复用模型、保存候选策略，跨专业页面保留同一实验及确切版本；统一发现入口可跳转，来源与关键限制始终可见 | LIFE07、U21/U26 |
