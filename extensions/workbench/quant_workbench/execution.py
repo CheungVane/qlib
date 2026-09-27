@@ -60,6 +60,13 @@ class PreconditionFailed(ExecutionError):
         return {"checks": self.checks, "reasons": self.reasons}
 
 
+class CapacityExceeded(ExecutionError):
+    """EXEC13: the concurrency slots are full, so no new attempt may be created."""
+
+    code = "capacity_exceeded"
+    status_code = 409
+
+
 class ExecutorPort(Protocol):
     """Executor boundary.
 
@@ -123,9 +130,17 @@ class ExecutionService:
     """Submit, inspect, reconcile and cancel attempts through injected executors."""
 
     def __init__(self, repository, executors: list[ExecutorPort] | None = None, importer=None,
-                 stats_window_seconds: int = 86400):
+                 stats_window_seconds: int = 86400, policy=None):
         self.repository = repository
         self.executors = list(executors or [])
+        self.policy = policy
+        self.policy_error: str | None = None
+        if self.policy is None:
+            try:
+                from .execution_policy import load_policy
+                self.policy = load_policy()
+            except Exception as exc:  # missing/invalid policy must refuse admission, not crash reads
+                self.policy_error = f"{type(exc).__name__}: {exc}"
         # EXEC12: the importer is an injected port; the core never imports an engine SDK.
         self.importer = importer
         self.stats_window_seconds = stats_window_seconds
@@ -212,6 +227,17 @@ class ExecutionService:
         previous = self.repository.find_attempt_by_key(idempotency_key)
         if previous is not None:
             return {"attempt": attempt_dto(previous), "created": False}
+
+        # EXEC13: bounded admission. A replay above never consumes a slot; a missing/invalid
+        # policy refuses admission instead of pretending to be bounded.
+        if self.policy_error:
+            raise PreconditionFailed(
+                [{"id": "execution_policy", "status": "fail", "detail": self.policy_error,
+                  "required_for": []}], ["execution_policy"])
+        open_attempts = self.repository.list_open_attempts(limit=max(1, self.policy.max_concurrent))
+        if len(open_attempts) >= self.policy.max_concurrent:
+            raise CapacityExceeded(
+                f"execution capacity is full ({self.policy.max_concurrent} concurrent attempts)")
 
         executor, checks, reasons = self._preflight(kind)
         if reasons:

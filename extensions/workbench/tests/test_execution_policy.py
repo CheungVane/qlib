@@ -158,5 +158,61 @@ class ChildLimitEnforcementTests(unittest.TestCase):
             self.assertNotIn("ulimit", Path(f"{folder}/out.log").read_text())
 
 
+class ConcurrencyAdmissionTests(unittest.TestCase):
+    """EXEC13 / A41: slots are bounded and a full service refuses new work (409)."""
+
+    def setUp(self):
+        try:  # works under both `unittest discover -s tests` and `-m unittest tests.*`
+            from tests.test_execution import StubExecutor
+        except ImportError:
+            from test_execution import StubExecutor  # type: ignore[no-redef]
+        from quant_workbench.execution import ExecutionService
+        from quant_workbench.storage import LocalResultRepository
+
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        self.repo = LocalResultRepository(root)
+        policy = ep.ExecutionPolicy(
+            max_concurrent=1, timeout_seconds=60, terminate_grace_seconds=2, cpu_seconds=60,
+            memory_bytes=1 << 30, enforce=("cpu",), agent_max_trials=2, agent_max_calls=10,
+            agent_scope="policy_revision")
+        self.service = ExecutionService(self.repo, executors=[StubExecutor(root)], policy=policy)
+
+    def tearDown(self):
+        for attempt in self.repo.list_open_attempts():
+            try:
+                self.service.cancel(attempt["attempt_id"])
+            except Exception:
+                pass
+
+    def submit(self, key, seconds="30"):
+        return self.service.submit("stub.sleep", {"seconds": seconds}, idempotency_key=key)
+
+    def test_second_submit_is_refused_while_the_slot_is_taken(self):
+        from quant_workbench.execution import CapacityExceeded
+
+        first = self.submit("k1")
+        self.assertEqual(first["attempt"]["status"], "running")
+        with self.assertRaises(CapacityExceeded) as raised:
+            self.submit("k2")
+        self.assertEqual(raised.exception.code, "capacity_exceeded")
+        self.assertEqual(raised.exception.status_code, 409)
+        self.assertEqual(len(self.repo.list_open_attempts()), 1, "refusal must not create an attempt")
+
+    def test_cancelling_releases_the_slot(self):
+        first = self.submit("k1")
+        self.service.cancel(first["attempt"]["attempt_id"])
+        self.assertEqual(self.repo.list_open_attempts(), [])
+        second = self.submit("k2", seconds="0")
+        self.assertEqual(second["attempt"]["status"], "running")
+
+    def test_idempotent_replay_still_works_when_full(self):
+        first = self.submit("k1")
+        again = self.service.submit("stub.sleep", {"seconds": "30"}, idempotency_key="k1")
+        self.assertFalse(again["created"])
+        self.assertEqual(again["attempt"]["attempt_id"], first["attempt"]["attempt_id"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -2,6 +2,15 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — T04 第3片：并发准入（槽满拒绝）
+
+- 来源：用户"继续"。
+- 实现：`execution.py` 新增 `CapacityExceeded`（code=`capacity_exceeded`、HTTP 409，经既有`ExecutionError`处理器自动映射）；`ExecutionService` 接受注入的 `policy`，缺省从 `configs/workbench/execution_policy.json` 加载；`submit()` 在幂等重放之后、preflight 之前按 `policy.max_concurrent` 统计未终态Attempt，**槽满即拒绝且不创建Attempt**；政策缺失/非法时以 `execution_policy` 前置失败拒绝（fail-closed），读取路径不受影响。
+- 测试：新增3项——槽位被占时第二次提交抛`CapacityExceeded`(409)且未新增Attempt；取消后槽位释放、下次可提交；**幂等重放不消耗槽位**。共14项政策测试；tearDown 取消遗留Attempt避免泄漏子进程。
+- 边界（如实记录）：槽位判定在插入前完成，**不是EXEC13要求的"持久化事务内预留"**；单进程单用户下竞态窗口极小但未消除。
+- 未完成：deadline与超时终止监督、Agent预算预留、Qlib执行器改走容器、`failed/resource_limit`归类。**A41仍不通过**。
+- 验证：全量门禁 `[gate] ok`。
+
 ## 2026-09-27 — T04 第2片：容器内存探测 + CPU 上限真实注入
 
 - 来源：用户"可以"，接续 T04 剩余项。
