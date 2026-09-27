@@ -18,6 +18,11 @@ from quant_workbench.execution import (
 )
 from quant_workbench.storage import LocalResultRepository, SCHEMA_VERSION, V1_SCHEMA, V2_ATTEMPT_SCHEMA
 
+try:  # works under both `unittest discover -s tests` and `-m unittest tests.*`
+    from tests.sandbox import isolated_repo_root
+except ImportError:
+    from sandbox import isolated_repo_root  # type: ignore[no-redef]
+
 
 class StubExecutor(SubprocessExecutor):
     """Real subprocess lifecycle with cheap commands; no engine is started."""
@@ -117,12 +122,9 @@ def wait_for(predicate, timeout=10.0, interval=0.05):
 class ExecutionTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp.name)
-        # find_repo_root() only accepts a candidate that looks like the checkout; mark the
-        # sandbox so no stub attempt can leak work into the real working tree.
-        (self.root / "configs/cn").mkdir(parents=True)
-        (self.root / "configs/cn/profile.json").write_text("{}", encoding="utf-8")
-        (self.root / "scripts").mkdir()
+        # find_repo_root() refuses an explicit root that is not a checkout; mark the sandbox
+        # so no stub attempt can leak work into the real working tree (tests/sandbox.py).
+        self.root = isolated_repo_root(self.temp.name)
         self.repo = LocalResultRepository(self.root / "store")
         self.executor = StubExecutor(self.root)
         self.extra_executors = []

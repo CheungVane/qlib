@@ -2,6 +2,15 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — 测试沙箱硬边界：executor 不再写进真实 checkout
+
+- 来源：用户确认删除仓库根目录的测试残留 `runs/`（`stub_sleep`、`rdagent_factor_baseline` 的工作目录，实测 1.1 MB）。
+- 根因（已复现）：`test_execution_policy.py` 的两组用例把**裸临时目录**交给 `StubExecutor`，而 `discover_project_root(explicit)` 在校验失败后继续扫描 `here.parents`，回退到已安装的 checkout——于是 stub 的 workspace 落进仓库根 `runs/`。删掉目录只是清掉表象，测试会再造一次。
+- 修复：①`cn_market.discover_project_root(explicit)` 改为**显式根权威**：不像 checkout（缺 `configs/cn/profile.json` 或 `scripts/`）即抛 `ProjectRootNotFound`，不再静默回退；②新增 `tests/sandbox.py::isolated_repo_root()`（打标记并断言解析回自身），`test_execution.py` 与 `test_execution_policy.py` 三处裸 `Path(tmp.name)` 改用该助手；③`.gitignore` 增加 `runs/` 作为兜底。
+- 测试：新增 `tests/test_sandbox_isolation.py` 3 项（沙箱内 workspace 不外泄、未标记显式根被拒、真实 checkout 仍被接受且 `runs/` 仍被忽略）；全量门禁 `[gate] ok`（Python 272 项含 2 项环境跳过、JS 25 项）；复跑原先泄漏的两组用例后仓库根不再出现 `runs/`。
+- 边界：无显式参数时 `discover_project_root()` 仍按"`QWB_REPO_ROOT`→包位置→cwd→包根"解析，生产路径未改；本次不涉及数据、指标、能力声明。
+- 清理：`runs/` 已移入废纸篓；未提交任何测试残留。
+
 ## 2026-09-27 — BaoStock 访问规则写入代码：单只顺序 + 强制 sleep + 遇封即停
 
 - 来源：用户明确要求"baostock 适合单只循环，必须加 sleep，禁止多线程并发。这个写到代码里，然后同步到spec"。

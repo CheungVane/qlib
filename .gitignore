@@ -37,6 +37,8 @@ test-output.xml
 .output
 .data
 .venv/
+# executor/test stubs must not leave workspaces in the tree (2026-09-27)
+runs/
 
 # special software
 mlruns/

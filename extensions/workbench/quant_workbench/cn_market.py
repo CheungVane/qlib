@@ -66,22 +66,45 @@ def rdagent_snapshot_path(fingerprint: str, home=None) -> Path:
     return base / ".qlib/qlib_data/qwb_cn_current" / fingerprint[:12]
 
 
+class ProjectRootNotFound(RuntimeError):
+    """An explicit project root that is not a checkout is refused.
+
+    Falling back to the installed checkout would run engine/stub work against the real
+    working tree — that is how test leftovers (`runs/`) appeared in the repository root.
+    """
+
+
+def _looks_like_checkout(candidate: Path) -> bool:
+    try:
+        return (candidate / "configs/cn/profile.json").is_file() and (candidate / "scripts").is_dir()
+    except OSError:
+        return False
+
+
 def discover_project_root(explicit=None) -> Path:
-    """Locate the Qlib checkout that owns configs/cn/profile.json and scripts/."""
-    candidates = []
+    """Locate the Qlib checkout that owns configs/cn/profile.json and scripts/.
+
+    Without an explicit candidate the installed checkout is the intended answer. With one,
+    an unmarked directory (a test sandbox, a data directory) must not resolve to the real
+    checkout, so the mismatch is raised instead of silently ignored.
+    """
+    here = Path(__file__).resolve()
     if explicit:
-        candidates.append(Path(explicit))
+        candidate = Path(explicit)
+        if _looks_like_checkout(candidate):
+            return candidate.resolve()
+        raise ProjectRootNotFound(
+            f"explicit project root is not a Qlib checkout: {candidate} "
+            f"(needs configs/cn/profile.json and scripts/); refusing to fall back to "
+            f"{here.parents[2].resolve()}")
+    candidates = []
     if os.environ.get("QWB_REPO_ROOT"):
         candidates.append(Path(os.environ["QWB_REPO_ROOT"]))
-    here = Path(__file__).resolve()
     candidates.extend(here.parents)
     candidates.append(Path.cwd())
     for candidate in candidates:
-        try:
-            if (candidate / "configs/cn/profile.json").is_file() and (candidate / "scripts").is_dir():
-                return candidate.resolve()
-        except OSError:
-            continue
+        if _looks_like_checkout(candidate):
+            return candidate.resolve()
     return here.parents[2].resolve()
 
 

@@ -13,6 +13,11 @@ from quant_workbench.adapters.executors import SubprocessExecutor
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
+try:  # works under both `unittest discover -s tests` and `-m unittest tests.*`
+    from tests.sandbox import isolated_repo_root
+except ImportError:
+    from sandbox import isolated_repo_root  # type: ignore[no-redef]
+
 
 class PolicyLoadingTests(unittest.TestCase):
     def test_shipped_policy_loads_with_explicit_numbers(self):
@@ -178,7 +183,7 @@ class ConcurrencyAdmissionTests(unittest.TestCase):
 
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        root = Path(self.tmp.name)
+        root = isolated_repo_root(self.tmp.name)
         self.repo = LocalResultRepository(root)
         policy = ep.ExecutionPolicy(
             max_concurrent=1, timeout_seconds=60, terminate_grace_seconds=2, cpu_seconds=60,
@@ -273,7 +278,7 @@ class AgentBudgetTests(unittest.TestCase):
 
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        root = Path(self.tmp.name)
+        root = isolated_repo_root(self.tmp.name)
         self.repo = LocalResultRepository(root)
         self.policy = ep.ExecutionPolicy(
             max_concurrent=5, timeout_seconds=60, terminate_grace_seconds=2, cpu_seconds=60,
@@ -354,7 +359,7 @@ class AgentBudgetTests(unittest.TestCase):
             from test_execution import StubExecutor  # type: ignore[no-redef]
         from quant_workbench.execution import ExecutionService
 
-        root = Path(self.tmp.name)
+        root = isolated_repo_root(self.tmp.name)
         service = ExecutionService(self.repo, executors=[StubExecutor(root)], policy=self.policy)
         service.submit("stub.exit", {"script": "exit 0"}, idempotency_key="plain1")
         self.assertEqual(self.repo.agent_budget_rows(self.policy.revision()), [])
