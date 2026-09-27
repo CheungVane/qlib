@@ -2,7 +2,7 @@
 
 状态：生效。版本：2.1（交接复审；T01-F后端统计纠正已实现；T01-U界面已验收，规模合同待验收）。修订日期：2026-09-27（初始生效2026-09-26）。
 关联需求：U18（比较分组）、U19（因子层分析与因子面板入库）、U24（容量分层）；上游要求 ID：DATA01—06、METRIC01—06、COMPARE01、GOV-DERIVED、GOV-SOURCE、ARC07。
-验收：IMPLEMENTATION 阶段 M2 的 A28（分组比较）与阶段 M2 的 A29（因子面板入库）、A30（因子分析口径）。本文不改变结果语义专题（[结果合同](RESULT_CONTRACT.md)）与来源专题（[来源审计](PROVENANCE_AUDIT.md)）。
+验收：v2指定纠正项另见A34，分块规模另见A38；IMPLEMENTATION 阶段 M2 的 A28（分组比较）与阶段 M2 的 A29（因子面板入库）、A30（因子分析口径）。本文不改变结果语义专题（[结果合同](RESULT_CONTRACT.md)）与来源专题（[来源审计](PROVENANCE_AUDIT.md)）。
 
 ## 1. 范围与原则
 
@@ -79,7 +79,7 @@
 | `ic_std` / `icir` | IC 序列标准差；`icir = ic_mean / ic_std` | `ic_std=0` 时 `icir=null` |
 | `t_stat` / `p_value` | `t = ic_mean / se_mean`；se_mean是均值的Newey-West标准误，不能再除sqrt(N)。滞后L=min(h−1,N−1)，p为双侧正态近似 | 估计量定义见下；v2使用nw_se_mean；旧版算法保留但不满足本定义 |
 | `fdr_q` | Benjamini-Hochberg 校正后的 q 值 | 必须披露参与检验的因子数量 |
-| `quantile_spread` | 按因子分 5 组的平均未来收益 Q5−Q1 | 附带单调性判断（分组收益是否单调） |
+| `quantile_spread` | 按因子分 5 组的平均未来收益 Q5−Q1 | 当前仅输出单调性代理：组号与组均值的Pearson相关绝对值>0.8，且`(Q5−Q1>0)==(corr>0)`；此为既有布尔判定，不等于逐组严格单调或经济有效性 |
 | `decay` | 同一因子在 `h ∈ {1,5,10,20}` 下的 `ic_mean` | 描述因子衰减 |
 | `turnover` | 横截面秩的平均换手（相邻交易日的秩变动） | 高换手意味着更高交易成本风险 |
 
@@ -96,8 +96,8 @@
 | `absolute_correlation_similarity`（新定义） | `abs(corr)`（逐对），越大表示越相似；只表示相关相似度，不证明非线性冗余 | v2已实现；面板与有效相关值齐备才可算 |
 | `correlation_distance`（新定义） | `1 - abs(corr)`（逐对），越大表示越不相似 | v2已实现命名纠正；旧字段 `redundancy` 实际计算此值，不能解读为越大越冗余 |
 | `ic_series_correlation` | 两因子 IC 序列的相关系数 | 需要双方 IC 序列，平台可算 |
-| `orthogonal_ic` | 新因子对既有因子集合横截面回归取残差后的 IC | 需要既有集合，平台可算 |
-| `incremental_ic` | 等权合成 `既有集合 + 新因子` 前后的合成 IC 差 | 需要既有集合，平台可算 |
+| `orthogonal_ic` | 新因子对既有因子集合横截面回归取残差后的 IC | 已有探索性输出；既有增量混用Pearson/Spearman，A30未通过，须统一方法后复验 |
+| `incremental_ic` | 等权合成 `既有集合 + 新因子` 前后的合成 IC 差 | 已有探索性输出；留一组合样本可能不同，A30未通过，须在共同有效样本上复验 |
 | `holding_overlap` | 组合持仓重叠 | **未接入**：缺少持仓/成交明细 |
 | `crowding` | 因子拥挤度 | **未接入**：需要市场层面使用数据 |
 
