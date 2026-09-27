@@ -253,7 +253,16 @@ class WorkbenchService:
                                                   embargo=embargo, trials=trials, blocks=blocks)
 
     # -- performance and risk (U22) ----------------------------------------
-    def risk_report(self, run_ids: list[str], periods_per_year: int | None = None) -> dict[str, Any]:
+    def risk_report(self, run_ids: list[str], periods_per_year: int | None = None, *,
+                    analysis_version: int = 1, risk_free_rate: float | None = None,
+                    target_return: float | None = None) -> dict[str, Any]:
+        from . import risk_v2
+        if type(analysis_version) is not int or analysis_version not in (1, 2):
+            raise risk_layer.RiskError("analysis_version must be 1 or 2")
+        if analysis_version == 1 and (risk_free_rate is not None or target_return is not None):
+            raise risk_layer.RiskError("risk_free_rate and target_return require analysis_version=2")
+        risk_v2.scalar(risk_free_rate, "risk_free_rate")
+        risk_v2.scalar(target_return, "target_return")
         requested = list(dict.fromkeys(run_ids or []))
         if not requested:
             raise risk_layer.RiskError("run_id is required")
@@ -269,13 +278,18 @@ class WorkbenchService:
             annualisation_source = "config: configs/cn/profile.json"
         else:
             annualisation_source = "caller"
-        if isinstance(periods_per_year, bool) or not 1 <= int(periods_per_year) <= 1000:
+        if type(periods_per_year) is not int or not 1 <= periods_per_year <= 1000:
             raise risk_layer.RiskError("periods_per_year must be between 1 and 1000")
         reports = []
         for run_id in requested:
             revision = self.get_revision(run_id)
             if revision is None:
                 raise LookupError(f"run not found: {run_id}")
+            if analysis_version == 2:
+                reports.append(risk_v2.report(revision, periods_per_year=periods_per_year,
+                                             annualisation_source=annualisation_source,
+                                             risk_free_rate=risk_free_rate, target_return=target_return))
+                continue
             view = series_view.return_series(revision)
             if view is None or len(view["values"]) < risk_layer.MIN_OBSERVATIONS:
                 raise risk_layer.RiskError(
@@ -288,7 +302,8 @@ class WorkbenchService:
             report["basis"]["dataset"] = revision["result"]["run"].get("dataset") or {}
             report["basis"]["periods_per_year_source"] = annualisation_source
             reports.append(report)
-        return {"items": reports, "count": len(reports),
+        return {**({"schema_version": 2} if analysis_version == 2 else {}),
+                "items": reports, "count": len(reports),
                 "periods_per_year": periods_per_year,
                 "periods_per_year_source": annualisation_source,
                 "scope": "每个运行独立计算；未接入项见各自的 not_available 列表"}

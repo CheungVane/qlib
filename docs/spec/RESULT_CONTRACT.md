@@ -1,6 +1,6 @@
 # 结果安全与查询合同（2026-09-27修订）
 
-状态：生效。版本2.1（2026-09-27执行交接复审）；比较身份收敛与指标纠正尚需后续实现验收，本次仅改spec。
+状态：生效。版本2.1（2026-09-27执行交接复审）；风险v2后端已进入T01-R切片；比较身份、因子纠正与完整UI仍待验收，当前证据见IMPLEMENTATION。
 
 依据用户授权修复审查R01—R12及S01—S06。本专题细化ARC06/07/08、METRIC02—05、COMPARE01、RW02—05、CN04；不降低阶段验收要求。
 
@@ -100,7 +100,7 @@ comparison为中立证据对象，不固定要求cn_scenario。未知字段不�
 | 分布与极值 | 正收益比例、偏度、峰度、最好/最差单日 |
 | 月度 / 年度收益 | 按日历月/年聚合的复利收益矩阵；缺月显示 `null` 而不是 0 |
 
-定义卡与兼容：上述风险指标遵循METRIC06。Sortino目标下行偏差参照 [CME托管的定义说明](https://www.cmegroup.com/education/files/rr-sortino-a-sharper-ratio.pdf)。旧实现 `mean(r)/std(r|r<0)` 与本定义不等价：旧产物保留旧公式和限制，新实现必须使用新definition_id；历史0.1验收不能证明v2正确。回归必须覆盖恒定负收益、相同亏损幅度但不同发生频率、非零目标和无下行偏差；手算参考不能只复制实现。此处是待实现纠正，本次未修改运行时输出。
+定义卡与兼容：上述风险指标遵循METRIC06。Sortino目标下行偏差参照 [CME托管的定义说明](https://www.cmegroup.com/education/files/rr-sortino-a-sharper-ratio.pdf)。旧实现 `mean(r)/std(r|r<0)` 与本定义不等价：旧产物保留旧公式和限制，新实现必须使用新definition_id；历史0.1验收不能证明v2正确。回归必须覆盖恒定负收益、相同亏损幅度但不同发生频率、非零目标和无下行偏差；手算参考不能只复制实现。T01-R已实现风险API/CLI的v2纠正；默认v1和当前UI仍为旧定义，完整T01尚未验收。
 
 ### 首批定义卡、版本选择与验收样例
 
@@ -109,6 +109,15 @@ comparison为中立证据对象，不固定要求cn_scenario。未知字段不�
 版本2风险输出用 `sortino_target_downside` 替代旧 `sortino`；因子输出用新相关相似度/距离字段，旧 `redundancy` 不出现在版本2中。每个计算项附definition_id、formula、input_refs（确切结果revision/因子panel/数据snapshot身份）、input_basis（绝对/相对谁、成本前后）、parameters、availability/reason；同输入以新公式复算是新分析结果，不改旧ResultRevision。参数、输入引用与定义版本完整一致才可复算对照，持久化报告另存不可变报告身份。
 
 首批rf、T仅接受同频有限标量，默认0并注明default来源；不自动转换年收益目标，不支持曲线输入时明确拒绝。年化系数沿用已记录配置及既有来源规则。Sharpe/Sortino用sqrt(ppy)为明确约定，声明适用假设，不将重叠收益宣称为独立样本。输入缺测、现金流未解释或收益口径未知时不静默删除/补0；指标按适用性返回不可用。
+
+#### T01-R风险接口切片（2026-09-27实施决定）
+
+- 风险API增加 `analysis_version`、`risk_free_rate`、`target_return`；CLI对应 `--analysis-version`、`--risk-free-rate`、`--target-return`。标量单位是日频小数收益；版本1传入新增收益参数须拒绝，避免静默忽略。CLI旧版警告写stderr，stdout的JSON不变。
+- v2返回 `schema_version=2`，每个item带确切 `revision_id`、`definitions`、原来源/行情性质与 `basis`；不持久化分析报告、不改历史revision。定义卡的 `input_refs` 包含run、revision、源metric/definition和已记录dataset身份；未知snapshot保持null，不把当前数据补为历史身份。
+- 首批仅认可已登记的日频绝对收益：`native.qlib.return` + `native.qlib.report.return.v1` 为Qlib报告成本前收益；`platform.equity` + `platform.equity.account.v1` 推导成本后观测区间收益（不含首个权益点之前的收益）。这是定义映射，不是源数据真实性认证；来源分类另保留。两者均要求记录 `evidence.comparison.cashflow_policy=none`。权益首版仅支持正有限值；原始收益导致财富非正（r≤−1）时整组返回 `nonpositive_wealth_unsupported`，本批不支持破产后的绩效统计。
+- 不因metric名称猜定义。未登记定义（包括已扣rf/基准超额）、未知现金流、缺测、非日频、无交易日历或样本不足，v2对应风险项统一null并给机器原因；不尝试另一序列掩盖优先源的缺口。已扣rf的序列本批不支持，因而不会再次扣rf。没有任何收益源同样返回不可用item；未知run仍404。当前拒绝显式null缺测，尚不能根据完整日历快照识别被完全省略的交易日，必须披露覆盖未核验限制。
+- 当前v2复用其他风险量的既有估计量，并提供逐项公式/参数/不可用原因；本批只认证Sharpe/Sortino纠正与输入保护，不宣称所有统计量完成外部认证。回撤维持“首个观测权益起”的口径，不冒充含初始资金的完整回撤；CVaR尾部不足2点时为null，原因和值一致。
+- 实施拆为T01-R（风险后端/API/CLI）、T01-F（因子/NW）、T01-U（UI显式v2与浏览器验收）。三个切片均验证后才关闭T01/A34；中间版本UI继续旧版，须显示旧定义限制。
 
 手算样例（单期未年化，测试年化时统一乘sqrt(ppy)）：
 

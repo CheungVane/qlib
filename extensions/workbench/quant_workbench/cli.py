@@ -96,6 +96,9 @@ def parser() -> argparse.ArgumentParser:
     a = sub.add_parser("risk", help="performance and risk metrics for one or more runs")
     a.add_argument("run_ids", nargs="+")
     a.add_argument("--periods-per-year", type=int)
+    a.add_argument("--analysis-version", type=int, choices=[1, 2], default=1)
+    a.add_argument("--risk-free-rate", type=float, help="same-frequency daily decimal return (v2)")
+    a.add_argument("--target-return", type=float, help="same-frequency daily decimal return (v2)")
     a = sub.add_parser("validate", help="PSR/DSR/PBO validation for one or more runs")
     a.add_argument("run_ids", nargs="+")
     a.add_argument("--horizon", type=int, default=1)
@@ -191,7 +194,11 @@ def main(argv: list[str] | None = None) -> int:
             horizons = [int(value) for value in str(args.horizons).split(',') if value.strip()]
             result = service.factor_analysis(args.factor_ids, horizons)
         elif args.command == 'risk':
-            result = service.risk_report(args.run_ids, args.periods_per_year)
+            result = service.risk_report(args.run_ids, args.periods_per_year,
+                                        analysis_version=args.analysis_version,
+                                        risk_free_rate=args.risk_free_rate, target_return=args.target_return)
+            if args.analysis_version == 1:
+                print("旧定义，未满足当前纠正合同；可使用 --analysis-version 2", file=sys.stderr)
         elif args.command == 'validate':
             result = service.strategy_validation(args.run_ids, args.horizon, args.splits,
                                                  args.embargo, args.trials, args.blocks)

@@ -428,3 +428,9 @@ test('U20/U21: attention chip, command palette and the validation card',async()=
     assert.match(html,/工作台计算；不能替代前瞻验证/);
   });
 });
+
+test('T01-R: legacy risk presentation discloses its definition limit',async()=>{
+  const x=ui(async()=>response({items:[{metrics:{sortino:1},basis:{sample:{},parameters:{}},calendar:{}}]}));
+  const html=await x.run("renderRiskCard('r')");
+  assert.match(html,/旧定义，未满足当前纠正合同/);
+});

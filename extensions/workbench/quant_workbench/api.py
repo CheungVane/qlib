@@ -167,9 +167,12 @@ def create_app(service: WorkbenchService):
         return service.strategy_validation(run_id, horizon, splits, embargo, trials, blocks)
 
     @app.get("/v1/risk")
-    def risk(run_id: list[str] = Query(...), periods_per_year: int | None = Query(None, ge=1, le=1000)):
+    def risk(run_id: list[str] = Query(...), periods_per_year: int | None = Query(None, ge=1, le=1000),
+             analysis_version: int = Query(1, ge=1, le=2),
+             risk_free_rate: float | None = Query(None), target_return: float | None = Query(None)):
         """U22: performance and risk metrics for one or more recorded runs."""
-        return service.risk_report(run_id, periods_per_year)
+        return service.risk_report(run_id, periods_per_year, analysis_version=analysis_version,
+                                   risk_free_rate=risk_free_rate, target_return=target_return)
 
     @app.get("/v1/attention")
     def attention(limit: int = Query(20, ge=1, le=100)):

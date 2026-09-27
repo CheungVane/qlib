@@ -326,7 +326,7 @@ async function renderRiskCard(runId){
  const months=['01','02','03','04','05','06','07','08','09','10','11','12'];
  const monthlyRows=Object.keys(monthly).sort().map(year=>`<tr><th>${esc(year)}</th>${months.map(month=>{const value=monthly[year][month];return `<td>${typeof value==='number'?pct(value):'<small class="muted">缺月</small>'}</td>`;}).join('')}</tr>`).join('');
  const unavailable=(report.not_available||[]).map(item=>`${esc(item.metric)}（${esc(item.reason)}）`).join('；');
- return card('风险与绩效',`${badge('derived')}<div class="metric-row">${boxes}</div>
+ return card('风险与绩效',`${badge('derived')}<p class="warning">旧定义，未满足当前纠正合同。目标下行偏差版本已提供 API/CLI，界面切换待验收。</p><div class="metric-row">${boxes}</div>
  <p class="panel-note">样本 ${esc(report.basis.sample.start)} → ${esc(report.basis.sample.end)}（${report.basis.sample.observations} 个观测）· 年化参数 ${report.basis.parameters.periods_per_year} 个交易日 · 收益来源 ${esc(report.return_source||'未记录')}</p>
  <details><summary>回撤期（按深度）</summary><ul class="stack li">${episodes||'<li>样本内没有回撤</li>'}</ul></details>
  <details><summary>月度收益（缺月为 null，不填 0）</summary><div class="table-scroll"><table class="table compare-table"><thead><tr><th>年</th>${months.map(month=>`<th>${month}月</th>`).join('')}</tr></thead><tbody>${monthlyRows||'<tr><td colspan="13">无记录</td></tr>'}</tbody></table></div></details>
