@@ -80,7 +80,7 @@ T01-F证据：`extensions/workbench/.venv/bin/python -m unittest discover -s ext
 | T02 事后诊断真实性 | 定义已冻结（[VALIDATION §2A](VALIDATION.md)）；可实现 | 不依赖TrialLedger：披露选择范围、N依据、权重和及独立状态；按§2A定义卡实现，N必须进入公式并锁定输入revision。不完整集合只标探索性。出口A31/A32及A36诊断子项 |
 | T03 比较合同 | 无，可开始 | 首批回测指标字段适用表，equity/metric均验证身份缺失/差异、不同初始资金反例；服务端判方向和可比性。出口A13/A27/A28 |
 | T04 执行政策 | 无，可开始 | 持久化并发槽、截止时间、政策修订与Agent计数；启动前检查、超时终止/恢复。出口A41；上限未支持的环境不通过 |
-| T05 数据目录边界 | **进行中**：快照登记、组件清单、目录端口与as-of夹具已实现；物化引用/旧路径/迁移恢复未做 | 按[数据源清单](DATA_SOURCES.md)实现适配器与快照身份（FINV主 + BAO校验 + EM补充）；snapshot身份→组件清单→物化引用；旧路径显式登记，未知不补造；设计并验证迁移/恢复。出口A16/A17和A40数据访问子项。A38分块可独立开展，超旧上限的真实研究须先通过A38 |
+| T05 数据目录边界 | **接近完成**：快照登记、组件清单、目录端口、物化可复跑、bar质量门禁、旧路径登记、迁移与恢复均已实现并实测；剩余真实财务修订源与A40子项 | 按[数据源清单](DATA_SOURCES.md)实现适配器与快照身份（FINV主 + BAO校验 + EM补充）；snapshot身份→组件清单→物化引用；旧路径显式登记，未知不补造；设计并验证迁移/恢复。出口A16/A17和A40数据访问子项。A38分块可独立开展，超旧上限的真实研究须先通过A38 |
 | T06 实验/模型/策略对象 | T04、T05；接口草案可先行 | 定义版本、Run/Attempt、模型输入契约/复用、StrategyVersion及TrialLedger基础记账；先冻结DTO/命令样例和迁移，再实现固定流程，无单Stage续跑。出口A35，为T07提供试验事实 |
 | T07 实际验证证据 | T02、T06 | 分折训练、折内预处理、预测/标签、测试集访问与账本快照；失败保持unverified/invalidated。出口A36其余子项，与T02合并后才可标A36通过 |
 | T08 限定真实研究 | T01、T03、T05—T07、DEC01 | 明确来源/股票池/区间的真实链路，必要历史组件通过质量与时间语义验收。出口A37；来源待选只阻塞本任务 |
@@ -203,9 +203,9 @@ M1的完成证据：环境锁、导入命令、成功/失败样本、自动化�
 | 验收ID | 场景与通过条件 | 对应要求 |
 | --- | --- | --- |
 | A16 | 同时输入bar/财务修订/重复代码映射夹具；原始数据可追溯；不同available_at查询不泄漏未来修订；缺字段拒绝或显式降级 | DATA01—05 |
-| A16证据（部分） | `data_directory.select_as_of` 只返回 `available_at<=as_of` 的最新修订，测试覆盖"未来修订不泄漏"与"无可用修订返回None"；`resolve_symbol` 按有效期区间解析代码复用，区间冲突抛错；`FreeSnapshotReader` 缺组件/缺字段抛 `DataDirectoryError`；真实快照按快照ID可读（不看当前profile）。**财务修订使用合成夹具，未接真实财务源；真实bar质量门禁未做** | DATA01—05 / T05 |
+| A16证据（部分） | `data_directory.select_as_of` 只返回 `available_at<=as_of` 的最新修订（测试覆盖未来修订不泄漏与无可用返回None）；`resolve_symbol` 按有效期区间解析代码复用、冲突抛错；`validate_bars` 对中证500全量500只做对齐/正数/无穷/OHLC门禁取得**0问题**，并把NaN计为缺失（`missing_points`）而非损坏；缺组件/缺字段抛 `DataDirectoryError`。**财务修订仍用合成夹具（未接真实财务源）；真实bar的覆盖范围/基准门禁未做** | DATA01—05 / T05 |
 | A17 | 已发布snapshot不被追加修改；物化记录输入版本；同种子配置可复跑，输入缺证据时复现状态受限 | DATA04, ARC06 |
-| A17证据（部分） | `publish_snapshot` 对相同摘要幂等复用、对同ID不同摘要拒绝（不可追加修改）；`load_snapshot` 校验组件摘要与清单一致，篡改即拒绝；`reproducibility()` 要求provenance完整且materializer记录名称与版本，否则返回limited及原因；真实快照已登记content_digest与archive SHA-256。**物化引用、同种子复跑与迁移/恢复未实现** | DATA04, ARC06 / T05 |
+| A17证据（部分） | `publish_snapshot` 相同摘要幂等、同ID不同摘要拒绝、拒绝把legacy路径升格；`load_snapshot` 摘要校验，篡改即拒绝；`materialize_panel` 同输入+同seed两次输出摘要一致并通过`verify_materialization`复算（真实快照close/volume窗口`sha256:db60e4b6…`）；`migrate_registry`升级前备份并拒绝降级新版本、`restore_registry`可从备份恢复；`reproducibility()`要求provenance完整且materializer有名称与版本。**物化仅覆盖小窗口；同种子复跑未覆盖全量面板** | DATA04, ARC06 / T05 |
 | A18 | 两个不同Qlib配置进程不污染全局状态；进程崩溃标记interrupted；重复提交不产生双任务；重试保留Attempt | ARC05, RUN01/03 |
 | A18证据 | 两次真实Qlib Attempt在不同工作目录与各自`mlflow.db`运行；RD-Agent基线探针19秒、单轮loop探针3分29秒均退出码0（loop同步1个研究会话）；`test_execution.py`覆盖崩溃→interrupted、同幂等键不产生第二个Attempt、失败后新键保留旧Attempt，且桩执行器工作目录被断言限制在测试沙箱内 | EXECUTION.md §5 |
 | A19 | 取消有确认状态；取消/完成竞争不覆盖已确认终态；失败任务保留日志/部分产物；API读取不会启动训练 | RUN02, API02 |

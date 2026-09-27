@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
+import shutil
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -25,6 +27,8 @@ from .free_sources import FreeSourceError
 
 SCHEMA_VERSION = 1
 COMPONENT_KINDS = ("bar", "calendar", "universe", "status", "financial", "code_map")
+MATERIALIZER_VERSION = "1"
+LEGACY_SOURCE_CLASS = "legacy_unknown"
 
 
 class DataDirectoryError(ValueError):
@@ -82,6 +86,10 @@ def publish_snapshot(registry: str | Path, record: dict) -> Path:
     """Write a snapshot record; an existing id may only be reused with identical content."""
     registry = Path(registry)
     registry.mkdir(parents=True, exist_ok=True)
+    if (registry / f"{record['snapshot_id']}.legacy.json").exists():
+        raise DataDirectoryError(
+            f"{record['snapshot_id']} is registered as a legacy path; "
+            "register a new snapshot id instead of promoting it silently")
     target = registry / f"{record['snapshot_id']}.json"
     if target.exists():
         existing = json.loads(target.read_text())
@@ -119,6 +127,222 @@ def reproducibility(record: dict) -> dict:
     if missing:
         return {"state": "limited", "reason": f"materializer missing {missing}"}
     return {"state": "reproducible", "reason": None}
+
+
+# -- A17 materialization -----------------------------------------------------
+def materialize_panel(reader: "FreeSnapshotReader", *, output: str | Path, universe: str,
+                      fields: Sequence[str], start: date, end: date,
+                      seed: int | None = None, limit: int | None = None) -> dict:
+    """Write a deterministic long-format panel and return its materialization record.
+
+    Same snapshot + universe + fields + window + seed produces byte-identical output,
+    so the output digest is a reproducible identity (A17).
+    """
+    if not fields:
+        raise DataDirectoryError("at least one field is required")
+    unknown = [field for field in fields if field not in free_sources.ARCHIVE_FIELDS]
+    if unknown:
+        raise DataDirectoryError(f"unknown feature fields: {unknown}")
+    calendar = [day for day in reader.calendar() if start <= day <= end]
+    if not calendar:
+        raise DataDirectoryError("window does not intersect the snapshot calendar")
+    symbols = [item["symbol"] for item in reader.instruments(universe)]
+    if limit:
+        symbols = symbols[:limit]
+    target = Path(output)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    full_calendar = reader.calendar()
+    rows = 0
+    with target.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write("date,symbol," + ",".join(fields) + "\n")
+        for symbol in sorted(symbols):
+            series = {}
+            for field in fields:
+                try:
+                    values = free_sources.read_bin_values(
+                        reader.path("bar") / symbol.lower() / f"{field}.day.bin")
+                except (FreeSourceError, OSError):
+                    continue
+                series[field] = values
+            if not series:
+                continue
+            length = min(len(values) for values in series.values())
+            start_index = free_sources.read_bin_head_tail(
+                reader.path("bar") / symbol.lower() / f"{fields[0]}.day.bin")["start_index"]
+            for offset in range(length):
+                position = start_index + offset
+                if position >= len(full_calendar):
+                    break
+                day = full_calendar[position]
+                if not (start <= day <= end):
+                    continue
+                handle.write(",".join([day.isoformat(), symbol]
+                                      + [f"{series[field][offset]:.6f}" for field in fields]) + "\n")
+                rows += 1
+    digest = "sha256:" + hashlib.sha256(target.read_bytes()).hexdigest()
+    return {
+        "materializer": {"name": "materialize_panel", "version": MATERIALIZER_VERSION},
+        "seed": seed,
+        "input_snapshot_id": reader.record["snapshot_id"],
+        "input_content_digest": reader.record["content_digest"],
+        "universe": universe,
+        "fields": list(fields),
+        "window": {"start": start.isoformat(), "end": end.isoformat()},
+        "rows": rows,
+        "output_digest": digest,
+        "output_name": target.name,
+        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+
+def verify_materialization(record: dict, output: str | Path) -> dict:
+    """A17 replay check: recomputed digest must equal the recorded one."""
+    actual = "sha256:" + hashlib.sha256(Path(output).read_bytes()).hexdigest()
+    return {"ok": actual == record.get("output_digest"), "actual": actual,
+            "expected": record.get("output_digest")}
+
+
+# -- legacy paths and registry migration -------------------------------------
+def register_legacy(registry: str | Path, *, legacy_id: str, path_label: str, reason: str) -> Path:
+    """Explicitly register a legacy data path so it is never mistaken for a snapshot."""
+    registry = Path(registry)
+    registry.mkdir(parents=True, exist_ok=True)
+    if (registry / f"{legacy_id}.json").exists():
+        raise DataDirectoryError(f"{legacy_id} is already registered as a snapshot")
+    target = registry / f"{legacy_id}.legacy.json"
+    target.write_text(json.dumps({
+        "kind": "legacy_path",
+        "legacy_id": legacy_id,
+        "path_label": path_label,
+        "reason": reason,
+        "source_class": LEGACY_SOURCE_CLASS,
+        "digest": None,
+        "status": "legacy",
+        "reproducibility": {"state": "limited", "reason": "legacy path has no recorded digest"},
+        "registered_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    return target
+
+
+def list_legacy(registry: str | Path) -> list[dict]:
+    return [json.loads(path.read_text()) for path in sorted(Path(registry).glob("*.legacy.json"))]
+
+
+def migrate_registry(registry: str | Path, *, target_version: int = SCHEMA_VERSION,
+                     backup_root: str | Path | None = None) -> dict:
+    """Upgrade snapshot records; refuse newer schemas; back up before any write."""
+    registry = Path(registry)
+    records = sorted(path for path in registry.glob("*.json") if not path.name.endswith(".legacy.json"))
+    plan = []
+    for path in records:
+        record = json.loads(path.read_text())
+        version = record.get("schema_version", 0)
+        if version > target_version:
+            raise DataDirectoryError(
+                f"refusing to downgrade {path.name}: schema_version={version} > {target_version}")
+        plan.append((path, record, version))
+    changed = [item for item in plan if item[2] < target_version]
+    if not changed:
+        return {"registry": str(registry), "migrated": 0, "skipped": len(plan), "backup": None}
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    backup = Path(backup_root or registry.parent / "registry-backup") / stamp
+    backup.mkdir(parents=True, exist_ok=True)
+    for path in records:
+        shutil.copy2(path, backup / path.name)
+    for path, record, version in changed:
+        upgraded = _upgrade_record(record, version, target_version)
+        path.write_text(json.dumps(upgraded, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    return {"registry": str(registry), "migrated": len(changed), "skipped": len(plan) - len(changed),
+            "backup": backup.name}
+
+
+def _upgrade_record(record: dict, version: int, target: int) -> dict:
+    upgraded = dict(record)
+    if version < 1 <= target:
+        components = upgraded.get("components") or []
+        if not components:
+            raise DataDirectoryError(
+                f"cannot upgrade {upgraded.get('snapshot_id')}: no component manifest")
+        upgraded["schema_version"] = 1
+        upgraded.setdefault("content_digest", component_digest(components))
+        upgraded.setdefault("status", "published")
+    return upgraded
+
+
+def restore_registry(backup_dir: str | Path, registry: str | Path) -> dict:
+    """Restore registry files from a migration backup; refuse an empty source."""
+    backup, registry = Path(backup_dir), Path(registry)
+    files = sorted(list(backup.glob("*.json")))
+    if not files:
+        raise DataDirectoryError(f"no registry files in backup: {backup}")
+    registry.mkdir(parents=True, exist_ok=True)
+    restored = []
+    for path in files:
+        shutil.copy2(path, registry / path.name)
+        restored.append(path.name)
+    return {"restored": len(restored), "files": restored}
+
+
+# -- DATA05 bar quality gate -------------------------------------------------
+def validate_bars(reader: "FreeSnapshotReader", symbols: Sequence[str],
+                  fields: Sequence[str] = ("open", "high", "low", "close", "volume"),
+                  tolerance: float = 1e-4) -> dict:
+    """Fail-closed bar checks: alignment, positivity, infinities, OHLC ordering.
+
+    NaN is treated as a missing observation (the qlib bin format pads suspended or
+    unknown days with NaN) and counted separately; it is not a corruption issue.
+    """
+    issues: list[dict] = []
+    checked = 0
+    missing_points = 0
+    for symbol in symbols:
+        try:
+            series = {field: free_sources.read_bin_values(
+                reader.path("bar") / symbol.lower() / f"{field}.day.bin") for field in fields}
+        except (FreeSourceError, OSError) as error:
+            issues.append({"symbol": symbol, "type": "unreadable", "detail": str(error)})
+            continue
+        lengths = {field: len(values) for field, values in series.items()}
+        if len(set(lengths.values())) != 1:
+            issues.append({"symbol": symbol, "type": "length_mismatch", "detail": lengths})
+            continue
+        checked += 1
+        seen: set[tuple[str, str]] = set()
+        for field, values in series.items():
+            for value in values:
+                if math.isnan(value):
+                    missing_points += 1
+                    continue
+                if math.isinf(value):
+                    problem = "non_finite"
+                elif field != "volume" and value <= 0:
+                    problem = "non_positive_price"
+                elif field == "volume" and value < 0:
+                    problem = "negative_volume"
+                else:
+                    continue
+                if (problem, field) not in seen:
+                    issues.append({"symbol": symbol, "type": problem, "field": field})
+                    seen.add((problem, field))
+        if {"open", "high", "low", "close"} <= set(fields):
+            seen_ohlc: set[str] = set()
+            for index in range(lengths[fields[0]]):
+                row = [series[field][index] for field in ("open", "high", "low", "close")]
+                if any(math.isnan(value) for value in row):
+                    continue
+                low, high = series["low"][index], series["high"][index]
+                body_low = min(series["open"][index], series["close"][index])
+                body_high = max(series["open"][index], series["close"][index])
+                if low - body_low > tolerance and "low_above_body" not in seen_ohlc:
+                    issues.append({"symbol": symbol, "type": "low_above_body", "index": index})
+                    seen_ohlc.add("low_above_body")
+                if body_high - high > tolerance and "body_above_high" not in seen_ohlc:
+                    issues.append({"symbol": symbol, "type": "body_above_high", "index": index})
+                    seen_ohlc.add("body_above_high")
+                if len(seen_ohlc) == 2:
+                    break
+    return {"ok": not issues, "checked_symbols": checked, "issue_count": len(issues),
+            "missing_points": missing_points, "issues": issues[:50]}
 
 
 # -- A16 semantics -----------------------------------------------------------

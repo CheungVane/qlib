@@ -2,6 +2,7 @@
 
 import json
 import os
+import struct
 import tempfile
 import unittest
 from datetime import date
@@ -89,6 +90,131 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(dd.reproducibility(partial)["state"], "limited")
         no_version = dict(record, materializer={"name": "x"})
         self.assertEqual(dd.reproducibility(no_version)["state"], "limited")
+
+    def test_legacy_paths_are_registered_and_not_promotable(self):
+        record = real_record()
+        with tempfile.TemporaryDirectory() as folder:
+            dd.register_legacy(folder, legacy_id="cn_data_legacy", path_label="cn_data",
+                               reason="pre-existing local demo data without digest")
+            legacy = dd.list_legacy(folder)
+            self.assertEqual(len(legacy), 1)
+            self.assertEqual(legacy[0]["source_class"], dd.LEGACY_SOURCE_CLASS)
+            self.assertEqual(dd.reproducibility(legacy[0])["state"], "limited")
+            with self.assertRaises(DataDirectoryError):
+                dd.publish_snapshot(folder, dict(record, snapshot_id="cn_data_legacy"))
+
+    def test_migration_upgrades_older_records_and_backs_up(self):
+        record = real_record()
+        stale = dict(record)
+        stale["schema_version"] = 0
+        stale.pop("content_digest")
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / f"{record['snapshot_id']}.json"
+            path.write_text(json.dumps(stale))
+            summary = dd.migrate_registry(folder, backup_root=Path(folder) / "backup")
+            self.assertEqual(summary["migrated"], 1)
+            upgraded = json.loads(path.read_text())
+            self.assertEqual(upgraded["schema_version"], dd.SCHEMA_VERSION)
+            self.assertEqual(upgraded["content_digest"], record["content_digest"])
+            self.assertTrue((Path(folder) / "backup" / summary["backup"] / path.name).exists())
+
+    def test_migration_refuses_newer_schema(self):
+        record = real_record()
+        with tempfile.TemporaryDirectory() as folder:
+            (Path(folder) / f"{record['snapshot_id']}.json").write_text(
+                json.dumps(dict(record, schema_version=dd.SCHEMA_VERSION + 1)))
+            with self.assertRaises(DataDirectoryError):
+                dd.migrate_registry(folder, backup_root=Path(folder) / "backup")
+
+    def test_registry_restore_from_backup(self):
+        record = real_record()
+        stale = dict(record, schema_version=0)
+        stale.pop("content_digest")
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / f"{record['snapshot_id']}.json"
+            path.write_text(json.dumps(stale))
+            summary = dd.migrate_registry(folder, backup_root=Path(folder) / "backup")
+            path.write_text(json.dumps({"tampered": True}))
+            restored = dd.restore_registry(Path(folder) / "backup" / summary["backup"], folder)
+            self.assertEqual(restored["restored"], 1)
+            self.assertEqual(json.loads(path.read_text())["schema_version"], 0)
+            with self.assertRaises(DataDirectoryError):
+                dd.restore_registry(Path(folder) / "missing-backup", folder)
+
+
+class FakeSnapshotTests(unittest.TestCase):
+    """DATA05 checks run against hand-written bins so failures are provable."""
+
+    calendar = ["2026-09-23", "2026-09-24"]
+
+    def build(self, folder: Path, ohlc: dict, volume: float = 100.0) -> dd.FreeSnapshotReader:
+        features = folder / "features/sh600001"
+        features.mkdir(parents=True)
+        for field, values in dict(ohlc, volume=[volume, volume]).items():
+            payload = struct.pack("<f", 0) + struct.pack(f"<{len(values)}f", *values)
+            (features / f"{field}.day.bin").write_bytes(payload)
+        (folder / "calendars").mkdir()
+        (folder / "calendars/day.txt").write_text("\n".join(self.calendar) + "\n")
+        (folder / "instruments").mkdir()
+        (folder / "instruments/all.txt").write_text("SH600001\t2020-01-01\t2026-09-24\n")
+        record = dd.build_snapshot_record(
+            snapshot_id="fake", source={"source_class": "free_community_unverified"},
+            components=[{"kind": "bar", "uri": "features", "content_digest": "sha256:f",
+                         "source_class": "free_community_unverified",
+                         "coverage_start": "2026-09-23", "coverage_end": "2026-09-24"},
+                        {"kind": "calendar", "uri": "calendars/day.txt",
+                         "content_digest": "sha256:c", "source_class": "free_community_unverified",
+                         "coverage_start": "2026-09-23", "coverage_end": "2026-09-24"},
+                        {"kind": "universe", "uri": "instruments/all.txt",
+                         "content_digest": "sha256:u", "source_class": "free_community_unverified",
+                         "coverage_start": "2026-09-23", "coverage_end": "2026-09-24"}],
+            provenance={"completeness": "complete"},
+            materializer={"name": "test", "version": "1"})
+        return dd.FreeSnapshotReader(folder, record)
+
+    def test_clean_bars_pass(self):
+        with tempfile.TemporaryDirectory() as folder:
+            reader = self.build(Path(folder), {"open": [9.0, 9.1], "high": [9.2, 9.3],
+                                               "low": [8.9, 9.0], "close": [9.1, 9.2]})
+            report = dd.validate_bars(reader, ["SH600001"])
+        self.assertTrue(report["ok"], report["issues"])
+        self.assertEqual(report["missing_points"], 0)
+
+    def test_nan_is_counted_as_missing_not_as_corruption(self):
+        with tempfile.TemporaryDirectory() as folder:
+            reader = self.build(Path(folder), {"open": [9.0, float("nan")], "high": [9.2, 9.3],
+                                               "low": [8.9, 9.0], "close": [9.1, float("nan")]})
+            report = dd.validate_bars(reader, ["SH600001"])
+        self.assertTrue(report["ok"], report["issues"])
+        self.assertEqual(report["missing_points"], 2)
+
+    def test_ohlc_violation_and_negative_volume_fail_closed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            reader = self.build(Path(folder), {"open": [9.0, 9.1], "high": [9.05, 9.3],
+                                               "low": [8.9, 9.15], "close": [9.4, 9.2]}, volume=-5.0)
+            report = dd.validate_bars(reader, ["SH600001"])
+        kinds = {issue["type"] for issue in report["issues"]}
+        self.assertIn("low_above_body", kinds)
+        self.assertIn("body_above_high", kinds)
+        self.assertIn("negative_volume", kinds)
+        self.assertFalse(report["ok"])
+
+    def test_materialization_is_reproducible(self):
+        with tempfile.TemporaryDirectory() as folder:
+            reader = self.build(Path(folder), {"open": [9.0, 9.1], "high": [9.2, 9.3],
+                                               "low": [8.9, 9.0], "close": [9.1, 9.2]})
+            record = dd.materialize_panel(reader, output=Path(folder) / "panel.csv",
+                                          universe="all", fields=["close"],
+                                          start=date(2026, 9, 23), end=date(2026, 9, 24), seed=7)
+            replay = dd.materialize_panel(reader, output=Path(folder) / "panel2.csv",
+                                          universe="all", fields=["close"],
+                                          start=date(2026, 9, 23), end=date(2026, 9, 24), seed=7)
+            self.assertEqual(record["output_digest"], replay["output_digest"])
+            self.assertEqual(record["rows"], 2)
+            self.assertTrue(dd.verify_materialization(record, Path(folder) / "panel.csv")["ok"])
+            with (Path(folder) / "panel.csv").open("a") as handle:
+                handle.write("2026-09-25,SH600001,1.0\n")
+            self.assertFalse(dd.verify_materialization(record, Path(folder) / "panel.csv")["ok"])
 
 
 class AsOfTests(unittest.TestCase):

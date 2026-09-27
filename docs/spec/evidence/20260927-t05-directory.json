@@ -1,0 +1,53 @@
+{
+  "bar_quality_gate": {
+    "audited_symbols": 500,
+    "issue_count": 0,
+    "issues_sample": [],
+    "ok": true,
+    "universe_symbols": 500
+  },
+  "legacy_count": 2,
+  "legacy_registered": [
+    "cn_data",
+    "qwb_cn_current"
+  ],
+  "manifest_validation": {
+    "calendar": {
+      "days": 6479,
+      "first": "2000-01-04",
+      "last": "2026-09-24"
+    },
+    "ok": true,
+    "problems": []
+  },
+  "materialization": {
+    "deterministic_replay": true,
+    "fields": [
+      "close",
+      "volume"
+    ],
+    "first_digest": "sha256:db60e4b6e0b1f34a11d7e774c9c57666762a0966171defad9393911947bdd6bd",
+    "replay_check": true,
+    "rows": 360,
+    "second_digest": "sha256:db60e4b6e0b1f34a11d7e774c9c57666762a0966171defad9393911947bdd6bd",
+    "seed": 0,
+    "window": {
+      "end": "2026-09-24",
+      "start": "2026-09-01"
+    }
+  },
+  "notes": [
+    "registry and materialized panel live outside the repository",
+    "the bar audit is a sample unless --bars-limit 0",
+    "legacy paths are registered as legacy_unknown and cannot be promoted silently"
+  ],
+  "paths_recorded": false,
+  "registry_record": "free_cn_20260924.json",
+  "reproducibility": {
+    "reason": null,
+    "state": "reproducible"
+  },
+  "snapshot_content_digest": "sha256:2d6f5367c1f20addf1fe260a9ef9a5d2dc964c09a0726bf3d80a6d721117966a",
+  "snapshot_id": "free_cn_20260924",
+  "t05_slice": "directory_registry_materialization"
+}

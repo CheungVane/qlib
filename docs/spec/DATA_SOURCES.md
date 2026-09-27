@@ -168,9 +168,12 @@ Tushare Pro 是 FINV 的日常上游，直连可获得每日指标（市值/换�
 
 ### T05 目录端口与快照登记（2026-09-27）
 
-- 新增 `quant_workbench/data_directory.py`：`build_snapshot_record`（组件清单+内容摘要）、`publish_snapshot`（已发布快照不可追加修改，相同摘要幂等）、`load_snapshot`（摘要校验）、`reproducibility`（证据不完整即受限）、`select_as_of`（不泄漏未来修订）、`resolve_symbol`（代码复用按有效期解析）、`FreeSnapshotReader`（按快照ID+数据根读取日历/成分/字段，不依赖Qlib）。
+- 新增 `quant_workbench/data_directory.py`：`build_snapshot_record`（组件清单+内容摘要）、`publish_snapshot`（已发布快照不可追加修改，相同摘要幂等，拒绝把 legacy 路径升格）、`load_snapshot`（摘要校验）、`reproducibility`（证据不完整即受限）、`select_as_of`（不泄漏未来修订）、`resolve_symbol`（代码复用按有效期解析）、`FreeSnapshotReader`（按快照ID+数据根读取日历/成分/字段，不依赖Qlib）。
+- 物化与质量门禁：`materialize_panel` 产出确定性长表（同输入+同seed两次摘要一致）、`verify_materialization` 复算校验；`validate_bars` 做对齐/正数/无穷/OHLC约束检查，并把 **NaN 计为缺失而非损坏**（qlib bin 用 NaN 表示停牌或未知日）。
+- 旧路径与迁移：`register_legacy` 显式登记既有本地数据（`legacy_unknown`，无摘要，不可静默升格）；`migrate_registry` 升级旧 schema 前先备份、拒绝降级较新版本；`restore_registry` 从备份恢复。
 - 已登记快照记录：[20260927-free-snapshot-record.json](evidence/20260927-free-snapshot-record.json)，含calendar/universe/bar/status四个组件及内容摘要；数据根不写入记录，改变数据根不改变快照身份。
-- A16/A17 目前只有**部分证据**（合成夹具+登记覆盖）；物化引用、旧路径显式登记、迁移/恢复与同种子复跑仍未实现，不得据此关闭T05或A16/A17。
+- 实测证据：[20260927-t05-directory.json](evidence/20260927-t05-directory.json)——中证500全量500只bar审计**0问题**、物化两次摘要一致（`sha256:db60e4b6…`）、`cn_data`与`qwb_cn_current`已登记为legacy、快照`reproducibility=reproducible`。
+- A16/A17 现有**较强但仍非完整**证据：A16 的真实财务修订源与真实bar范围/覆盖门禁未做；A17 的物化只覆盖close/volume小窗口。不得据此关闭T05或A16/A17。
 
 稳定性实测：EM 两次探测中一次断连、一次成功；YF 三次探测分别为 429、200（载荷很小）、429。免费抓取类来源**必须带重试、失败留痕与降级路径**，不能作为唯一来源。
 

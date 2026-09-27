@@ -2,6 +2,15 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — T05 物化、质量门禁、旧路径与迁移（数据源切片收尾）
+
+- 来源：用户"继续t05"。
+- 实现：`data_directory` 增加 `materialize_panel`（确定性长表，同输入+同seed摘要一致）、`verify_materialization`（复算校验）、`validate_bars`（对齐/正数/无穷/OHLC门禁，**NaN计为缺失而非损坏**）、`register_legacy`（旧路径显式登记且不可静默升格）、`migrate_registry`（升级前备份、拒绝降级新版本）、`restore_registry`（从备份恢复）；新增 `scripts/register_free_snapshot.py`。
+- 实测：中证500全量500只bar审计**0问题**（0 issue，NaN单列为missing）；物化close/volume窗口两次摘要一致`sha256:db60e4b6…`且复算通过；`cn_data`、`qwb_cn_current`登记为`legacy_unknown`；快照`reproducibility=reproducible`。证据见[20260927-t05-directory.json](evidence/20260927-t05-directory.json)。
+- 发现并修正：初版OHLC不变量写错（漏“收盘高于最高价”）、且把NaN当作损坏报错245处；两者均由测试/真实审计暴露后修正，NaN改为缺失计数。
+- 测试：数据目录与免费源相关38项通过（system python3 + numpy）。仍未跑工作台全量门禁（本worktree无`.venv`）。
+- 边界：T05仍差真实财务修订源、真实bar覆盖/范围门禁、A40数据访问子项与完整A16/A17验收；特征与标签管线未做。
+
 ## 2026-09-27 — T05 目录端口与快照登记（数据源切片续）
 
 - 来源：用户同意"先做T05本体"。
