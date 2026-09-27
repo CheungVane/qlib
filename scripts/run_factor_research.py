@@ -47,6 +47,9 @@ def main() -> int:
     parser.add_argument("--end", default="2026-09-24")
     parser.add_argument("--industry-window", type=int, default=120)
     parser.add_argument("--industry-clusters", type=int, default=8)
+    parser.add_argument("--stability-folds", type=int, default=6)
+    parser.add_argument("--round-trip-cost", type=float, default=0.00092,
+                        help="commission+stamp+transfer both ways (configs/cn: 9.2bp)")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
 
@@ -88,6 +91,24 @@ def main() -> int:
         usable = [key for key in industry_keys if key <= day]
         return industry_by_date[usable[-1]] if usable else {}
 
+    market_close = fp.aligned_series(reader, "SH000905", "close", dates)
+    market_returns = [market_close[index] / market_close[index - 1] - 1.0
+                      if index and math.isfinite(market_close[index])
+                      and math.isfinite(market_close[index - 1]) and market_close[index - 1] > 0
+                      else float("nan") for index in range(len(market_close))]
+    beta_grid = fp.rolling_beta(returns, market_returns, window=args.industry_window, step=21)
+    beta_keys = sorted(beta_grid)
+    beta_by_date = {dates[index].isoformat(): beta_grid[index] for index in beta_keys}
+    beta_keys_by_date = sorted(beta_by_date)
+
+    def beta_for(day: str, index: int) -> dict[str, float]:
+        usable = [key for key in beta_keys_by_date if key <= day]
+        return beta_by_date[usable[-1]] if usable else {}
+
+    def exposures_for(day: str, index: int) -> list[dict[str, float]]:
+        size_row = {symbol: size[symbol][index] for symbol in closes}
+        return [size_row, beta_for(day, index)]
+
     panels = {name: [dict() for _ in dates] for name in FACTORS}
     labels = {horizon: [dict() for _ in dates] for horizon in HORIZONS}
     for symbol in closes:
@@ -115,7 +136,7 @@ def main() -> int:
                 for index, day in enumerate(dates):
                     factor = dict(panels[name][index])
                     if variant == "neutralized":
-                        factor = fp.neutralize(factor, {key: size[key][index] for key in closes},
+                        factor = fp.neutralize(factor, exposures_for(day.isoformat(), index),
                                                industry_for(day.isoformat()))
                     value = fp.rank_ic(factor, labels[horizon][index])
                     if value is not None:
@@ -137,29 +158,6 @@ def main() -> int:
                     "positive_share": sum(1 for value in series if value > 0) / len(series),
                 }
 
-    q_values = fp.benjamini_hochberg({key: item["p_value"] for key, item in hypotheses.items()
-                                      if item["p_value"] is not None})
-    for key, item in hypotheses.items():
-        item["fdr_q"] = q_values.get(key)
-        item["ic_series_digest"] = "sha256:" + hashlib.sha256(
-            json.dumps([round(value, 8) for value in ic_series[key]]).encode()).hexdigest()
-
-    spreads = {}
-    for name in FACTORS:
-        for variant in ("raw", "neutralized"):
-            values = []
-            for index, day in enumerate(dates):
-                factor = dict(panels[name][index])
-                if variant == "neutralized":
-                    factor = fp.neutralize(factor, {key: size[key][index] for key in closes},
-                                           industry_for(day.isoformat()))
-                spread = fp.quantile_spread(factor, labels[5][index])
-                if spread is not None:
-                    values.append(spread["spread_top_bottom"])
-            if values:
-                spreads[f"{name}_{variant}"] = {"days": len(values),
-                                                "mean_spread": statistics.fmean(values)}
-
     turnover_stats = {}
     for name in FACTORS:
         per_day = []
@@ -168,9 +166,52 @@ def main() -> int:
             if value is not None:
                 per_day.append(value)
         if per_day:
-            turnover_stats[name] = {"days": len(per_day), "mean_rank_turnover": statistics.fmean(per_day)}
+            turnover_stats[name] = {"days": len(per_day),
+                                    "mean_rank_turnover": statistics.fmean(per_day)}
 
+    round_trip_cost = args.round_trip_cost
+    spreads = {}
+    for name in FACTORS:
+        for variant in ("raw", "neutralized"):
+            values = []
+            for index, day in enumerate(dates):
+                factor = dict(panels[name][index])
+                if variant == "neutralized":
+                    factor = fp.neutralize(factor, exposures_for(day.isoformat(), index),
+                                           industry_for(day.isoformat()))
+                spread = fp.quantile_spread(factor, labels[5][index])
+                if spread is not None:
+                    values.append(spread["spread_top_bottom"])
+            if values:
+                spreads[f"{name}_{variant}"] = {"days": len(values),
+                                                "mean_spread": statistics.fmean(values)}
+
+    q_values = fp.benjamini_hochberg({key: item["p_value"] for key, item in hypotheses.items()
+                                      if item["p_value"] is not None})
+    for key, item in hypotheses.items():
+        item["fdr_q"] = q_values.get(key)
+        item["ic_series_digest"] = "sha256:" + hashlib.sha256(
+            json.dumps([round(value, 8) for value in ic_series[key]]).encode()).hexdigest()
+        item["stability"] = fp.stability(ic_series[key], folds=args.stability_folds)
+        turnover = turnover_stats.get(item["factor"], {}).get("mean_rank_turnover")
+        if turnover is not None:
+            spread = spreads.get(f"{item['factor']}_{item['variant']}")
+            if spread:
+                item["cost_screen"] = fp.cost_threshold(
+                    spread["mean_spread"], turnover, item["horizon"], round_trip_cost)
+
+    fdr_survivors = [key for key, item in hypotheses.items()
+                     if (item.get("fdr_q") or 1.0) <= 0.05]
+    cost_survivors = [key for key, item in hypotheses.items()
+                      if (item.get("cost_screen") or {}).get("passes")]
     evidence = {
+        "summary": {
+            "fdr_survivors": sorted(fdr_survivors),
+            "cost_survivors": sorted(cost_survivors),
+            "survives_both": sorted(set(fdr_survivors) & set(cost_survivors)),
+            "interpretation": ("a hypothesis must pass FDR **and** cover round-trip cost to be "
+                               "worth further work; the intersection here is the headline"),
+        },
         "slice": "csi500_factor_research",
         "snapshot_id": reader.record["snapshot_id"],
         "snapshot_content_digest": reader.record["content_digest"],
@@ -180,12 +221,21 @@ def main() -> int:
                      "window": args.industry_window, "clusters": args.industry_clusters,
                      "recluster_step_days": 21, "points": len(industry_keys),
                      "note": "clusters use past returns only; not a named industry classification"},
+        "market_factor": {"symbol": "SH000905", "kind": "csi500_index_returns",
+                          "beta_window": args.industry_window, "beta_step_days": 21,
+                          "points": len(beta_grid)},
+        "neutralization": {"exposures": ["log_float_cap", "market_beta", "industry_dummies"],
+                           "method": "cross_sectional_ols_residual"},
         "label": {"horizons": list(HORIZONS), "basis": "adjusted close on snapshot calendar",
                   "two_sided_tradability": True},
         "hypotheses": hypotheses,
         "quantile_spread_h5": spreads,
         "factor_rank_turnover": turnover_stats,
         "families": {"hypotheses_tested": len(hypotheses), "fdr": "benjamini_hochberg"},
+        "cost_model": {"round_trip_cost": round_trip_cost,
+                       "basis": "configs/cn commission 2bp x2 + stamp 5bp sell + transfer 0.1bp x2",
+                       "formula": "expected_cost = min(2, h*daily_rank_turnover) * round_trip_cost",
+                       "kind": "screening only, not a backtest"},
         "limitations": [
             "free_community_unverified inputs; exploratory only, not alpha evidence",
             "industry is a statistical proxy, not a PIT named classification",

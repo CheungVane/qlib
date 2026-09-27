@@ -168,21 +168,53 @@ def rolling_industry(returns_by_symbol: dict[str, Sequence[float]], dates: Seque
     return result
 
 
-def neutralize(factor: dict[str, float], size: dict[str, float],
+def rolling_beta(returns_by_symbol: dict[str, Sequence[float]], market_returns: Sequence[float],
+                 *, window: int = 120, step: int = 21) -> dict[int, dict[str, float]]:
+    """Trailing market beta on a fixed grid; uses only past returns (PIT)."""
+    result: dict[int, dict[str, float]] = {}
+    length = len(market_returns)
+    for index in range(length):
+        if index < window or index % step:
+            continue
+        market = market_returns[index - window:index]
+        if len(market) != window or any(not math.isfinite(value) for value in market):
+            continue
+        market_mean = statistics.fmean(market)
+        variance = sum((value - market_mean) ** 2 for value in market)
+        if variance <= 0:
+            continue
+        row = {}
+        for symbol, values in returns_by_symbol.items():
+            series = list(values[index - window:index])
+            if len(series) != window or any(not math.isfinite(value) for value in series):
+                continue
+            series_mean = statistics.fmean(series)
+            covariance = sum((a - series_mean) * (b - market_mean)
+                             for a, b in zip(series, market))
+            row[symbol] = covariance / variance
+        if row:
+            result[index] = row
+    return result
+
+
+def neutralize(factor: dict[str, float], exposures: Sequence[dict[str, float]],
                industry: dict[str, int] | None = None) -> dict[str, float]:
-    """Residualise the factor on size (log float cap) and industry dummies."""
+    """Residualise the factor on cross-sectional exposures (e.g. size, beta) + industry."""
     try:
         import numpy as np
     except ImportError as error:  # pragma: no cover
         raise DataDirectoryError("neutralize needs numpy (install the 'analysis' extra)") from error
 
+    exposures = list(exposures) or [{}]
     symbols = [symbol for symbol in sorted(factor)
                if math.isfinite(factor.get(symbol, float("nan")))
-               and math.isfinite(size.get(symbol, float("nan")))]
+               and all(math.isfinite(item.get(symbol, float("nan"))) for item in exposures)]
     if len(symbols) < 20:
         return {}
     industry = industry or {}
-    columns = [np.ones(len(symbols)), np.array([size[symbol] for symbol in symbols], dtype=float)]
+    columns = [np.ones(len(symbols))]
+    for item in exposures:
+        columns.append(np.array([item[symbol] for symbol in symbols], dtype=float))
     categories = sorted({industry[symbol] for symbol in symbols if symbol in industry})
     for category in categories[1:]:
         columns.append(np.array([1.0 if industry.get(symbol) == category else 0.0
@@ -192,6 +224,36 @@ def neutralize(factor: dict[str, float], size: dict[str, float],
     coefficients, *_ = np.linalg.lstsq(matrix, target, rcond=None)
     residual = target - matrix @ coefficients
     return {symbol: float(value) for symbol, value in zip(symbols, residual)}
+
+
+def stability(series: Sequence[float], folds: int = 6) -> dict:
+    """Consecutive-fold IC stability: sign consistency and dispersion of fold means."""
+    values = [value for value in series if math.isfinite(value)]
+    if len(values) < folds * 5:
+        return {"state": "insufficient", "folds": 0}
+    size = len(values) // folds
+    means = [statistics.fmean(values[index * size:(index + 1) * size]) for index in range(folds)]
+    overall = statistics.fmean(values)
+    signs = [1 if value > 0 else -1 for value in means]
+    dominant = 1 if overall > 0 else -1
+    return {"state": "available", "folds": folds,
+            "fold_means": means,
+            "same_sign_share": sum(1 for sign in signs if sign == dominant) / folds,
+            "dispersion": (statistics.stdev(means) / abs(overall)) if len(means) > 1 and overall else None}
+
+
+def cost_threshold(gross_spread: float, daily_rank_turnover: float, horizon: int,
+                   round_trip_cost: float) -> dict:
+    """Screening test: can the gross quantile spread cover the round-trip cost?
+
+    Expected turnover over one holding period is capped at 2 (full replacement twice);
+    this is a screening calculation, not a backtest.
+    """
+    expected_cost = min(2.0, horizon * daily_rank_turnover) * round_trip_cost
+    net = gross_spread - expected_cost
+    return {"gross_spread": gross_spread, "expected_cost": expected_cost, "net": net,
+            "passes": net > 0, "round_trip_cost": round_trip_cost,
+            "assumed_turnover": min(2.0, horizon * daily_rank_turnover)}
 
 
 def rank_turnover(previous: dict[str, float], current: dict[str, float]) -> float | None:

@@ -114,11 +114,30 @@ class ExposureTests(unittest.TestCase):
     def test_neutralize_removes_size_exposure(self):
         factor = {f"S{index:03d}": 3.0 * index + (index % 7) * 0.1 for index in range(60)}
         size = {f"S{index:03d}": float(index) for index in range(60)}
-        residual = fp.neutralize(factor, size)
+        residual = fp.neutralize(factor, [size])
         self.assertTrue(residual)
         correlation = fp.rank_ic(residual, size)
         self.assertIsNotNone(correlation)
         self.assertLess(abs(correlation), 0.35)
+
+    def test_neutralize_handles_multiple_exposures(self):
+        factor = {f"S{index:03d}": 2.0 * index + (index % 5) for index in range(80)}
+        size = {f"S{index:03d}": float(index) for index in range(80)}
+        beta = {f"S{index:03d}": (index % 11) / 3.0 for index in range(80)}
+        industry = {f"S{index:03d}": index % 6 for index in range(80)}
+        residual = fp.neutralize(factor, [size, beta], industry)
+        self.assertTrue(residual)
+        self.assertLess(abs(fp.rank_ic(residual, size)), 0.4)
+        self.assertLess(abs(fp.rank_ic(residual, beta)), 0.4)
+
+    def test_rolling_beta_uses_past_window_only(self):
+        market = [0.01 if index % 2 else -0.01 for index in range(60)]
+        symbols = {"A": [2 * value for value in market], "B": [-value for value in market]}
+        betas = fp.rolling_beta(symbols, market, window=20, step=10)
+        self.assertTrue(betas)
+        first = min(betas)
+        self.assertAlmostEqual(betas[first]["A"], 2.0, places=6)
+        self.assertAlmostEqual(betas[first]["B"], -1.0, places=6)
 
 
 class InferenceTests(unittest.TestCase):
@@ -149,6 +168,22 @@ class InferenceTests(unittest.TestCase):
         self.assertLessEqual(q_values["b"], q_values["c"])
         self.assertLessEqual(max(q_values.values()), 1.0)
         self.assertAlmostEqual(q_values["a"], 0.004, places=6)
+
+    def test_stability_reports_sign_consistency(self):
+        steady = [0.05 + (0.01 if index % 2 else -0.01) for index in range(60)]
+        report = fp.stability(steady, folds=6)
+        self.assertEqual(report["state"], "available")
+        self.assertEqual(report["same_sign_share"], 1.0)
+        mixed = [0.05 if index < 30 else -0.05 for index in range(60)]
+        self.assertLess(fp.stability(mixed, folds=6)["same_sign_share"], 1.0)
+        self.assertEqual(fp.stability([0.01, 0.02], folds=6)["state"], "insufficient")
+
+    def test_cost_threshold_screens_spread_against_fees(self):
+        cheap = fp.cost_threshold(0.01, 0.02, horizon=5, round_trip_cost=0.00092)
+        self.assertTrue(cheap["passes"])
+        thin = fp.cost_threshold(0.0001, 0.05, horizon=5, round_trip_cost=0.00092)
+        self.assertFalse(thin["passes"])
+        self.assertAlmostEqual(thin["assumed_turnover"], min(2.0, 5 * 0.05))
 
 
 if __name__ == "__main__":
