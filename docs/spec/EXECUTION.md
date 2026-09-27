@@ -141,7 +141,7 @@ EXEC13（执行政策与预算，LIFE06/AGENT04，待实现）：
 - Agent试验/调用次数在发起前原子预留；重试也计数，取消/重启不清空同一预算范围的账目。到限阻止下一次试验/调用，已获准调用可完成并保存产物（仍受任务超时约束），标记budget_exhausted及研究是否完整；不由预算到限推断研究成功。
 - CPU/内存硬上限必须有执行器可核验机制，资源下限检查不构成上限。被上限终止记录failed/resource_limit及证据。若某环境尚不支持，上限能力与A41保持未完成，该环境不得通过完整EXEC06准入；本条不表示现有按钮已按此拒绝。
 - **本机落地路径（2026-09-27）**：Qlib 入口在容器内运行（镜像 `qwb-qlib-cpu:local`，colima `rdagent` 池），内存用 `--memory/--memory-swap`（cgroup 硬上限，交换同时禁用）、CPU 用 `--ulimit cpu=`；被上限终止记 `failed/resource_limit`（退出码 137/152）。容器的挂载路径固定为 `/qwb/run`（工作目录）、`/qwb/data`（行情快照，只读）、`/qwb/src`（平台代码，只读），编译产物在进入容器前改写为这些路径，**残留任何宿主绝对路径即拒绝执行**；Attempt 自身跟踪库中记录的挂载路径在导入前归一化回宿主工作目录（只改路径字符串，不改指标、参数与产物字节）。
-- RD-Agent 入口**尚未接容器**：其因子代码经 `scripts/run_rdagent_factor_smoke.py` 在宿主 `LocalEnv` 中执行，上游 `DockerConf.mem_limit` 不适用于本仓库的该路径。因此在 `memory` 属必须项期间，RD-Agent 入口由前置检查拒绝准入（缺 `rdagent.limits`），而不是无上限运行。
+- **RD-Agent 入口容器化（2026-09-27）**：整个 Attempt（驱动与因子代码）在**同一个**容器内运行（镜像 `qwb-rdagent-cpu:local`，由 `scripts/build_rdagent_runner_image.sh` 从上游 `requirements.txt` 构建；RD-Agent 检出只挂载、不打包，上游代码变化无需重建镜像）。平台只注入挂载与执行开关：`/qwb/agent`(rw，检出与 `git_ignore_folder`)、`/qwb/repo`(ro)、`/qwb/hooks`(ro)、`/qwb/platform`(rw，研究快照与调用账本)、`~/.qlib`→`/root/.qlib`(ro)。探针在容器内把 `QTDockerEnv` 换成同容器的 `LocalEnv`（否则会去连嵌套 Docker：本机 `.env` 设了 `MODEL_COSTEER_ENV_TYPE=docker`），embedding 的 Ollama 地址由平台改写为宿主可达地址。**上游源码仍不改动**：替换只发生在平台自己的探针脚本里。
 - **Agent 调用计数（2026-09-27 落地）**：计数单位是**一次 `litellm.completion` 调用**（RD-Agent 的 chat 生成请求；库内部自动重试不再细分），每次调用前在共享账本中原子预留；重试与重放各计一次，取消或重启不清空同一范围的账目；到限时该次调用被拒绝（不发出请求），Attempt 保留已有产物，并在 outcome 记 `agent_budget.calls.status=budget_exhausted` 与 used/limit，**不由此推断研究成功**。实现与上游解耦：**不修改 RD-Agent 源码**——执行器把仓库内 `hooks/agent_budget/` 前置到 `PYTHONPATH`，由 Python 标准启动钩子 `sitecustomize` 包装 `litellm` 入口；执行期计数写平台根下的文件账本（`flock` 原子），Attempt 终态由平台把用量核对进 V5 账本（DB 是持久事实，文件是执行期计数），`/v1/executions/catalog` 据此报 `calls_enforced`。embedding 调用不计入（不是生成式试验，避免同一语义出现两套口径）。
 
 EXEC11（演进，GOV-UPSTREAM）：Qlib 与 RD-Agent 保持外部引擎边界；执行器是适配层，不修改上游源码，不把 RD-Agent 代码复制进 Qlib。RD-Agent 探针脚本位于本仓库 `scripts/`，RD-Agent checkout 只写其被 Git 忽略的目录。上游更新后重验执行器命令、前置条件检查与适配器契约。
@@ -152,8 +152,8 @@ EXEC11（演进，GOV-UPSTREAM）：Qlib 与 RD-Agent 保持外部引擎边界�
 - RD-Agent 内部工作目录由其自身分配（版本化模板目录按指纹隔离）；平台保证日志、退出证据与配置指纹隔离，不修改上游的目录分配逻辑。
 - 无调度器与排队：并发上限是有界准入（槽满返回 409 且不创建 Attempt，槽位在写入事务内预留），失联但未确认结束的任务继续占槽并提示核对；界面不承诺排队。
 - 日志查看为有界尾部读取，不是实时流；日志内容经脱敏后可能替换路径与密钥。
-- 执行仅覆盖合成行情与已知情景；真实数据与远程执行器属于后续阶段。资源硬上限目前只对 Qlib 容器入口生效，RD-Agent 入口以拒绝准入处理。
-- RD-Agent 因子代码仍在宿主 `LocalEnv` 执行；调用计数与内存上限是两件事——调用次数已按上条强制，内存硬上限仍以"拒绝准入"处理，直到该入口接容器。
+- 执行仅覆盖合成行情与已知情景；真实数据与远程执行器属于后续阶段。Qlib 与 RD-Agent 两条入口都已在容器内运行并受内存/CPU 硬上限约束。
+- RD-Agent 的驱动与因子代码同容器运行，内存/CPU 上限对整个 Attempt 生效；调用计数见上条。容器未加 `--network` 限制（因子代码与 embedding 需要出网与宿主服务），这一点按当前用途保留。
 
 ## 5. 验收映射
 

@@ -19,6 +19,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from ..cn_market import (
     CN_SYNTHETIC_DATASET_ID, CN_SYNTHETIC_SOURCE_INSTANCE, discover_project_root, load_profile,
@@ -32,11 +33,17 @@ PREFLIGHT_TTL_SECONDS = 15.0
 LOG_BYTE_CAP = 200_000
 COMPILE_TIMEOUT = 180
 ENGINE_IMAGE = "qwb-qlib-cpu:local"
-QWB_RDAGENT_IMAGE = ENGINE_IMAGE  # legacy alias; QWB_RDAGENT_IMAGE/QWB_ENGINE_IMAGE override
+RDAGENT_ENGINE_IMAGE = "qwb-rdagent-cpu:local"
+QWB_RDAGENT_IMAGE = RDAGENT_ENGINE_IMAGE  # legacy alias; QWB_RDAGENT_IMAGE overrides it
 CONTAINER_NAME_PREFIX = "qwb"
 CONTAINER_RUN_DIR = "/qwb/run"
 CONTAINER_DATA_DIR = "/qwb/data"
 CONTAINER_SOURCE_DIR = "/qwb/src"
+CONTAINER_AGENT_DIR = "/qwb/agent"
+CONTAINER_REPO_DIR = "/qwb/repo"
+CONTAINER_HOOK_DIR = "/qwb/hooks"
+CONTAINER_PLATFORM_DIR = "/qwb/platform"
+CONTAINER_HOME_QLIB = "/root/.qlib"
 AGENT_BUDGET_HOOK_DIR = Path(__file__).resolve().parents[2] / "hooks" / "agent_budget"
 
 
@@ -859,9 +866,10 @@ class RDAgentExecutor(SubprocessExecutor):
                  else "RD-Agent 因子基线（集成探针）")
         return {
             "label": label,
-            "description": ("在 RD-Agent fork 内运行单轮因子演化循环并同步研究快照；使用本地 .env 的聊天与 embedding 配置。"
+            "description": ("在受限容器内运行单轮因子演化循环并同步研究快照；驱动与因子代码同一容器，"
+                            "内存=cgroup 硬上限、CPU=RLIMIT_CPU、LLM 调用按政策计数；使用本地 .env 的聊天与 embedding 配置。"
                             if mode == "loop" else
-                            "在 RD-Agent fork 内运行因子基线回测（本地环境，不发聊天请求），并同步研究快照。"),
+                            "在受限容器内运行因子基线回测（不发聊天请求）并同步研究快照；内存/CPU 由容器强制。"),
             "probe": True,
             "data_nature": "synthetic_probe",
             # EXEC12: research snapshots enter the result library through the trusted export.
@@ -881,7 +889,7 @@ class RDAgentExecutor(SubprocessExecutor):
         coreutils = Path("/opt/homebrew/opt/coreutils/libexec/gnubin")
         if os.uname().sysname == "Darwin" and (coreutils / "timeout").is_file():
             env["PATH"] = f"{coreutils}:{env.get('PATH', '')}"
-        if self.agent_call_enforcement():
+        if self.agent_call_enforcement() and not self.containerized():
             # Decoupled hook: sitecustomize wraps litellm.completion inside RD-Agent's own
             # interpreter, so no upstream source changes are needed.
             env["PYTHONPATH"] = os.pathsep.join(
@@ -942,10 +950,73 @@ class RDAgentExecutor(SubprocessExecutor):
     def cwd(self, kind: str, run_dir: Path) -> Path:
         return self.agent_root
 
+    def containerized(self) -> bool:
+        return True
+
+    def image(self) -> str:
+        return os.environ.get("QWB_RDAGENT_IMAGE") or RDAGENT_ENGINE_IMAGE
+
+    def container_route(self, attempt_id: str, kind: str, params: dict[str, Any],
+                        run_dir: Path) -> dict[str, Any] | None:
+        """One bounded container carries the whole attempt: driver + factor code.
+
+        The checkout is mounted rw because RD-Agent owns its git-ignored work directories; the
+        repository, the Qlib snapshot and the budget hook are read-only. `~/.qlib` is mounted
+        at the container's own home so the compiled template's `~` path resolves unchanged.
+        """
+        home_qlib = Path.home() / ".qlib"
+        source_root = (self.repo_root / "extensions" / "workbench").resolve()
+        platform_root = self.budget_root.parent
+        mounts: list[tuple[str, str, str]] = [
+            (str(self.agent_root), CONTAINER_AGENT_DIR, "rw"),
+            (str(self.repo_root), CONTAINER_REPO_DIR, "ro"),
+            (str(AGENT_BUDGET_HOOK_DIR), CONTAINER_HOOK_DIR, "ro"),
+            (str(platform_root), CONTAINER_PLATFORM_DIR, "rw"),
+        ]
+        if home_qlib.is_dir():
+            mounts.append((str(home_qlib), CONTAINER_HOME_QLIB, "ro"))
+        return {"name": container_name(self.executor_id, attempt_id), "image": self.image(),
+                "image_id": self.image_id(self.image()), "workdir": CONTAINER_AGENT_DIR,
+                "mounts": mounts, "source_root": str(source_root)}
+
+    def container_environment(self, attempt_id: str | None = None) -> dict[str, str]:
+        """Env for the container: platform wiring plus a host-reachable Ollama base."""
+        env = {
+            "QWB_REPO_ROOT": CONTAINER_REPO_DIR,
+            "QWB_RDAGENT_ROOT": CONTAINER_AGENT_DIR,
+            "QWB_RDAGENT_IN_CONTAINER": "1",
+            "QWB_PLATFORM_ROOT": CONTAINER_PLATFORM_DIR,
+            "QWB_AGENT_BUDGET_FILE": f"{CONTAINER_PLATFORM_DIR}/{self.budget_root.name}/"
+                                     f"{self.call_ledger_path().name}",
+            "QWB_AGENT_BUDGET_LIMIT": str(self.call_limit()),
+            "QWB_AGENT_BUDGET_STRICT": "1",
+            # Attribution: the ledger records which attempt spent each call.
+            "QWB_ATTEMPT_ID": str(attempt_id or ""),
+            "PYTHONPATH": f"{CONTAINER_HOOK_DIR}:{CONTAINER_REPO_DIR}/extensions/workbench",
+        }
+        configured = _read_env_file(self.agent_root / ".env")
+        base = configured.get("OLLAMA_API_BASE") or ""
+        if base:
+            # The embedding server runs on the macOS host, not inside the VM.
+            parsed = urlsplit(base)
+            if parsed.hostname in {"127.0.0.1", "localhost", "0.0.0.0"}:
+                base = urlunsplit(parsed._replace(netloc=f"host.lima.internal:{parsed.port or 11434}"))
+        env["OLLAMA_API_BASE"] = base or "http://host.lima.internal:11434"
+        return env
+
     def command(self, attempt_id: str, kind: str, params: dict[str, Any], run_dir: Path) -> list[str]:
         mode = params.get("mode") or ("loop" if kind == self.LOOP else "baseline")
-        return [str(self.agent_root / ".venv/bin/python"),
-                str(self.repo_root / "scripts" / "run_rdagent_factor_smoke.py"), "--mode", mode]
+        route = self.container_route(attempt_id, kind, params, run_dir) or {}
+        return container_command(
+            name=route.get("name") or container_name(self.executor_id, attempt_id),
+            image=route.get("image") or self.image(),
+            workdir=CONTAINER_AGENT_DIR,
+            mounts=route.get("mounts") or [(str(self.agent_root), CONTAINER_AGENT_DIR, "rw")],
+            inner=["python", f"{CONTAINER_REPO_DIR}/scripts/run_rdagent_factor_smoke.py",
+                   "--mode", mode],
+            limits=self.limits,
+            env=self.container_environment(attempt_id),
+        )
 
     def _ollama_model(self, model: str, base: str) -> bool:
         from urllib.parse import urlsplit
@@ -1003,14 +1074,24 @@ class RDAgentExecutor(SubprocessExecutor):
                 required_for=[self.LOOP])
         else:
             add("rdagent.embedding", "missing", "EMBEDDING_MODEL is not configured", required_for=[self.LOOP])
-        # EXEC13: a mandatory limit this route cannot enforce must refuse admission rather than
-        # run uncapped. The factor path currently runs generated code in a host LocalEnv
-        # (scripts/run_rdagent_factor_smoke.py overrides RD-Agent's get_factor_env), so RD-Agent's
-        # own DockerConf.mem_limit never applies to our attempts.
-        if "memory_bytes" in self.limits:
+        # EXEC13: the whole attempt (driver + factor code) runs in one container, so the policy
+        # memory/CPU limits are real cgroup/RLIMIT limits rather than declarations.
+        image = self.image()
+        runtime = self.docker_runtime()
+        limit = (self.limits.get("memory_bytes") or (None,))[0]
+        if runtime is None or not runtime.startswith("linux/"):
             add("rdagent.limits", "missing",
-                "policy enforces a memory hard limit, but this route runs factor code in a host "
-                "LocalEnv (no container); admission is refused until the container route lands")
+                f"the RD-Agent attempt runs in a container, but the Docker engine is not a "
+                f"reachable linux/ engine (observed {runtime or 'none'}); run "
+                f"scripts/start_research_runtime.sh")
+        elif not self.image_present(image):
+            add("rdagent.limits", "missing",
+                f"RD-Agent container image {image} is not built; run "
+                f"scripts/build_rdagent_runner_image.sh")
+        else:
+            add("rdagent.limits", "ok",
+                f"attempt runs in {image} with --memory={round((limit or 0) / 1024 ** 3, 1) if limit else 'none'}GiB "
+                f"and --ulimit cpu={self.limits.get('cpu_seconds', (None,))[0] or 'none'}")
         hook = AGENT_BUDGET_HOOK_DIR / "sitecustomize.py"
         helper = AGENT_BUDGET_HOOK_DIR / "qwb_agent_budget.py"
         ledger_dir = self.call_ledger_path().parent
@@ -1035,7 +1116,6 @@ class RDAgentExecutor(SubprocessExecutor):
         else:
             add("rdagent.docker", "missing",
                 f"Linux Docker engine not reachable (observed {runtime or 'none'}); run scripts/start_research_runtime.sh")
-        image = os.environ.get("QWB_RDAGENT_IMAGE", QWB_RDAGENT_IMAGE)
         add("rdagent.image", "ok" if self.image_present(image) else "missing",
             f"container image {image} {'present' if self.image_present(image) else 'not built'}")
         cpu, memory = self.pool_cpu_count(), self.pool_memory()
@@ -1073,6 +1153,9 @@ class RDAgentExecutor(SubprocessExecutor):
             "mode": mode,
             "artifacts": {"workspace": Path(attempt["workspace"]).name},
             "notes": ["集成探针结果不等于研究结论；研究快照需经可信离线导出后进入结果库。"],
+            "engine": {"engine": "rdagent", "runtime": "container", "image": self.image(),
+                       "image_id": self.image_id(self.image()),
+                       "limits": {name: values[0] for name, values in self.limits.items()}},
         }
         evidence_path = self.agent_root / "git_ignore_folder" / filename
         if evidence_path.is_file():

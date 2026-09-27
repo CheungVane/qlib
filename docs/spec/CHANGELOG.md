@@ -2,6 +2,17 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — T04 第12片：RD-Agent 入口容器化，A41 通过
+
+- 来源：用户"那就给他上容器吧"（承接 `agent_max_calls` 之后 T04 的最后一项）。
+- 镜像：新增 `extensions/workbench/docker/rdagent-runner/Dockerfile` 与 `scripts/build_rdagent_runner_image.sh`，从 RD-Agent 上游 `requirements.txt` 构建 `qwb-rdagent-cpu:local`（本机基于 commit 484776c；RD-Agent 检出只挂载、**不打包**，所以上游代码变化无需重建镜像，只有依赖变化才需要）。首次构建因 `pip install /src` 的构建隔离环境缺 numpy 失败，改用 `--no-build-isolation` 后通过。
+- 路由：整个 Attempt（驱动 + 因子代码）在一个容器内运行，`--memory/--memory-swap`=政策值、`--ulimit cpu=`=政策值；挂载 `/qwb/agent`(rw，检出与 `git_ignore_folder`)、`/qwb/repo`(ro)、`/qwb/hooks`(ro)、`/qwb/platform`(rw，研究快照与调用账本)、`~/.qlib`→`/root/.qlib`(ro，模板里的 `~` 路径原样可用)。
+- 解耦：**仍未改上游源码**。三处适配都在平台自己的脚本里——①探针把 `QTDockerEnv` 换成同容器的 `LocalEnv`（本机 `.env` 设了 `MODEL_COSTEER_ENV_TYPE=docker`，否则 workspace 会去连嵌套 Docker，实测即失败于此）；②`FACTOR_COSTEER_PYTHON_BIN`/LocalEnv 的 `bin_path` 在容器内指向容器解释器；③Ollama 基址由平台改写为宿主可达地址（`host.lima.internal`，实测容器内可访问 bge-m3）。
+- 顺带修：`run_rdagent_factor_smoke.py` 的研究快照出口硬编码 `<repo>/.data/workbench`，容器内 repo 只读即失败；新增 `QWB_PLATFORM_ROOT` 由平台注入并挂载。
+- 缺陷修复：`container_environment()` 起初没传 `QWB_ATTEMPT_ID`，平台级 loop 的 `attempt_used` 记成 0、`blocked_by_this_attempt=false`；补上后归属正确。
+- 验证（全部实机）：门禁 `[gate] ok`（Python 290 项 + JS 25 项）；平台 Attempt `231ed548`（`rdagent.factor.baseline`）在容器内退出 0、metric_count 19、quality `passed_checks`，运行中 `docker inspect` 读到 `Memory=MemorySwap=2147483648`、`Ulimits=cpu=3600:3600`；容器内真实 `--mode loop` 在 limit=3 时发 3 次即被拦（10 次内部重试全拒、`used=3` 无超支）；平台级 loop 在临时 limit=4 下以 `outcome.agent_budget.calls.status=budget_exhausted`（`used=4`、`attempt_used=4`、`blocked_by_this_attempt=true`）收尾，**策略随后已还原为 200**。证据见[agent-call-budget](evidence/20260927-agent-call-budget.json)（含 RD-Agent 容器段）。
+- 出口：**A41 通过（本机）**，T04 完成；本项不含多任务调度/排队、远程执行器与按供应商计量的 token 核算。
+
 ## 2026-09-27 — T04 第11片：`agent_max_calls` 强制（不改 RD-Agent 源码）
 
 - 来源：用户"`agent_max_calls` 没有强制，去做吧，如果需要修改 rd-agent 的源代码，记得尽量与原始架构解耦"。

@@ -17,6 +17,9 @@ from prepare_cn_scenario import compile_agent, effective_segments, load_profile,
 
 PROJECT = Path(__file__).resolve().parents[1]
 AGENT = Path(os.environ.get("QWB_RDAGENT_ROOT") or PROJECT.parent / "RD-Agent").resolve()
+# Where the platform keeps its own state (research snapshots, ledgers). The repository may be
+# mounted read-only when this probe runs inside a container, so this must be explicit.
+PLATFORM_ROOT = Path(os.environ.get("QWB_PLATFORM_ROOT") or PROJECT / ".data" / "workbench")
 BASE_FEATURES = AGENT / "git_ignore_folder/qwb_base_features"
 EVIDENCE = AGENT / "git_ignore_folder/qwb_factor_smoke.json"
 
@@ -27,7 +30,15 @@ def evidence_for(workspace, bundle, template, mode, metric_count):
         raise RuntimeError('Result scenario does not match current configuration')
     return {'schema_version': 2, 'mode': mode, 'completed_at': datetime.now(timezone.utc).isoformat(),
             'metric_count': metric_count, 'dataset': 'synthetic_cn_current', 'template': template.name,
-            'image': 'qwb-qlib-cpu:local', 'scenario_fingerprint': bundle['fingerprint'], 'quality': quality}
+            'image': ENGINE_IMAGE, 'runtime': RUNTIME,
+            'scenario_fingerprint': bundle['fingerprint'], 'quality': quality}
+
+
+# The platform can run this probe inside a bounded container (whole attempt, one cgroup
+# limit). The flags below only adapt paths and tool lookup; nothing about RD-Agent changes.
+IN_CONTAINER = os.environ.get("QWB_RDAGENT_IN_CONTAINER") == "1"
+ENGINE_IMAGE = os.environ.get("QWB_RDAGENT_IMAGE") or "qwb-rdagent-cpu:local"
+RUNTIME = "container" if IN_CONTAINER else "host_process"
 
 
 def main() -> None:
@@ -43,7 +54,7 @@ def main() -> None:
         (BASE_FEATURES / "base_factors.json").write_text('{"CLOSE":"$close"}\n')
     if not (AGENT / ".env").is_file():
         parser.error("RD-Agent .env is missing")
-    if shutil.which("timeout") is None:
+    if not IN_CONTAINER and shutil.which("timeout") is None:
         coreutils_bin = Path("/opt/homebrew/opt/coreutils/libexec/gnubin")
         if (coreutils_bin / "timeout").is_file():
             os.environ["PATH"] = f"{coreutils_bin}:{os.environ.get('PATH', '')}"
@@ -61,7 +72,11 @@ def main() -> None:
     for segment, bounds in effective_segments(bundle).items():
         for bound, value in zip(('START', 'END'), bounds):
             os.environ[f'QLIB_FACTOR_{segment.upper()}_{bound}'] = value
-    os.environ["FACTOR_COSTEER_PYTHON_BIN"] = str(AGENT / ".venv/bin/python")
+    # Inside the bounded container the interpreter that runs this probe is also the one the
+    # factor code must use (the image carries Qlib and the RD-Agent dependencies).
+    factor_bin = (os.environ.get("PATH", "") if IN_CONTAINER
+                  else f"{AGENT / '.venv/bin'}:{os.environ.get('PATH', '')}")
+    os.environ["FACTOR_COSTEER_PYTHON_BIN"] = sys.executable if IN_CONTAINER else str(AGENT / ".venv/bin/python")
     sys.path.insert(0, str(AGENT))
 
     from rdagent.utils.env import LocalConf, LocalEnv
@@ -70,17 +85,36 @@ def main() -> None:
     import rdagent.scenarios.qlib.experiment.factor_experiment as factor_experiment
     from rdagent.scenarios.qlib.experiment.workspace import QlibFBWorkspace
 
-    # RD-Agent's Mac factor path assumes Conda. The local source data can be
-    # evaluated with the installed RD-Agent Python environment instead.
+    # RD-Agent's Mac factor path assumes Conda. Evaluate the generated code with the
+    # interpreter of this probe: the host RD-Agent venv, or the container that carries Qlib
+    # and the RD-Agent dependencies.
     factor_experiment.get_factor_env = lambda: LocalEnv(
-        conf=LocalConf(default_entry="python main.py", bin_path=f"{AGENT / '.venv/bin'}:{os.environ['PATH']}")
-    )
+        conf=LocalConf(default_entry="python main.py", bin_path=factor_bin))
     original_init = QlibFBWorkspace.__init__
 
     def init_from_cn_template(self, template_folder_path, *extra, **kwargs):
         return original_init(self, template_folder_path=template, *extra, **kwargs)
 
     QlibFBWorkspace.__init__ = init_from_cn_template
+
+    if IN_CONTAINER:
+        # This probe already runs inside the bounded container, so the workspace must not
+        # connect to a nested Docker engine (``MODEL_COSTEER_ENV_TYPE=docker`` in .env). The
+        # stand-in keeps upstream's execute() logic — only the execution environment changes.
+        import rdagent.scenarios.qlib.experiment.workspace as workspace_module
+
+        class _ContainerLocalEnv:
+            def __init__(self, *args, **kwargs):
+                self._env = LocalEnv(conf=LocalConf(default_entry="python main.py",
+                                                    bin_path=factor_bin))
+
+            def prepare(self, *args, **kwargs):
+                return self._env.prepare(*args, **kwargs)
+
+            def check_output(self, **kwargs):
+                return self._env.check_output(**kwargs)
+
+        workspace_module.QTDockerEnv = _ContainerLocalEnv
 
     if args.mode == "baseline":
         from rdagent.scenarios.qlib.developer.factor_runner import QlibFactorRunner
@@ -134,7 +168,7 @@ if __name__ == "__main__":
         if Path.cwd().resolve() == AGENT.resolve():
             from export_rdagent_research import export
             try:
-                exported = export(AGENT, PROJECT / '.data/workbench/research', PROJECT / '.data/workbench', True,
+                exported = export(AGENT, PLATFORM_ROOT / 'research', PLATFORM_ROOT, True,
                                   {p.name for p in (AGENT / 'log').glob('*') if p.is_dir()} - prior_sessions)
                 print(json.dumps({'research_sessions_synced': exported}))
             except Exception as exc:

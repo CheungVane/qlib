@@ -15,7 +15,10 @@ import time
 import unittest
 from pathlib import Path
 
-from quant_workbench.adapters.executors import AGENT_BUDGET_HOOK_DIR, RDAgentExecutor
+from quant_workbench.adapters.executors import (
+    AGENT_BUDGET_HOOK_DIR, CONTAINER_AGENT_DIR, CONTAINER_HOOK_DIR, CONTAINER_PLATFORM_DIR,
+    CONTAINER_REPO_DIR, RDAgentExecutor,
+)
 from quant_workbench.execution import ExecutionService
 from quant_workbench.execution_policy import agent_limits, child_limits, load_policy
 from quant_workbench.storage import LocalResultRepository
@@ -144,15 +147,29 @@ class ExecutorWiringTests(unittest.TestCase):
         self.policy = load_policy()
         self.limits = {**child_limits(self.policy), **agent_limits(self.policy)}
 
-    def test_environment_carries_the_hook_and_the_ledger(self):
+    def test_container_carries_the_hook_the_ledger_and_the_limits(self):
         executor = RDAgentExecutor(repo_root=self.root, agent_root=self.root,
                                    profile_path=ROOT / "configs/cn/profile.json",
                                    limits=self.limits, budget_root=self.root / "agent_budget")
-        env = executor.environment(executor.LOOP)
-        self.assertTrue(env["PYTHONPATH"].startswith(str(AGENT_BUDGET_HOOK_DIR)))
-        self.assertEqual(env["QWB_AGENT_BUDGET_LIMIT"], str(self.policy.agent_max_calls))
-        self.assertEqual(env["QWB_AGENT_BUDGET_FILE"], str(executor.call_ledger_path()))
-        self.assertEqual(env["QWB_AGENT_BUDGET_STRICT"], "1")
+        host_env = executor.environment(executor.LOOP)
+        self.assertNotIn("QWB_AGENT_BUDGET_FILE", host_env,
+                         "the host process must not be pointed at the in-container ledger")
+        container = executor.container_environment()
+        self.assertEqual(container["QWB_AGENT_BUDGET_LIMIT"], str(self.policy.agent_max_calls))
+        self.assertEqual(container["QWB_AGENT_BUDGET_STRICT"], "1")
+        self.assertEqual(container["QWB_RDAGENT_IN_CONTAINER"], "1")
+        self.assertEqual(container["QWB_RDAGENT_ROOT"], CONTAINER_AGENT_DIR)
+        self.assertEqual(container["QWB_REPO_ROOT"], CONTAINER_REPO_DIR)
+        self.assertTrue(container["PYTHONPATH"].startswith(CONTAINER_HOOK_DIR))
+        self.assertEqual(container["QWB_AGENT_BUDGET_FILE"],
+                         f"{CONTAINER_PLATFORM_DIR}/agent_budget/{executor.call_ledger_path().name}")
+        prepared = executor.prepare("route-1", executor.LOOP, {"mode": "loop"})
+        command = " ".join(prepared["command"])
+        self.assertEqual(prepared["command"][:3], ["docker", "run", "--rm"])
+        self.assertIn("--memory", command)
+        self.assertIn(f"{CONTAINER_REPO_DIR}/scripts/run_rdagent_factor_smoke.py", command)
+        mounts = " ".join(prepared["container"]["mounts"][index][0] for index in range(1))
+        self.assertIn(str(self.root), mounts)
         checks = {item["id"]: item for item in executor.checks()}
         self.assertIn("rdagent.call_budget", checks, checks.keys())
 
