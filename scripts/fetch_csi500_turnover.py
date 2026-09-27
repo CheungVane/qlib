@@ -167,7 +167,9 @@ def main() -> int:
                 print(f"[warn] {symbol_name}: {status}", file=sys.stderr)
             if index % 25 == 0 or index == len(pending):
                 print(f"[progress] {index}/{len(pending)} symbols, errors={errors}", flush=True)
-            time.sleep(pause)
+            if not status.startswith("skipped"):
+                # Pacing protects the source, so it only applies where we actually queried it.
+                time.sleep(pause)
     finally:
         baostock.logout()
 
