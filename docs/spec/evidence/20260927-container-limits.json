@@ -1,0 +1,35 @@
+{
+  "policy": "sha256:8e32acbd5c71b7f8cebd59bbe8c24d01",
+  "enforce": [
+    "cpu",
+    "memory"
+  ],
+  "memory_bytes": 2147483648,
+  "max_concurrent": 2,
+  "checks": {
+    "cn.profile": {
+      "status": "ok",
+      "detail": "fingerprint b1d50a4a1795; synthetic=True; rules as_of 2026-09-26"
+    },
+    "cn.data_snapshot": {
+      "status": "ok",
+      "detail": "materialised snapshot b1d50a4a1795 matches the profile fingerprint"
+    },
+    "cn.calendar": {
+      "status": "ok",
+      "detail": "calendar sse-sessions-20191001-20220110-v1 covers 2019-10-01..2022-01-10"
+    },
+    "cn.fee_scenario": {
+      "status": "ok",
+      "detail": "commission 0.0002/side, min 5.00, stamp_sell 0.0005, transfer 0.00001, slippage 5bps"
+    },
+    "cn.container": {
+      "status": "ok",
+      "detail": "image qwb-qlib-cpu:local (sha256:0a2c4966554c); pool memory 5.8GiB, enforced limit 2.0GiB"
+    },
+    "cn.attempt_workspace": {
+      "status": "ok",
+      "detail": "per-attempt workspace under cn_runs is writable"
+    }
+  }
+}

@@ -2,10 +2,22 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — T04 第10片：Qlib 入口容器化，内存/CPU 硬上限落地
+
+- 来源：用户对"为什么要设上限"给出结论"那要容器"，授权把 Qlib 执行器改走容器。
+- 路由：`QlibCNExecutor` 现在用 `docker run --rm --init --name qwb-<executor>-<attempt>` 运行 `qrun`，镜像 `qwb-qlib-cpu:local`（colima `rdagent` 池 4 CPU / 5.77 GiB）。内存 = `--memory/--memory-swap`（cgroup 硬上限，禁用交换），CPU = `--ulimit cpu=<policy cpu_seconds>`（容器内 RLIMIT_CPU）；宿主侧不再对 docker 客户端注入 `ulimit -t`。取消时按确定性容器名 `docker rm -f` 兜底，避免只杀掉 docker 客户端而容器继续运行。
+- 路径：挂载固定为 `/qwb/run`(rw)、`/qwb/data`(ro，行情快照)、`/qwb/src`(ro，平台代码，`-e PYTHONPATH` 保证挂载的检出优先于镜像内快照)；编译后的 `workflow.yaml` 在这些挂载路径下重写，**残留任何宿主绝对路径即拒绝执行**。实测发现 colima 对"宿主路径=容器路径"的同路径 bind 时好时坏，故不采用同路径挂载。
+- 归一化：容器内 MLflow 记录的是 `/qwb/run/...`，宿主读不到；`outcome()` 在导入前把 Attempt 自身跟踪库（`experiments.artifact_location`、`runs.artifact_uri`）与 `meta.yaml` 的该前缀改回宿主工作目录，**只改路径字符串**，指标/参数/产物字节不动，并把它登记在 `outcome.container_paths_normalized`。
+- 归类：退出码 137（cgroup OOM 或 RLIMIT_CPU 硬杀）在有强制上限时归 `failed/resource_limit`，不再读成 `nonzero_exit`；同时回收已结束的 Popen，减少门禁里的 ResourceWarning。这条修掉了此前"CPU 上限因 shell 先被终止而落 interrupted"的时序依赖。
+- 政策：`configs/workbench/execution_policy.json` 改为 `enforce=["cpu","memory"]`、`memory_bytes=2GiB`（2 并发 × 2GiB < 池 5.77GiB），`note`/`container` 段说明机制与池约束；`container_flags()` 取代原先按 `cpu_seconds//3600` 猜 `--cpus` 的写法。
+- 前置检查：Qlib 入口新增 `cn.container`（Docker 引擎为 linux、镜像存在、池内存 ≥ 强制上限），不再要求仓库 `.venv/bin/qrun`；编译改用工作台自身解释器（`sys.executable`，含 PyYAML）。RD-Agent 入口新增 `rdagent.limits`：其因子代码经 `scripts/run_rdagent_factor_smoke.py` 在宿主 `LocalEnv` 执行，上游 `DockerConf.mem_limit` 不适用于本仓库路径，故在 `memory` 属必须项期间**拒绝准入**，不再无上限运行。
+- 验证：全程门禁 `[gate] ok`（Python 281 项含 5 项容器用例跳过、JS 25 项）；`QWB_CONTAINER_TESTS=1` 下 128MiB 上限分配 400MB → `failed/resource_limit`(137)、2 秒 CPU 上限忙循环 → `resource_limit`；真实容器化 Attempt `e7d21a20` 退出 0、质量 `passed_checks`（123 IC 日/122 交易日）、引擎证据含镜像 ID、EXEC12 自动入库 `imported`；另一次 Attempt（`7fbac10e`，归一化前）导入失败，补归一化后经 `qwb import-attempt` 重试 `imported`。证据见[container-route](evidence/20260927-container-route.json)与[container-limits](evidence/20260927-container-limits.json)。
+- 边界：`agent_max_calls` 仍未强制（需执行器→平台回报通道）；RD-Agent 容器路由未做，**A41 仍不通过**。本批未改数据、指标与结果语义；`.data/workbench-container-check` 是本次验证用的独立平台库，未触碰演示库。
+
 ## 2026-09-27 — 更正：RD-Agent 入口的内存上限来自 RD-Agent 自身，不是本平台 policy
 
 - 触发：用户问"qlib 为什么需要容器"，核对"（RD-Agent 执行器已走容器）"这句措辞时发现它会被读成"RD-Agent 入口已受平台内存上限约束"。
-- 事实（代码与上游核对）：`RDAgentExecutor.command()` 启动的是**宿主 subprocess**（`RD-Agent/.venv/bin/python scripts/run_rdagent_factor_smoke.py`），平台不传 `--memory`/`--cpus`；真正的容器由 RD-Agent 自己创建，其上限来自上游 `rdagent/utils/env.py` 的 `DockerConf` 默认值——`mem_limit="48g"`、`cpu_count=None`。在本机 5.77 GiB 的 colima 池里，48g 实际上等于 VM 上限，CPU 更是无约束。
+- 事实（代码与上游核对）：`RDAgentExecutor.command()` 启动的是**宿主 subprocess**（`RD-Agent/.venv/bin/python scripts/run_rdagent_factor_smoke.py`），平台不传 `--memory`/`--cpus`；该脚本进一步用 `LocalEnv` 覆盖 `get_factor_env`，**生成的因子代码就在宿主 RD-Agent venv 里跑**，所以上游 `rdagent/utils/env.py` 的 `DockerConf` 默认值（`mem_limit="48g"`、`cpu_count=None`）对本仓库这条路径**并不生效**——它只约束使用 DockerEnv 的其它场景。上一条把"容器由 RD-Agent 自建"写进结论是错的，见同日的《Qlib 入口容器化》一条。
 - 更正：准确说法是**两个入口都没有受 policy 的 `memory_bytes`/`cpu_seconds` 约束**，缺的是平台侧容器路由（Qlib 与 RD-Agent 都要接）；容器能强制内存上限的结论（`docker run --memory=…` 实测 OOM）仍然成立，那是"平台有能力"，不是"执行器已用上"。
 - 影响：A41 的"内存/CPU 硬上限由执行器可核验"对两个入口都未落地，T04 剩余范围不因此缩小；`enforce=["cpu"]` 保持不变。
 

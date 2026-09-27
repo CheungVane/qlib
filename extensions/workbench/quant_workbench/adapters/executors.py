@@ -12,7 +12,9 @@ import os
 import shlex
 import shutil
 import signal
+import sqlite3
 import subprocess
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,12 +25,42 @@ from ..cn_market import (
     rdagent_snapshot_path,
 )
 from ..execution import InvalidExecutionRequest
+from ..execution_policy import container_flags
 from ..source_safety import Sanitizer
 
 PREFLIGHT_TTL_SECONDS = 15.0
 LOG_BYTE_CAP = 200_000
 COMPILE_TIMEOUT = 180
-QWB_RDAGENT_IMAGE = "qwb-qlib-cpu:local"
+ENGINE_IMAGE = "qwb-qlib-cpu:local"
+QWB_RDAGENT_IMAGE = ENGINE_IMAGE  # legacy alias; QWB_RDAGENT_IMAGE/QWB_ENGINE_IMAGE override
+CONTAINER_NAME_PREFIX = "qwb"
+CONTAINER_RUN_DIR = "/qwb/run"
+CONTAINER_DATA_DIR = "/qwb/data"
+CONTAINER_SOURCE_DIR = "/qwb/src"
+
+
+def container_name(executor_id: str, attempt_id: str) -> str:
+    """Deterministic container name so cancel can clean up without extra persistence."""
+    slug = "".join(ch if ch.isalnum() or ch in "-." else "-" for ch in f"{executor_id}-{attempt_id}")
+    return f"{CONTAINER_NAME_PREFIX}-{slug[:48]}"
+
+
+def container_command(*, name: str, image: str, workdir: str, mounts, inner: list[str],
+                      limits: dict[str, Any] | None = None,
+                      env: dict[str, str] | None = None) -> list[str]:
+    """`docker run` invocation that carries the policy limits into the container.
+
+    Mounts keep the same absolute paths inside and outside so the compiled engine config
+    needs no rewriting; `--rm` plus a named container makes cleanup deterministic.
+    """
+    command = ["docker", "run", "--rm", "--init", "--name", name,
+               *container_flags(limits or {})]
+    for key, value in (env or {}).items():
+        command += ["-e", f"{key}={value}"]
+    for source, target, mode in mounts:
+        command += ["-v", f"{source}:{target}:{mode}"]
+    command += ["-w", str(workdir), image, *inner]
+    return command
 
 
 def _now() -> str:
@@ -153,6 +185,60 @@ class SubprocessExecutor:
     def workspace(self, attempt_id: str, kind: str, params: dict[str, Any]) -> Path:
         return self.repo_root / ".data" / "attempts" / attempt_id
 
+    # -- container route (EXEC13) ----------------------------------------
+    def containerized(self) -> bool:
+        """True when this executor runs the attempt inside a container."""
+        return False
+
+    def container_route(self, attempt_id: str, kind: str, params: dict[str, Any],
+                        run_dir: Path) -> dict[str, Any] | None:
+        """Hook: return the container spec for this attempt, or None for a host process."""
+        return None
+
+    def engine_image(self) -> str:
+        return os.environ.get("QWB_ENGINE_IMAGE") or ENGINE_IMAGE
+
+    def docker_runtime(self) -> str | None:
+        if shutil.which("docker") is None:
+            return None
+        result = _run(["docker", "info", "--format", "{{.OSType}}/{{.Architecture}}"], timeout=5)
+        return result.stdout.strip() if result and result.returncode == 0 else None
+
+    def image_present(self, image: str) -> bool:
+        result = _run(["docker", "image", "inspect", image, "--format", "{{.Id}}"], timeout=10)
+        return bool(result and result.returncode == 0 and result.stdout.strip())
+
+    def image_id(self, image: str) -> str | None:
+        result = _run(["docker", "image", "inspect", image, "--format", "{{.Id}}"], timeout=10)
+        return result.stdout.strip() if result and result.returncode == 0 else None
+
+    def pool_memory(self) -> int | None:
+        result = _run(["docker", "info", "--format", "{{.MemTotal}}"], timeout=5)
+        if result is None or result.returncode != 0:
+            return None
+        try:
+            return int(result.stdout.strip())
+        except ValueError:
+            return None
+
+    def pool_cpu_count(self) -> int | None:
+        result = _run(["docker", "info", "--format", "{{.NCPU}}"], timeout=5)
+        if result is None or result.returncode != 0:
+            return None
+        try:
+            return int(result.stdout.strip())
+        except ValueError:
+            return None
+
+    def _remove_container(self, name: str) -> None:
+        """Best-effort cleanup: killing the docker client alone can leave the container up."""
+        if not self.containerized() or shutil.which("docker") is None:
+            return
+        try:
+            subprocess.run(["docker", "rm", "-f", name], capture_output=True, timeout=60)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+
     def prepare_extra(self, attempt_id: str, kind: str, params: dict[str, Any], run_dir: Path) -> dict[str, Any]:
         return {}
 
@@ -203,7 +289,7 @@ class SubprocessExecutor:
             raise InvalidExecutionRequest(f"attempt workspace is not writable: {exc}") from exc
         log_path = run_dir / "attempt.log"
         extra = self.prepare_extra(attempt_id, kind, normalized, run_dir)
-        return {
+        payload = {
             "attempt_id": attempt_id,
             "kind": kind,
             "params": normalized,
@@ -216,6 +302,10 @@ class SubprocessExecutor:
             "config_fingerprint": self.config_fingerprint(),
             **extra,
         }
+        route = self.container_route(attempt_id, kind, normalized, run_dir)
+        if route:
+            payload["container"] = route
+        return payload
 
     def start(self, attempt_id: str, prepared: dict[str, Any]) -> dict[str, Any]:
         run_dir = Path(prepared["workspace"])
@@ -224,7 +314,9 @@ class SubprocessExecutor:
         log_path.touch(exist_ok=True)
         preamble = "umask 022\n"
         cpu_limit = (self.limits.get("cpu_seconds") or (None,))[0]
-        if cpu_limit:
+        # A containerized attempt carries RLIMIT_CPU through `docker run --ulimit cpu=`, so the
+        # host-side `ulimit -t` must not be applied to the docker client itself.
+        if cpu_limit and not prepared.get("container"):
             # POSIX sh: ulimit -t is RLIMIT_CPU in seconds — verified to kill runaway children.
             preamble += f"ulimit -t {int(cpu_limit)}\n"
             # A CPU-limit kill may prevent the numeric marker from being written; trap the
@@ -254,10 +346,25 @@ class SubprocessExecutor:
         code = _read_int(run_dir / "exit_code")
         handle = self._processes.get(attempt_id)
         if code == 152:  # 128 + SIGXCPU(24): the child itself was stopped by the CPU limit
-            self._processes.pop(attempt_id, None)
+            finished = self._processes.pop(attempt_id, None)
+            if finished is not None:
+                finished.poll()  # reap, so a completed attempt does not linger as a warning
             return {"state": "failed", "exit_code": 152, "error_code": "resource_limit",
                     "error_message": "terminated by the enforced CPU limit",
                     "ended_at": _now(), "evidence": {"exit_marker": True, "exit_code": 152}}
+        if code == 137 and (self.limits.get("memory_bytes") or self.limits.get("cpu_seconds")):
+            # 128 + SIGKILL: inside a container this is the cgroup OOM kill or the hard
+            # RLIMIT_CPU kill (the soft SIGXCPU handler may not survive to write a marker).
+            # Both are enforced resource limits, so they must not read as "nonzero_exit".
+            finished = self._processes.pop(attempt_id, None)
+            if finished is not None:
+                finished.poll()
+            return {"state": "failed", "exit_code": 137, "error_code": "resource_limit",
+                    "error_message": "terminated by an enforced resource limit",
+                    "ended_at": _now(),
+                    "evidence": {"exit_marker": True, "exit_code": 137,
+                                 "containerized": bool(self.containerized()),
+                                 "limits": {name: values[0] for name, values in self.limits.items()}}}
         if code is None and handle is not None:
             returncode = handle.poll()
             if returncode is not None:
@@ -325,6 +432,10 @@ class SubprocessExecutor:
         if handle is not None:
             handle.poll()
         code = _read_int(marker)
+        # Even a confirmed host-process end is not enough for a containerized attempt: the
+        # container is a separate object in the VM, so ask Docker to remove it by its
+        # deterministic name (best effort; useless if the container never started).
+        self._remove_container(container_name(self.executor_id, attempt_id))
         if code is None and _pid_alive(pid):
             return {"confirmed": False, "state": "running", "reason": "process_still_running",
                     "evidence": {"signals": signals}}
@@ -387,7 +498,8 @@ class QlibCNExecutor(SubprocessExecutor):
     def describe(self, kind: str) -> dict[str, Any]:
         return {
             "label": "Qlib CN 合成行情训练+回测",
-            "description": "按 configs/cn/profile.json 编译独立工作目录，用 Qlib 自身环境运行；成功后平台自动发布结果并写回执。",
+            "description": "按 configs/cn/profile.json 编译独立工作目录，在受限容器内用 Qlib 运行"
+                           "（内存=cgroup 硬上限，CPU=RLIMIT_CPU）；成功后平台自动发布结果并写回执。",
             "probe": False,
             "data_nature": "synthetic_current_rules_counterfactual",
             # EXEC12: the platform publishes this entry's result automatically.
@@ -441,12 +553,32 @@ class QlibCNExecutor(SubprocessExecutor):
             f"commission {account['commission_both']}/side, min {account['minimum_commission']}, "
             f"stamp_sell {fees['stamp_sell']}, transfer {fees['transfer_both']}, "
             f"slippage {bundle['research']['execution']['slippage_bps']}bps")
-        python = self.repo_root / ".venv/bin/python"
-        qrun = self.repo_root / ".venv/bin/qrun"
-        if python.is_file() and qrun.is_file():
-            add("cn.engine_env", "ok", "Qlib virtualenv provides python and qrun")
+        # EXEC13: the attempt runs in a container so the memory cap is a cgroup limit. The
+        # image (not the checkout's .venv) is the engine runtime and its ID is the version
+        # evidence recorded with the attempt.
+        image = self.engine_image()
+        runtime = self.docker_runtime()
+        if runtime is None:
+            add("cn.container", "missing",
+                "Docker engine is not reachable; start it with scripts/start_research_runtime.sh")
+        elif not runtime.startswith("linux/"):
+            add("cn.container", "missing",
+                f"Docker engine runs {runtime} containers; the Qlib image needs linux/")
+        elif not self.image_present(image):
+            add("cn.container", "missing",
+                f"container image {image} is not built; run scripts/build_rdagent_cpu_image.sh")
         else:
-            add("cn.engine_env", "missing", "run scripts/run_cn_demo.sh once to build the Qlib virtualenv")
+            image_id = self.image_id(image) or "unknown-id"
+            limit = (self.limits.get("memory_bytes") or (None,))[0]
+            pool = self.pool_memory()
+            if limit and pool and pool < limit:
+                add("cn.container", "missing",
+                    f"image {image} ({image_id[:19]}) but pool memory {pool} < enforced limit {limit}")
+            else:
+                add("cn.container", "ok",
+                    f"image {image} ({image_id[:19]}); pool memory "
+                    f"{round((pool or 0) / 1024 ** 3, 1)}GiB, enforced limit "
+                    f"{round((limit or 0) / 1024 ** 3, 1) if limit else 'none'}GiB")
         run_root = self.repo_root / ".data" / "cn_runs"
         try:
             run_root.mkdir(parents=True, exist_ok=True)
@@ -469,13 +601,48 @@ class QlibCNExecutor(SubprocessExecutor):
     def cwd(self, kind: str, run_dir: Path) -> Path:
         return run_dir
 
+    def containerized(self) -> bool:
+        return True
+
+    def container_route(self, attempt_id: str, kind: str, params: dict[str, Any],
+                        run_dir: Path) -> dict[str, Any] | None:
+        """Fixed container paths; the compiled workflow is rewritten to match them.
+
+        Same-path bind mounts are not reliable on this host (colima serves them
+        intermittently), so the container only ever sees paths we hand it explicitly.
+        """
+        bundle = self.bundle()
+        data_dir = (self.repo_root / bundle["research"]["data_path"]).resolve()
+        source_root = (self.repo_root / "extensions" / "workbench").resolve()
+        mounts: list[tuple[str, str, str]] = [
+            (str(run_dir), CONTAINER_RUN_DIR, "rw"),
+            (str(data_dir), CONTAINER_DATA_DIR, "ro"),
+            (str(source_root), CONTAINER_SOURCE_DIR, "ro"),
+        ]
+        image = self.engine_image()
+        return {"name": container_name(self.executor_id, attempt_id), "image": image,
+                "image_id": self.image_id(image), "workdir": CONTAINER_RUN_DIR,
+                "mounts": mounts, "data_dir": str(data_dir),
+                "paths": {str(data_dir): CONTAINER_DATA_DIR, str(run_dir): CONTAINER_RUN_DIR,
+                          str(source_root): CONTAINER_SOURCE_DIR}}
+
     def command(self, attempt_id: str, kind: str, params: dict[str, Any], run_dir: Path) -> list[str]:
-        return [str(self.repo_root / ".venv/bin/qrun"), str(run_dir / "workflow.yaml")]
+        route = self.container_route(attempt_id, kind, params, run_dir) or {}
+        return container_command(
+            name=route.get("name") or container_name(self.executor_id, attempt_id),
+            image=route.get("image") or self.engine_image(),
+            workdir=route.get("workdir") or CONTAINER_RUN_DIR,
+            mounts=route.get("mounts") or [(str(run_dir), CONTAINER_RUN_DIR, "rw")],
+            inner=["qrun", f"{CONTAINER_RUN_DIR}/workflow.yaml"],
+            limits=self.limits,
+            # The mounted checkout must win over the copy baked into the image, otherwise the
+            # container would run stale platform code from build time.
+            env={"PYTHONPATH": CONTAINER_SOURCE_DIR},
+        )
 
     def prepare_extra(self, attempt_id: str, kind: str, params: dict[str, Any], run_dir: Path) -> dict[str, Any]:
         compile_script = self.repo_root / "scripts" / "prepare_cn_scenario.py"
-        python = self.repo_root / ".venv/bin/python"
-        result = _run([str(python), str(compile_script), "--target", "qlib", "--profile", str(self.profile_path),
+        result = _run([sys.executable, str(compile_script), "--target", "qlib", "--profile", str(self.profile_path),
                        "--out-dir", str(run_dir)], timeout=COMPILE_TIMEOUT)
         if result is None or result.returncode != 0:
             detail = (result.stderr if result else "compiler did not start").strip().splitlines()
@@ -484,7 +651,67 @@ class QlibCNExecutor(SubprocessExecutor):
         workflow = run_dir / "workflow.yaml"
         if not workflow.is_file():
             raise InvalidExecutionRequest("CN scenario compile produced no workflow.yaml")
+        self._rewrite_for_container(attempt_id, kind, params, run_dir)
         return {"workflow": str(workflow)}
+
+    def _rewrite_for_container(self, attempt_id: str, kind: str,
+                               params: dict[str, Any], run_dir: Path) -> None:
+        """Point the compiled workflow at the container's mount paths.
+
+        Fail-closed: any remaining host-absolute path means the mapping is incomplete, and
+        running such a workflow would silently read the wrong (or no) data.
+        """
+        route = self.container_route(attempt_id, kind, params, run_dir) or {}
+        mapping: dict[str, str] = route.get("paths") or {}
+        if not mapping:
+            return
+        workflow = run_dir / "workflow.yaml"
+        text = workflow.read_text(encoding="utf-8")
+        for host, inside in sorted(mapping.items(), key=lambda item: -len(item[0])):
+            text = text.replace(host, inside)
+        leftovers = sorted({token for token in ("/Users/", str(Path.home())) if token in text})
+        if leftovers:
+            detail = [line.strip() for line in text.splitlines() if leftovers[0] in line][:3]
+            raise InvalidExecutionRequest(
+                "compiled workflow still points at host paths "
+                f"({', '.join(leftovers)}): {' | '.join(detail)}")
+        workflow.write_text(text, encoding="utf-8")
+
+    def _normalize_container_paths(self, run_dir: Path) -> dict[str, Any] | None:
+        """Map the container's own mount paths back to this host directory.
+
+        MLflow records the artifact location it sees, which inside the container is
+        `/qwb/run/...`; the platform reads the attempt workspace on the host, so the recorded
+        prefix must be normalized or the result import cannot find the files. Only path
+        strings change — metrics, parameters and artifact bytes are untouched.
+        """
+        record: dict[str, Any] = {"from": CONTAINER_RUN_DIR, "to": str(run_dir),
+                                  "db_rows": 0, "meta_files": 0}
+        database = run_dir / "mlflow.db"
+        if database.is_file():
+            connection = sqlite3.connect(database)
+            try:
+                for table, column in (("experiments", "artifact_location"),
+                                      ("runs", "artifact_uri")):
+                    cursor = connection.execute(
+                        f"update {table} set {column} = replace({column}, ?, ?) "
+                        f"where {column} like ?",
+                        (CONTAINER_RUN_DIR, str(run_dir), CONTAINER_RUN_DIR + "%"))
+                    record["db_rows"] += cursor.rowcount
+                connection.commit()
+            finally:
+                connection.close()
+        for meta in (run_dir / "mlruns").rglob("meta.yaml"):
+            try:
+                text = meta.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if CONTAINER_RUN_DIR in text:
+                meta.write_text(text.replace(CONTAINER_RUN_DIR, str(run_dir)), encoding="utf-8")
+                record["meta_files"] += 1
+        if not record["db_rows"] and not record["meta_files"]:
+            return None
+        return record
 
     def outcome(self, attempt: dict[str, Any]) -> dict[str, Any]:
         run_dir = Path(attempt["workspace"])
@@ -494,6 +721,19 @@ class QlibCNExecutor(SubprocessExecutor):
             "artifacts": {"workspace": run_dir.name},
             "notes": ["执行成功不代表研究有效；结果进入结果库仍需显式导入并声明行情性质。"],
         }
+        normalized = self._normalize_container_paths(run_dir)
+        if normalized:
+            outcome["container_paths_normalized"] = normalized
+        route = self.container_route(attempt["attempt_id"], attempt["kind"],
+                                     attempt.get("params") or {}, run_dir)
+        if route:
+            # Engine version evidence: the image ID pins what actually ran (the checkout's
+            # .venv is no longer the runtime, so "current environment" must not be implied).
+            outcome["engine"] = {
+                "engine": "qlib", "runtime": "container", "image": route["image"],
+                "image_id": route["image_id"],
+                "limits": {name: values[0] for name, values in self.limits.items()},
+            }
         quality_path = run_dir / "quality.json"
         if quality_path.is_file():
             try:
@@ -645,26 +885,6 @@ class RDAgentExecutor(SubprocessExecutor):
         return [str(self.agent_root / ".venv/bin/python"),
                 str(self.repo_root / "scripts" / "run_rdagent_factor_smoke.py"), "--mode", mode]
 
-    def _docker_runtime(self) -> str | None:
-        if shutil.which("docker") is None:
-            return None
-        result = _run(["docker", "info", "--format", "{{.OSType}}/{{.Architecture}}"], timeout=5)
-        return result.stdout.strip() if result and result.returncode == 0 else None
-
-    def _image_present(self, image: str) -> bool:
-        result = _run(["docker", "image", "inspect", image, "--format", "{{.Id}}"], timeout=10)
-        return bool(result and result.returncode == 0 and result.stdout.strip())
-
-    def _resources(self) -> tuple[int | None, int | None]:
-        result = _run(["docker", "info", "--format", "{{.NCPU}} {{.MemTotal}}"], timeout=5)
-        if result is None or result.returncode != 0:
-            return None, None
-        try:
-            cpu, memory = result.stdout.split()
-            return int(cpu), int(memory)
-        except (ValueError, TypeError):
-            return None, None
-
     def _ollama_model(self, model: str, base: str) -> bool:
         from urllib.parse import urlsplit
         from urllib.request import urlopen
@@ -721,16 +941,24 @@ class RDAgentExecutor(SubprocessExecutor):
                 required_for=[self.LOOP])
         else:
             add("rdagent.embedding", "missing", "EMBEDDING_MODEL is not configured", required_for=[self.LOOP])
-        runtime = self._docker_runtime()
+        # EXEC13: a mandatory limit this route cannot enforce must refuse admission rather than
+        # run uncapped. The factor path currently runs generated code in a host LocalEnv
+        # (scripts/run_rdagent_factor_smoke.py overrides RD-Agent's get_factor_env), so RD-Agent's
+        # own DockerConf.mem_limit never applies to our attempts.
+        if "memory_bytes" in self.limits:
+            add("rdagent.limits", "missing",
+                "policy enforces a memory hard limit, but this route runs factor code in a host "
+                "LocalEnv (no container); admission is refused until the container route lands")
+        runtime = self.docker_runtime()
         if runtime and runtime.startswith("linux/"):
             add("rdagent.docker", "ok", f"Linux Docker engine {runtime}")
         else:
             add("rdagent.docker", "missing",
                 f"Linux Docker engine not reachable (observed {runtime or 'none'}); run scripts/start_research_runtime.sh")
         image = os.environ.get("QWB_RDAGENT_IMAGE", QWB_RDAGENT_IMAGE)
-        add("rdagent.image", "ok" if self._image_present(image) else "missing",
-            f"container image {image} {'present' if self._image_present(image) else 'not built'}")
-        cpu, memory = self._resources()
+        add("rdagent.image", "ok" if self.image_present(image) else "missing",
+            f"container image {image} {'present' if self.image_present(image) else 'not built'}")
+        cpu, memory = self.pool_cpu_count(), self.pool_memory()
         enough = cpu is not None and memory is not None and cpu >= 2 and memory >= 4 * 1024 ** 3
         add("rdagent.resources", "ok" if enough else "missing",
             f"docker resources cpu={cpu} mem={round((memory or 0) / 1024 ** 3, 1)}GiB (need >=2 cpu, >=4GiB)")

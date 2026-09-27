@@ -7,9 +7,10 @@ Fail-closed rules:
 * a limit listed in `enforce` must be verifiable in this environment — otherwise admission
   is refused with the exact unsupported limit named.
 
-CPU hard limits are enforced with RLIMIT_CPU in the child process. macOS refuses finite
-RLIMIT_AS/RLIMIT_DATA in this environment, so memory enforcement is declared as a visible
-limitation rather than silently assumed; A41 stays incomplete there by contract.
+CPU hard limits are enforced with RLIMIT_CPU (`ulimit -t` on the host path, `--ulimit cpu=`
+inside a container). macOS refuses finite RLIMIT_AS/RLIMIT_DATA, so a memory hard limit can
+only be enforced through container cgroups (`--memory`/`--memory-swap`); an executor that
+cannot apply them must refuse admission instead of running uncapped.
 """
 
 from __future__ import annotations
@@ -161,10 +162,24 @@ def child_limits(policy: ExecutionPolicy) -> dict:
     return limits
 
 
-def container_limits(policy: ExecutionPolicy) -> list[str]:
-    """Docker flags for the container path; memory only when the policy enforces it."""
-    flags = [f"--cpus={max(1, policy.cpu_seconds // 3600)}"]
-    if "memory" in policy.enforce:
-        flags.append(f"--memory={policy.memory_bytes}b")
-        flags.append(f"--memory-swap={policy.memory_bytes}b")
+def container_flags(limits: dict) -> list[str]:
+    """Docker flags expressing the policy for a container-routed attempt.
+
+    Memory is the cgroup limit (`--memory`/`--memory-swap`, swap disabled so the cap is real);
+    CPU stays RLIMIT_CPU, applied inside the container through `--ulimit cpu=`. Only limits the
+    policy actually hands to the executor (`child_limits`) become flags.
+    """
+    flags: list[str] = []
+    memory = (limits.get("memory_bytes") or (None,))[0]
+    if memory:
+        flags.append(f"--memory={int(memory)}b")
+        flags.append(f"--memory-swap={int(memory)}b")
+    cpu = (limits.get("cpu_seconds") or (None,))[0]
+    if cpu:
+        flags.append(f"--ulimit=cpu={int(cpu)}:{int(cpu)}")
     return flags
+
+
+def container_limits(policy: ExecutionPolicy) -> list[str]:
+    """Docker flags for the container path, derived from the executor's own limit dict."""
+    return container_flags(child_limits(policy))

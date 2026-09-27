@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "batch": "T04 container route (EXEC13 / A41)",
+  "date": "2026-09-27",
+  "policy": {
+    "revision": "sha256:8e32acbd5c71b7f8cebd59bbe8c24d01",
+    "enforce": [
+      "cpu",
+      "memory"
+    ],
+    "memory_bytes": 2147483648,
+    "max_concurrent": 2
+  },
+  "environment": {
+    "engine": "colima profile rdagent",
+    "runtime": "image qwb-qlib-cpu:local (sha256:0a2c4966554c); pool memory 5.8GiB, enforced limit 2.0GiB"
+  },
+  "executor_checks": {
+    "cn.profile": {
+      "status": "ok",
+      "detail": "fingerprint b1d50a4a1795; synthetic=True; rules as_of 2026-09-26"
+    },
+    "cn.data_snapshot": {
+      "status": "ok",
+      "detail": "materialised snapshot b1d50a4a1795 matches the profile fingerprint"
+    },
+    "cn.calendar": {
+      "status": "ok",
+      "detail": "calendar sse-sessions-20191001-20220110-v1 covers 2019-10-01..2022-01-10"
+    },
+    "cn.fee_scenario": {
+      "status": "ok",
+      "detail": "commission 0.0002/side, min 5.00, stamp_sell 0.0005, transfer 0.00001, slippage 5bps"
+    },
+    "cn.container": {
+      "status": "ok",
+      "detail": "image qwb-qlib-cpu:local (sha256:0a2c4966554c); pool memory 5.8GiB, enforced limit 2.0GiB"
+    },
+    "cn.attempt_workspace": {
+      "status": "ok",
+      "detail": "per-attempt workspace under cn_runs is writable"
+    }
+  },
+  "cap_enforcement_machine_checks": [
+    {
+      "limit": "memory",
+      "setting_bytes": 134217728,
+      "inner_command": "python -c \"bytearray(400*1024*1024)\"",
+      "observed": {
+        "state": "failed",
+        "error_code": "resource_limit",
+        "exit_code": 137,
+        "containerized": true
+      },
+      "note": "cgroup --memory/--memory-swap kill; classified resource_limit, not nonzero_exit"
+    },
+    {
+      "limit": "cpu",
+      "setting_seconds": 2,
+      "inner_command": "python -c \"while True: pass\"",
+      "observed": {
+        "state": "failed",
+        "error_code": "resource_limit",
+        "exit_code": 137
+      },
+      "note": "RLIMIT_CPU via docker --ulimit cpu=2:2 inside the container"
+    }
+  ],
+  "real_attempts": [
+    {
+      "attempt_id": "e7d21a20-7c8b-4bf3-b898-1a9fc02c59c3",
+      "workspace_label": "20260927T124405780811-b1d50a4a17-e7d21a20",
+      "status": "succeeded",
+      "exit_code": 0,
+      "engine": {
+        "runtime": "container",
+        "image": "qwb-qlib-cpu:local",
+        "image_id": "sha256:0a2c4966554ce06f880972abe15799ba5727f59e1f28066f6a4f23aac12b007c",
+        "limits": {
+          "cpu_seconds": 3600,
+          "memory_bytes": 2147483648
+        }
+      },
+      "container_path_normalization": {
+        "from": "/qwb/run",
+        "to": "[HOME]/…/<workspace>",
+        "db_rows": 3
+      },
+      "quality": {
+        "status": "passed_checks",
+        "valid_ic_days": 123,
+        "trade_days": 122,
+        "scenario_matches_config": true
+      },
+      "result_import": {
+        "status": "imported",
+        "run_id": "2ecb147c-7ac3-5662-8d92-b823699621f6",
+        "revision_id": "f10a5a9e9192525dbe5070f35bf81563",
+        "receipt_id": "7c81e477c3ed65f998666c6b3f75b040",
+        "adapter_version": "qlib_mlflow_v2"
+      }
+    },
+    {
+      "attempt_id": "7fbac10e-621f-46fb-a67f-b33fac497699",
+      "workspace_label": "20260927T124319256957-b1d50a4a17-7fbac10e",
+      "status": "succeeded",
+      "exit_code": 0,
+      "note": "run before path normalization existed: result_import first failed with MlflowException (artifact path /qwb/run/... not on the host); after normalizing the attempt's own store, the documented retry (`qwb import-attempt`) imported it",
+      "result_import": {
+        "status": "imported",
+        "run_id": "b1a60225-2db4-5b6f-a381-f2950946c44e",
+        "revision_id": "cb7c21fc8cf7c94b0fa4099b5076ac31",
+        "receipt_id": "f926e79cc4a87c2db4afdbd34f99c950",
+        "adapter_version": "qlib_mlflow_v2"
+      }
+    }
+  ],
+  "limits": [
+    "colima serves same-path bind mounts intermittently; the route uses fixed container paths (/qwb/run, /qwb/data, /qwb/src) and rewrites the compiled workflow, refusing to run when a host path remains",
+    "the container writes an attempt-local MLflow store whose artifact URIs point at /qwb/run; the platform normalizes those path strings to the host workspace before import (metrics untouched)",
+    "container tests need a run directory under $HOME (colima does not share /var/folders)",
+    "RD-Agent entry still refuses admission while memory is a mandatory limit: its factor code runs in a host LocalEnv, so no platform-enforced cap applies yet",
+    "pool memory 5.77 GiB must stay >= max_concurrent x memory_bytes; the current 2 x 2 GiB leaves VM overhead headroom"
+  ],
+  "conclusion": "Qlib attempts run in the policy-limited container; A41 memory/CPU enforcement and resource_limit classification are now evidenced for this route. agent_max_calls is still unenforced and the RD-Agent container route is still missing, so A41 stays incomplete overall."
+}

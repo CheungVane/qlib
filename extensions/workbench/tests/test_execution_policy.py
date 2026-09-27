@@ -93,14 +93,22 @@ class CapabilityTests(unittest.TestCase):
             agent_max_calls=policy.agent_max_calls, agent_scope=policy.agent_scope)
         caps = {"cpu": True, "memory": False}
         self.assertEqual(ep.unsupported_limits(memory_required, caps), ["memory"])
-        self.assertEqual(ep.unsupported_limits(policy, caps), [])
-        self.assertEqual(ep.unsupported_limits(policy, {"cpu": False, "memory": False}), ["cpu"])
+        # The shipped policy now enforces both, so a missing memory capability is a blocker.
+        self.assertEqual(ep.unsupported_limits(policy, caps), ["memory"])
+        self.assertEqual(ep.unsupported_limits(policy, {"cpu": True, "memory": True}), [])
+        self.assertEqual(ep.unsupported_limits(policy, {"cpu": False, "memory": False}),
+                         ["cpu", "memory"])
 
     def test_child_limits_follow_the_enforce_list(self):
         policy = ep.load_policy()
-        cpu_only = {(k, v) for k, v in ep.child_limits(policy).items()}
-        self.assertIn("cpu_seconds", {name for name, _ in cpu_only})
-        self.assertNotIn("memory_bytes", {name for name, _ in cpu_only})
+        self.assertEqual(set(ep.child_limits(policy)), {"cpu_seconds", "memory_bytes"})
+        cpu_only = ep.ExecutionPolicy(
+            max_concurrent=policy.max_concurrent, timeout_seconds=policy.timeout_seconds,
+            terminate_grace_seconds=policy.terminate_grace_seconds,
+            cpu_seconds=policy.cpu_seconds, memory_bytes=policy.memory_bytes,
+            enforce=("cpu",), agent_max_trials=policy.agent_max_trials,
+            agent_max_calls=policy.agent_max_calls, agent_scope=policy.agent_scope)
+        self.assertEqual(set(ep.child_limits(cpu_only)), {"cpu_seconds"})
         with_memory = ep.ExecutionPolicy(
             max_concurrent=policy.max_concurrent, timeout_seconds=policy.timeout_seconds,
             terminate_grace_seconds=policy.terminate_grace_seconds,
@@ -115,8 +123,14 @@ class CapabilityTests(unittest.TestCase):
         self.assertIsInstance(capabilities["cpu"], bool)
         self.assertIsInstance(capabilities["memory"], bool)
         profile = ep.load_policy().limit_profile()
-        self.assertEqual(profile["enforced"], ["cpu"])
-        self.assertIn("memory", profile["unenforced"])
+        # T04 container route: both limits are mandatory, so a route that cannot apply them
+        # has to refuse admission (the executor precondition checks carry that refusal).
+        self.assertEqual(profile["enforced"], ["cpu", "memory"])
+        self.assertEqual(profile["unenforced"], [])
+        self.assertEqual(ep.container_limits(ep.load_policy()),
+                         [f"--memory={ep.load_policy().memory_bytes}b",
+                          f"--memory-swap={ep.load_policy().memory_bytes}b",
+                          f"--ulimit=cpu={ep.load_policy().cpu_seconds}:{ep.load_policy().cpu_seconds}"])
 
 
 class ChildLimitEnforcementTests(unittest.TestCase):
@@ -347,7 +361,7 @@ class AgentBudgetTests(unittest.TestCase):
         summary = self.service.policy_summary()
         self.assertTrue(summary["available"])
         self.assertEqual(summary["max_concurrent"], 5)
-        self.assertEqual(summary["unenforced"], ["memory"])
+        self.assertEqual(summary["unenforced"], ["memory"])  # this fixture policy enforces cpu only
         self.assertFalse(summary["agent"]["calls_enforced"])
         self.submit("s1")
         self.assertEqual(self.service.policy_summary()["agent"]["used"]["trials"], 1)

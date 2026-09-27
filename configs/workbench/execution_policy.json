@@ -5,10 +5,10 @@
   "timeout_seconds": 3600,
   "terminate_grace_seconds": 10,
   "cpu_seconds": 3600,
-  "memory_bytes": 4294967296,
-  "enforce": ["cpu"],
-  "unenforced_limits": {
-    "memory": "macOS 的 rlimit 无法强制内存：man 2 setrlimit 未列出 RLIMIT_AS；ulimit -v/-d/-m 在本机全部返回 Invalid argument。但容器可强制且已实测：docker run --memory=256m 下分配 400MB 被 OOM 杀掉（rc 137），不加限制则成功。故内存硬上限的落地路径是把引擎执行改为走容器（--memory/--cpus），而不是 rlimit；当前 Qlib 执行器仍是裸子进程故未启用。若把 \"memory\" 加入 enforce，准入会直接拒绝直到该路径接入。"
+  "memory_bytes": 2147483648,
+  "enforce": ["cpu", "memory"],
+  "container": {
+    "note": "内存上限只能由容器 cgroup 强制（macOS rlimit 不可用，实测 ulimit -v/-d/-m 全为 Invalid argument）。Qlib 入口走容器镜像 qwb-qlib-cpu:local；池为 colima rdagent（4 CPU / 6 GiB=aarch64），2 × 2 GiB 上限加 VM 开销仍需低于池内存，否则准入拒绝。RD-Agent 入口尚未接容器，因此在 memory 属于必须项期间会被前置检查拒绝。"
   },
   "agent_budget": {
     "max_trials": 12,
