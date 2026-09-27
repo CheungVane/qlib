@@ -385,13 +385,31 @@ test('U20/U21: attention chip, command palette and the validation card',async()=
   const runs={items:[{run_id:'run-1',display_title:'Qlib CN 回测 · 2026-09-26',run:{title:'mlflow_recorder',engine:{id:'qlib'},status:'succeeded',dataset:{version:'v1'}}}]};
   const research={items:[{id:'r1',title:'因子研究 · mom_5d',status:'result_available',factor_count:3}],total:1,next_offset:null};
   const factors={items:[{factor_id:'f1',name:'mom_5d',panel_count:1,source_instance_id:'rdagent-local'}]};
-  const validation={basis:{parameters:{horizon:1,blocks:4},sample:{observations:120},configs:[]},
-    configs:[{run_id:'a',title:'运行 A',observations:120,sharpe:0.4,psr:{psr:0.7},dsr:{dsr:0.55},return_source:'derived: platform.equity 日收益（平台计算）'},
-             {run_id:'b',title:'运行 B',observations:120,sharpe:0.1,psr:{psr:0.4},dsr:{dsr:0.3},return_source:'native.qlib.return（引擎报告日收益）'}],
-    pbo:{pbo:0.42,blocks:4,splits:6,configurations:2,observations:120},
-    leakage:{purged_folds:{folds:[{purged_ratio:0.2},{purged_ratio:0.4}]},uniqueness:{effective_samples:80,samples:119}},
+  const validation={schema_version:2,analysis_version:2,
+    inputs:[{run_id:'a',revision_id:'rev-a',resolution:'latest_at_request'},
+            {run_id:'b',revision_id:'rev-b',resolution:'explicit'}],
+    basis:{window:{start:'2025-01-02',end:'2026-09-24',observations:120,policy:'intersection_of_requested_revisions'},
+           parameters:{horizon:1,blocks:4},
+           trial_scope:{available_configurations:3,usable_configurations:2,
+                        excluded:[{run_id:'c',reason:'return_basis_unknown'}],
+                        declared_n:2,declared_n_source:'inferred_from_request_selection',
+                        correlation_assumption:'unmodeled_iid',scope_completeness:'incomplete'}},
+    definitions:{psr:{formula:'x'},dsr:{},pbo:{}},
+    configs:[{run_id:'a',revision_id:'rev-a',title:'运行 A',observations:120,sharpe_per_period:0.4,
+              psr:{availability:'available',value:0.7},dsr:{availability:'available',value:0.55}},
+             {run_id:'b',revision_id:'rev-b',title:'运行 B',observations:120,sharpe_per_period:0.1,
+              psr:{availability:'unavailable',reason:'insufficient_observations'},
+              dsr:{availability:'unavailable',reason:'deflated_sharpe_needs_at_least_two_trials'}}],
+    pbo:{availability:'available',value:0.42,blocks:4,observations_per_block:30,
+         dropped_observations:{count:2,policy:'drop_earliest'},
+         collapsed_duplicates:[{kept_index:0,dropped_index:2}],
+         combinations_total:6,combinations_used:6},
+    leakage:{purged_folds:{folds:[{purged_ratio:0.2},{purged_ratio:0.4}]},
+             uniqueness:{weight_sum:80,samples:119,note:'weight_sum is not an independent effective sample size'}},
     not_available:[{metric:'live_out_of_sample',reason:'尚无前瞻/实盘样本'}],limitations:['x']};
+  const requested=[];
   const x=ui(async path=>{
+    requested.push(path);
     if(path.startsWith('/v1/attention'))return response(attention);
     if(path.startsWith('/v1/runs'))return response(runs);
     if(path.startsWith('/v1/research'))return response(research);
@@ -424,10 +442,50 @@ test('U20/U21: attention chip, command palette and the validation card',async()=
     assert.match(html,/PSR/);
     assert.match(html,/DSR/);
     assert.match(html,/PBO（过拟合概率）/);
-    assert.match(html,/有效样本数/);
+    assert.match(html,/唯一性权重和 Σw/);
+    assert.match(html,/不是独立样本量/);
+    assert.doesNotMatch(html,/有效样本数/);
+    assert.match(html,/声明试验数 N/);
+    assert.match(html,/本次选择推断/);
+    assert.match(html,/探索性诊断/);
+    assert.match(html,/被排除配置/);
+    assert.match(html,/收益定义未登记/);
+    assert.match(html,/DSR 至少需要两个可用试验/);
+    assert.match(html,/丢弃最早的 2 个观测/);
+    assert.match(html,/折叠 1 个重复配置/);
     assert.match(html,/尚未前瞻|尚无前瞻/);
     assert.match(html,/工作台计算；不能替代前瞻验证/);
+    assert.ok(requested.some(path=>path.startsWith('/v1/validation')&&path.includes('analysis_version=2')));
   });
+});
+
+test('T02-U: validation card refuses a v1 response instead of mixing definitions',async()=>{
+  const legacy={basis:{parameters:{horizon:1,blocks:4}},configs:[{run_id:'a',title:'运行 A',psr:{psr:0.7},dsr:{dsr:0.55}}],
+    pbo:{pbo:0.42},leakage:{uniqueness:{effective_samples:80,samples:119}}};
+  const x=ui(async path=>path.startsWith('/v1/validation')?response(legacy):response({items:[]}));
+  const html=await x.run("renderValidationCard(['a','b'])");
+  assert.match(html,/旧定义，未满足当前纠正合同/);
+  assert.doesNotMatch(html,/PBO（过拟合概率）/);
+});
+
+test('T02-U: validation card shows per-item unavailable reasons and degenerate PBO',async()=>{
+  const degenerate={schema_version:2,analysis_version:2,
+    inputs:[{run_id:'a',revision_id:'rev-a',resolution:'latest_at_request'}],
+    basis:{window:{start:'2025-01-02',end:'2026-09-24',observations:120},
+           trial_scope:{available_configurations:1,usable_configurations:1,excluded:[],
+                        declared_n:1,declared_n_source:'inferred_from_request_selection',
+                        correlation_assumption:'unmodeled_iid',scope_completeness:'incomplete'}},
+    definitions:{},configs:[{run_id:'a',revision_id:'rev-a',observations:120,sharpe_per_period:0.2,
+      psr:{availability:'available',value:0.6},dsr:{availability:'unavailable',reason:'deflated_sharpe_needs_at_least_two_trials'}}],
+    pbo:{availability:'unavailable',reason:'pbo_needs_at_least_two_configurations'},
+    leakage:{purged_folds:{folds:[]},uniqueness:{weight_sum:100,samples:120}},
+    not_available:[],limitations:[]};
+  const x=ui(async path=>path.startsWith('/v1/validation')?response(degenerate):response({items:[]}));
+  const html=await x.run("renderValidationCard(['a'])");
+  assert.match(html,/PBO 至少需要两个配置/);
+  assert.match(html,/DSR 至少需要两个可用试验/);
+  const empty=await x.run("renderValidationCard(['a','b'])");
+  assert.match(empty,/PBO 至少需要两个配置/);
 });
 
 test('T01-R: legacy risk presentation discloses its definition limit',async()=>{

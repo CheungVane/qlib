@@ -29,8 +29,8 @@ const HELP = {
   body:['这里只列已有状态能判断的事项：失败/中断的执行、已成功但未入库的结果、集成探针结果、取消请求中。','每条给出原因与跳转目标；没有事项时显示空态，不隐藏也不假装有内容。','数据新鲜度、实时行情等未接入能力不会进入此列表（否则会变成无法处理的噪声）。']},
  'risk.card':{title:'风险与绩效怎么读',summary:'Sharpe/Sortino/Calmar、VaR/CVaR、回撤期与月度收益，全部由平台按公式计算。',ref:'RESULT_CONTRACT.md（绩效与风险指标族）',
   body:['年化收益按 (1+总收益)^(ppy/N)-1，ppy取本次配置中的年化交易日（CN情景238）；这是分析参数，不代表历史运行配置已核验。','Sharpe按同频rf计算；Sortino按相对目标T的全样本下行均方根计算，分母包含全部观测。rf/T默认0会明确标为假设；零下行偏差返回不可用。确切公式与输入见定义卡。','VaR/CVaR 是历史法：5% 分位与分位以下均值，只描述样本内尾部，不是未来损失保证。','回撤期给出开始、谷底、恢复日期、深度与持续天数；未回到前高的标为"未恢复"。','月度/年度收益按日历聚合，缺月显示 null；分红再投资与真实成本细分仍未接入。']},
- 'validation.card':{title:'验证卡怎么读',summary:'PSR/DSR 修正选择偏差，PBO 估计过拟合概率，purge 与唯一性说明样本泄漏。',ref:'VALIDATION.md',
-  body:['PSR：Sharpe 大于基准的概率（偏度/峰度修正）；DSR：以"试了 N 个配置后的期望最大 Sharpe"为基准，比 PSR 更保守。','PBO（CSCV）：把收益矩阵切成时间块，样本内最优配置在样本外的分位低于中位的比例；越高说明越可能是挑出来的。','purge/embargo：训练集剔除与测试窗口标签重叠的样本及其后若干样本；唯一性权重说明重叠标签让有效样本数小于观测数。','这些都不能替代前瞻/实盘验证：结果里固定列出"缺少前瞻样本"这条未接入项。']},
+ 'validation.card':{title:'验证卡怎么读',summary:'PSR/DSR 修正选择偏差，PBO 估计过拟合概率，purge 与唯一性说明样本泄漏。',ref:'VALIDATION.md §2A',
+  body:['PSR：Sharpe 大于基准的概率（偏度/峰度修正，逐期不年化）；DSR 以"声明的试验数 N 对应的期望最大 Sharpe"为基准，比 PSR 更保守。N 来自调用方声明或本次选择推断，后者只代表本次选择。','PBO（CSCV）：把收益矩阵切成等长时间块，样本内最优配置在样本外的秩低于中位的比例；完全相同或零离散度的配置会被拒绝而不是给出数值。','purge/embargo：训练集剔除与测试窗口标签重叠的样本及其后若干样本；唯一性权重和 Σw 不是独立有效样本量，不能据它推断显著性。','试验范围不完整时一律标探索性；共同观测取各 revision 的交集，被排除的配置会列出原因。','这些都不能替代前瞻/实盘验证：结果里固定列出"缺少前瞻样本"这条未接入项。']},
  'page.live':{title:'实时页为什么是空的',summary:'行情流尚未接入，没有连接记录时不显示 0。',ref:'LIVE01 / UI01',
   body:['实时行情、延迟与缺口能力属于后续阶段；当前没有数据流会话或采集记录。','按规范，无采集样本时不显示 0%，而是明确说明未接入。']},
  'page.data':{title:'数据页怎么读',summary:'这里展示当前结果的来源与情景证据，不是供应商数据目录。',ref:'ARC06 / DATA01—05',
@@ -312,6 +312,7 @@ async function renderBacktest(){
   document.getElementById('content').innerHTML=`<div class="stack">${card('运行概况',heading+kpis)}${risk}${provenancePanel(detail)}${reviewPanel(review,detail.evidence)}${card('权益曲线',seriesPanel(equity),equity?.series?.provenance?.source||'来源未核实')}${card('成本与换手',misc)}${card('来源证据',`<details><summary>展开原始证据</summary><pre class="panel-note">${esc(JSON.stringify(detail.evidence,null,2))}</pre></details>`,'未知事实保留为空')}</div>`;
 }
 const analysisReasons={missing_trading_day_ic:'检验窗口内有交易日缺少有效 IC',insufficient_observations:'样本不足',nonpositive_long_run_variance:'长期方差为零或非正，显著性无定义',nonfinite_standard_error:'标准误无法计算',no_downside_deviation:'没有相对目标的下行偏差',zero_return_dispersion:'收益离散度为零',cashflow_policy_unknown_or_unsupported:'现金流口径未知或不支持',return_basis_unknown:'收益定义未登记',missing_or_nonfinite_observation:'存在缺测或非有限观测',daily_calendar_required:'缺少日频交易日历',return_unit_unsupported:'收益单位不支持',source_unavailable:'源序列不可用',no_return_series:'没有收益或权益序列',nonpositive_equity:'权益非正',nonpositive_wealth_unsupported:'暂不支持财富非正后的风险统计',no_drawdown:'样本内没有观测回撤，Calmar 无定义',insufficient_tail_observations:'尾部观测不足2个',undefined_for_sample:'当前样本下无定义',nonfinite_calculation:'计算结果非有限',not_enough_observations:'有效观测不足'};
+Object.assign(analysisReasons,{no_usable_configurations:'没有可用的配置',insufficient_common_observations:'共同观测不足',not_aligned_with_request_axis:'与请求轴不一致',pbo_needs_at_least_two_configurations:'PBO 至少需要两个配置',degenerate_configurations:'配置完全相同，无法区分',zero_dispersion_block:'分块内存在零离散度',not_enough_observations_for_blocks:'观测数不足以分块',blocks_must_be_even_and_at_least_four:'分块数必须是不小于4的偶数',no_observations:'没有观测',deflated_sharpe_needs_at_least_two_trials:'DSR 至少需要两个可用试验',declared_trials_below_two:'声明的试验数小于2',declared_trials_below_usable_configurations:'声明试验数小于可用配置数',insufficient_trial_dispersion:'试验 Sharpe 离散度不足',invalid_sharpe_variance:'Sharpe 方差项无效'});
 const analysisReason=reason=>analysisReasons[reason]||reason||'原因未记录';
 const analysisNature=value=>({handwritten_fixture:'手写演示样本',synthetic:'模拟数据',synthetic_scenario:'模拟情景',declared_real:'声明为真实，未经认证',real:'声明为真实，未经认证',unknown:'来源性质未知'}[value]||value||'来源性质未知');
 function analysisDetails(definitions,limitations=[]){
@@ -385,24 +386,36 @@ function compareTableHtml(table){
 async function renderValidationCard(runIds){
  const query=runIds.map(id=>'run_id='+encodeURIComponent(id)).join('&');
  let report=null,reason=null;
- try{report=await api(`/v1/validation?${query}&horizon=1&blocks=4`);}catch(error){reason=error.message;}
- if(reason)return card('验证：过拟合与多重检验',`<p class="warning">无法计算：${esc(reason)}</p><p class="panel-note">需要至少有 20 个观测的收益序列；缺少该序列的运行不参与验证。</p>`, '工作台计算', 'validation.card');
+ try{report=await api(`/v1/validation?${query}&horizon=1&blocks=4&analysis_version=2`);}catch(error){reason=error.message;}
+ if(reason)return card('验证：过拟合与多重检验',`<p class="warning">无法计算：${esc(reason)}</p><p class="panel-note">验证 v2 需要至少 10 个共同观测，且收益定义必须已登记；缺测不跳过、不回退。</p>`, '工作台计算', 'validation.card');
+ if(report.schema_version!==2)return card('验证：过拟合与多重检验','<p class="warning">旧定义，未满足当前纠正合同；需要支持验证 v2 的服务。</p>','无法展示纠正诊断','validation.card');
  const configs=report.configs||[];
  const rows=configs.map(config=>{
   const psr=config.psr||{},dsr=config.dsr||{};
-  const show=value=>typeof value==='number'?fmt(value,3):'未记录';
-  return `<tr><td>${esc(config.title||config.run_id.slice(0,8))}</td><td>${show(config.sharpe)}</td><td>${show(psr.psr)}</td><td>${show(dsr.dsr)}</td><td>${config.observations}</td><td><small class="muted">${esc(config.return_source||'未记录')}</small></td></tr>`;
+  const cell=item=>item.availability==='available'?fmt(item.value,3):`<span class="muted">不可用</span> <small class="muted">${esc(analysisReason(item.reason))}</small>`;
+  const show=value=>typeof value==='number'?fmt(value,3):'不可用';
+  return `<tr><td><strong>${esc(config.title||config.run_id.slice(0,8))}</strong><small class="block muted">revision ${esc((config.revision_id||'未记录').slice(0,12))}</small></td><td>${show(config.sharpe_per_period)}</td><td>${cell(psr)}</td><td>${cell(dsr)}</td><td>${config.observations??'未记录'}</td></tr>`;
  }).join('');
  const pbo=report.pbo||{};
+ const scope=(report.basis||{}).trial_scope||{},window=(report.basis||{}).window||{};
+ const dropped=(pbo.dropped_observations||{}).count||0;
+ const collapsed=(pbo.collapsed_duplicates||[]).length;
+ const nSource=scope.declared_n_source==='declared_by_caller'?'调用方声明':'本次选择推断';
+ const exploratory=scope.scope_completeness!=='complete';
+ const excluded=(scope.excluded||[]).map(item=>`${esc(String(item.run_id).slice(0,8))}（${esc(analysisReason(item.reason))}）`).join('；');
  const leakage=report.leakage||{};
  const uniqueness=leakage.uniqueness||{};
  const folds=(leakage.purged_folds||{}).folds||[];
  const purgedRatio=folds.length?folds.reduce((sum,fold)=>sum+(fold.purged_ratio||0),0)/folds.length:null;
- const unavailable=(report.not_available||[]).map(item=>`${esc(item.metric)}（${esc(item.reason)}）`).join('；');
- const body=`<div class="table-scroll"><table class="table"><thead><tr><th>配置</th><th>Sharpe</th><th>PSR</th><th>DSR</th><th>观测</th><th>收益来源</th></tr></thead><tbody>${rows}</tbody></table></div>
- <div class="metric-row"><div class="metric-box"><small>PBO（过拟合概率）</small><strong>${pbo.degenerate?'不适用':(typeof pbo.pbo==='number'?fmt(pbo.pbo,3):'未计算')}</strong></div><div class="metric-box"><small>折内平均剔除比例</small><strong>${purgedRatio===null?'未记录':fmt(purgedRatio*100,1)+'%'}</strong></div><div class="metric-box"><small>有效样本数</small><strong>${uniqueness.effective_samples===undefined?'未记录':fmt(uniqueness.effective_samples,1)}/${uniqueness.samples??'未记录'}</strong></div><div class="metric-box"><small>时间块</small><strong>${pbo.blocks??'未计算'}</strong></div></div>
- ${pbo.note?`<p class="warning">${esc(pbo.note)}</p>`:''}
- <p class="panel-note">PBO 越高说明"样本内挑出来的最好配置"在样本外越可能失效；DSR 以试验次数为基准，比 PSR 保守。样本内剔除比例来自 h=1 的 purged/embargo 折，有效样本数小于观测数是因为标签重叠。${unavailable?' 未接入：'+unavailable:''}</p>`;
+ const unavailable=(report.not_available||[]).map(item=>`${esc(item.metric)}（${esc(analysisReason(item.reason))}）`).join('；');
+ const body=`<div class="table-scroll"><table class="table analysis-table"><thead><tr><th>配置</th><th>逐期 Sharpe</th><th>PSR</th><th>DSR</th><th>共同观测</th></tr></thead><tbody>${rows||'<tr><td colspan="5">没有可用配置</td></tr>'}</tbody></table></div>
+ <div class="metric-row"><div class="metric-box"><small>PBO（过拟合概率）</small><strong>${pbo.availability==='available'?fmt(pbo.value,3):'不可用'}</strong>${pbo.availability==='available'?'':`<small class="muted">${esc(analysisReason(pbo.reason))}</small>`}</div><div class="metric-box"><small>可用配置</small><strong>${scope.usable_configurations??'未记录'}/${scope.available_configurations??'未记录'}</strong></div><div class="metric-box"><small>声明试验数 N</small><strong>${scope.declared_n??'未记录'}</strong><small class="muted">${esc(nSource)}</small></div><div class="metric-box"><small>唯一性权重和 Σw</small><strong>${uniqueness.weight_sum===undefined?'未记录':fmt(uniqueness.weight_sum,1)}</strong><small class="muted">不是独立样本量</small></div></div>
+ <p class="panel-note">共同观测 ${esc(window.start||'未记录')} → ${esc(window.end||'未记录')}（${window.observations??'未记录'} 个，取各 revision 日期交集）· 相关性假设 ${esc(scope.correlation_assumption||'未记录')} · 折内平均剔除 ${purgedRatio===null?'未记录':fmt(purgedRatio*100,1)+'%'}</p>
+ ${exploratory?`<p class="warning">探索性诊断：N 依据为"${esc(nSource)}"，试验范围不完整，不得声称已校正全部选择偏差。</p>`:''}
+ ${excluded?`<p class="panel-note">被排除配置：${excluded}</p>`:''}
+ ${(dropped||collapsed)?`<p class="panel-note">PBO 分块丢弃最早的 ${dropped} 个观测${collapsed?`；折叠 ${collapsed} 个重复配置`:''}。</p>`:''}
+ <p class="panel-note">PBO 越高说明"样本内挑出来的最好配置"在样本外越可能失效；DSR 以声明的试验数 N 为基准，比 PSR 保守。唯一性权重和 Σw 不是独立样本量。${unavailable?' 未接入：'+unavailable:''}</p>
+ ${analysisDetails(report.definitions,report.limitations)}`;
  return card('验证：过拟合与多重检验',body,'工作台计算；不能替代前瞻验证','validation.card');
 }
 async function renderCompare(){

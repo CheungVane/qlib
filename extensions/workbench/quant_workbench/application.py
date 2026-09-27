@@ -267,6 +267,7 @@ class WorkbenchService:
                 if reason == "insufficient_observations":
                     reason = None  # validation v2 applies its own >=10 threshold
                 configs.append({"run_id": run_id, "revision_id": revision["revision_id"],
+                                "title": revision["result"]["run"]["title"],
                                 "dates": view["dates"], "values": view["values"],
                                 "reason": reason, "input_basis": view.get("input_basis"),
                                 "resolution": "explicit" if revision_ids else "latest_at_request",

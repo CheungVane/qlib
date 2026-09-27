@@ -251,7 +251,8 @@ def build_report(configs: list[dict], *, horizon: int = 1, splits: int = 5,
         sharpe = (psr.get("inputs") or {}).get("sharpe_per_period")
         if sharpe is not None:
             trial_sharpes.append(sharpe)
-        configs_out.append({"run_id": config["run_id"], "revision_id": config.get("revision_id"),
+        configs_out.append({"run_id": config["run_id"], "title": config.get("title"),
+                            "revision_id": config.get("revision_id"),
                             "observations": len(values), "sharpe_per_period": sharpe,
                             "psr": psr})
 
@@ -310,8 +311,9 @@ def build_report(configs: list[dict], *, horizon: int = 1, splits: int = 5,
         "leakage": leakage,
         "resolved_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "not_available": [], "limitations": [
-            "DSR/PBO are exploratory while the trial scope is incomplete",
-            "no forward sample; historical diagnostics cannot replace live evidence",
-            "horizon/splits/embargo affect the leakage summary only, not PSR/DSR/PBO",
+            "试验范围不完整时，DSR 与 PBO 只能作为探索性诊断",
+            "没有前瞻样本；历史诊断不能替代前瞻或实盘证据",
+            "horizon/splits/embargo 只影响泄漏摘要，不进入 PSR/DSR/PBO 的数值",
+            "共同观测取各 revision 的日期交集；被排除的配置在 trial_scope.excluded 中列出原因",
         ],
     }
