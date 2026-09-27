@@ -8,6 +8,31 @@
     "last": "2026-09-24",
     "matches_target_trade_date": true
   },
+  "enrichment": {
+    "cached_symbols": 1791,
+    "first_date": "2015-01-05",
+    "kind": "baostock_daily_turnover_status",
+    "last_date": "2026-09-24",
+    "note": "symbols without cache are names delisted before the fetch window; they stay out of the study window instead of being filled",
+    "rows": 4601971,
+    "source_class": "free_community_unverified",
+    "symbols_without_cache": 11,
+    "symbols_without_cache_sample": [
+      "SH600087",
+      "SH600102",
+      "SH600253",
+      "SH600263",
+      "SH600553",
+      "SH600607",
+      "SH600840",
+      "SH600991",
+      "SZ000515",
+      "SZ000522",
+      "SZ000602"
+    ],
+    "universe": "csi500",
+    "universe_symbols": 1802
+  },
   "instruments": {
     "by_exchange_prefix": {
       "BJ": 597,
@@ -115,5 +140,5 @@
   "snapshot_kind": "free_source_qlib_bin",
   "snapshot_label": "free_cn_20260924",
   "source_class": "free_community_unverified",
-  "verified_at": "2026-09-27T10:01:51Z"
+  "verified_at": "2026-09-27T10:10:39Z"
 }

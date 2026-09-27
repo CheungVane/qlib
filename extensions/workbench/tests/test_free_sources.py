@@ -67,6 +67,48 @@ class UniverseTests(unittest.TestCase):
         with self.assertRaises(FreeSourceError):
             free_sources.load_instruments("SH600000\t2020-01-01\n")
 
+    def test_universe_by_date_follows_index_membership_changes(self):
+        rows = free_sources.load_instruments(
+            "SH600001\t2020-01-01\t2020-12-31\n"
+            "SH600002\t2020-06-01\t2021-12-31\n"
+        )
+        calendar = [date(2020, 5, 29), date(2020, 6, 1), date(2020, 12, 31), date(2021, 6, 1)]
+        mapping = free_sources.universe_by_date(rows, calendar)
+        self.assertEqual(mapping["2020-05-29"], ["SH600001"])
+        self.assertEqual(mapping["2020-06-01"], ["SH600001", "SH600002"])
+        self.assertEqual(mapping["2021-06-01"], ["SH600002"])
+
+
+class TurnoverCacheTests(unittest.TestCase):
+    def test_parses_fetched_rows(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "SH600004.csv"
+            path.write_text("date,turn,tradestatus,isST\n"
+                            "2026-09-23,0.196700,1,0\n"
+                            "2026-09-24,,0,1\n")
+            parsed = free_sources.load_turnover_csv(path)
+        self.assertAlmostEqual(parsed["2026-09-23"]["turn"], 0.1967)
+        self.assertIsNone(parsed["2026-09-24"]["turn"])
+        self.assertEqual(parsed["2026-09-24"]["tradestatus"], 0)
+        self.assertEqual(parsed["2026-09-24"]["isST"], 1)
+
+    def test_rejects_unexpected_header(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "bad.csv"
+            path.write_text("date,close\n2026-09-24,9.00\n")
+            with self.assertRaises(FreeSourceError):
+                free_sources.load_turnover_csv(path)
+
+    def test_archive_volume_plus_turnover_gives_stable_float_shares(self):
+        # same symbol, adjacent days: float shares should not jump barring a share change
+        first = free_sources.float_shares_from_archive(777395.3125, 0.6796593070030212, 0.1586)
+        second = free_sources.float_shares_from_archive(762000.0, 0.6796593070030212, 0.1550)
+        self.assertLess(abs(first / second - 1), 0.05)
+
 
 class IndustryProxyTests(unittest.TestCase):
     """Gap 2: clustering on the trailing window is point-in-time by construction."""
@@ -118,6 +160,18 @@ class RealSnapshotTests(unittest.TestCase):
     def test_bin_reader_reads_last_value(self):
         head_tail = free_sources.read_bin_head_tail(SNAPSHOT / "features/sh600000/close.day.bin")
         self.assertAlmostEqual(head_tail["last"], 6.1169, places=4)
+
+    def test_derives_float_shares_for_a_csi500_member(self):
+        enrichment = Path(os.path.expanduser("~/.qlib/qlib_data/free_cn_20260924_enrichment"))
+        cache = enrichment / "turnover/SH600004.csv"
+        if not cache.exists():
+            self.skipTest("csi500 turnover cache is not present")
+        turnover = free_sources.load_turnover_csv(cache)
+        factor = free_sources.read_bin_head_tail(SNAPSHOT / "features/sh600004/factor.day.bin")["last"]
+        volume = free_sources.read_bin_head_tail(SNAPSHOT / "features/sh600004/volume.day.bin")["last"]
+        shares = free_sources.float_shares_from_archive(volume, factor, turnover["2026-09-24"]["turn"])
+        self.assertGreater(shares, 1e8)
+        self.assertLess(shares, 1e11)
 
 
 if __name__ == "__main__":

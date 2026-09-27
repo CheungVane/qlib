@@ -49,6 +49,8 @@ def main() -> int:
     parser.add_argument("--snapshot", required=True)
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--archive")
+    parser.add_argument("--enrichment", help="turnover cache directory written by fetch_csi500_turnover.py")
+    parser.add_argument("--universe", default="csi500", help="universe file used to scope the enrichment")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
 
@@ -112,6 +114,38 @@ def main() -> int:
     sample_dir = snapshot / "features/sh600000"
     record["sample_symbol"] = "sh600000"
     record["sample_fields"] = sorted(path.name.split(".")[0] for path in sample_dir.iterdir())
+
+    if args.enrichment:
+        enrichment = Path(args.enrichment).expanduser()
+        turnover_dir = enrichment / "turnover"
+        universe_symbols = {symbol for symbol, _, _ in
+                            load_instruments(snapshot / f"instruments/{args.universe}.txt")}
+        cached = sorted(path.stem for path in turnover_dir.glob("*.csv")) if turnover_dir.exists() else []
+        rows = dates = 0
+        first = last = None
+        for path in turnover_dir.glob("*.csv") if turnover_dir.exists() else []:
+            lines = path.read_text().splitlines()
+            if len(lines) <= 1:
+                continue
+            rows += len(lines) - 1
+            dates += 1
+            first = min(first, lines[1].split(",")[0]) if first else lines[1].split(",")[0]
+            last = max(last, lines[-1].split(",")[0]) if last else lines[-1].split(",")[0]
+        missing_cache = sorted(universe_symbols - set(cached))
+        record["enrichment"] = {
+            "source_class": SOURCE_CLASS,
+            "kind": "baostock_daily_turnover_status",
+            "universe": args.universe,
+            "universe_symbols": len(universe_symbols),
+            "cached_symbols": len(cached),
+            "rows": rows,
+            "first_date": first,
+            "last_date": last,
+            "symbols_without_cache": len(missing_cache),
+            "symbols_without_cache_sample": missing_cache[:20],
+            "note": ("symbols without cache are names delisted before the fetch window; "
+                     "they stay out of the study window instead of being filled"),
+        }
 
     Path(args.output).write_text(json.dumps(record, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
     print(json.dumps({"ok": not missing and record["calendar"]["matches_target_trade_date"],

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import struct
+from bisect import bisect_left, bisect_right
 from datetime import date
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -81,6 +82,13 @@ def float_market_cap(raw_close: float, raw_volume_shares: float, turnover_percen
     return raw_close * float_shares_from_turnover(raw_volume_shares, turnover_percent)
 
 
+def float_shares_from_archive(adjusted_volume: float, factor: float,
+                              turnover_percent: float) -> float:
+    """Combine the archive's inversely adjusted volume with fetched turnover."""
+    return float_shares_from_turnover(raw_volume_lots(adjusted_volume, factor) * 100.0,
+                                      turnover_percent)
+
+
 # -- gap 3: date-ranged universe / survivorship -----------------------------
 def load_instruments(text: str) -> list[dict]:
     """Parse a qlib instruments file: `SYMBOL<TAB>START<TAB>END`."""
@@ -103,6 +111,47 @@ def load_instruments(text: str) -> list[dict]:
 def active_universe(rows: Iterable[dict], as_of: date) -> list[str]:
     """Symbols whose recorded interval covers `as_of` (delisted names drop out by date)."""
     return [row["symbol"] for row in rows if row["start"] <= as_of <= row["end"]]
+
+
+def universe_by_date(rows: Iterable[dict], calendar: Sequence[date],
+                     start: date | None = None, end: date | None = None) -> dict[str, list[str]]:
+    """Expand recorded intervals into `date -> members`, preserving index membership."""
+    ordered = sorted(calendar)
+    if not ordered:
+        raise FreeSourceError("calendar is empty")
+    mapping: dict[str, set[str]] = {}
+    for row in rows:
+        low = bisect_left(ordered, row["start"])
+        high = bisect_right(ordered, row["end"]) - 1
+        for position in range(low, high + 1):
+            day = ordered[position]
+            if (start and day < start) or (end and day > end):
+                continue
+            mapping.setdefault(day.isoformat(), set()).add(row["symbol"])
+    return {day: sorted(symbols) for day, symbols in mapping.items()}
+
+
+def load_turnover_csv(path: str | Path) -> dict[str, dict]:
+    """Parse a fetch_csi500_turnover CSV: `date,turn,tradestatus,isST`."""
+    target = Path(path)
+    result: dict[str, dict] = {}
+    lines = target.read_text(encoding="utf-8").splitlines()
+    if not lines or lines[0].strip() != "date,turn,tradestatus,isST":
+        raise FreeSourceError(f"unexpected turnover header: {target}")
+    for line in lines[1:]:
+        if not line.strip():
+            continue
+        day, turn, status, is_st = line.split(",")
+        try:
+            turn_value = float(turn) if turn else None
+            status_value = int(status)
+            st_value = int(is_st)
+        except ValueError as error:
+            raise FreeSourceError(f"bad turnover row: {line!r}") from error
+        result[day] = {"turn": turn_value, "tradestatus": status_value, "isST": st_value}
+    if not result:
+        raise FreeSourceError(f"turnover file is empty: {target}")
+    return result
 
 
 def survivorship_report(rows: Iterable[dict], as_of: date,
