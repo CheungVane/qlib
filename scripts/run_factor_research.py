@@ -66,13 +66,10 @@ def main() -> int:
         if not cache.exists():
             continue
         enrichment = free_sources.load_turnover_csv(cache)
-        close = fp.aligned_series(reader, symbol, "close", dates)
-        high = fp.aligned_series(reader, symbol, "high", dates)
-        low = fp.aligned_series(reader, symbol, "low", dates)
-        change = fp.aligned_series(reader, symbol, "change", dates)
-        volume = fp.aligned_series(reader, symbol, "volume", dates)
-        factor = fp.aligned_series(reader, symbol, "factor", dates)
-        turns = [enrichment.get(day.isoformat(), {}).get("turn") or float("nan") for day in dates]
+        loaded = fp.load_symbol_series(reader, symbol, dates, enrichment)
+        close, high, low, change = (loaded["close"], loaded["high"],
+                                    loaded["low"], loaded["change"])
+        volume, factor, turns = loaded["volume"], loaded["factor"], loaded["turn"]
         closes[symbol] = close
         turns_by_symbol[symbol] = turns
         size[symbol] = fp.log_float_cap(close, factor, volume, turns)

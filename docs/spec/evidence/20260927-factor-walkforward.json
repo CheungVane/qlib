@@ -1,0 +1,113 @@
+{
+  "design": {
+    "alpha": 0.05,
+    "evaluation": "mean Rank IC of the selected set on the following block only",
+    "folds": 4,
+    "kind": "expanding_window_walk_forward",
+    "min_train_days": 120,
+    "round_trip_cost": 0.00092,
+    "selection": "train-window FDR q<=alpha AND train-window cost-screen pass"
+  },
+  "folds": [
+    {
+      "fold": 1,
+      "selected": [],
+      "test": {
+        "days": 75,
+        "end": "2025-10-24",
+        "start": "2025-07-04"
+      },
+      "test_ic_by_selected": {},
+      "test_ic_mean_of_selected": null,
+      "train": {
+        "days": 120,
+        "end": "2025-07-03",
+        "start": "2025-01-02"
+      },
+      "train_ic_mean_of_selected": null
+    },
+    {
+      "fold": 2,
+      "selected": [],
+      "test": {
+        "days": 75,
+        "end": "2026-02-10",
+        "start": "2025-10-27"
+      },
+      "test_ic_by_selected": {},
+      "test_ic_mean_of_selected": null,
+      "train": {
+        "days": 195,
+        "end": "2025-10-24",
+        "start": "2025-01-02"
+      },
+      "train_ic_mean_of_selected": null
+    },
+    {
+      "fold": 3,
+      "selected": [
+        "momentum_20_h5_neutralized",
+        "momentum_20_h5_raw",
+        "turnover_20_h5_neutralized",
+        "volatility_20_h5_neutralized"
+      ],
+      "test": {
+        "days": 75,
+        "end": "2026-06-09",
+        "start": "2026-02-11"
+      },
+      "test_ic_by_selected": {
+        "momentum_20_h5_neutralized": -0.003171371267987358,
+        "momentum_20_h5_raw": 0.028222297356261236,
+        "turnover_20_h5_neutralized": 0.01211784662176064,
+        "volatility_20_h5_neutralized": -0.010625776307576681
+      },
+      "test_ic_mean_of_selected": 0.006635749100614459,
+      "train": {
+        "days": 270,
+        "end": "2026-02-10",
+        "start": "2025-01-02"
+      },
+      "train_ic_mean_of_selected": -0.03760614733148604
+    },
+    {
+      "fold": 4,
+      "selected": [],
+      "test": {
+        "days": 76,
+        "end": "2026-09-24",
+        "start": "2026-06-10"
+      },
+      "test_ic_by_selected": {},
+      "test_ic_mean_of_selected": null,
+      "train": {
+        "days": 345,
+        "end": "2026-06-09",
+        "start": "2025-01-02"
+      },
+      "train_ic_mean_of_selected": null
+    }
+  ],
+  "limitations": [
+    "free_community_unverified inputs; exploratory only, not alpha evidence",
+    "expanding window means later folds train on data that overlaps earlier tests (standard walk-forward, but not a purged/embargoed protocol)",
+    "no portfolio construction, no impact/liquidity cost, no execution model",
+    "industry is a statistical proxy and size is derived from turnover"
+  ],
+  "paths_recorded": false,
+  "slice": "csi500_factor_walkforward",
+  "snapshot_content_digest": "sha256:2d6f5367c1f20addf1fe260a9ef9a5d2dc964c09a0726bf3d80a6d721117966a",
+  "snapshot_id": "free_cn_20260924",
+  "summary": {
+    "folds_total": 4,
+    "folds_with_selection": 1,
+    "realised_test_ic_digest": "sha256:75b1dc7b859e0ab5edbbc1c93235a933e23fbfcdd142de41768f267f1ba2aeba",
+    "realised_test_ic_mean": 0.006635749100614459,
+    "sign_kept_share": 0.0
+  },
+  "window": {
+    "end": "2026-09-24",
+    "start": "2025-01-02",
+    "trading_days": 421
+  }
+}

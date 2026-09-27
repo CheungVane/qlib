@@ -48,6 +48,38 @@ def aligned_series(reader: FreeSnapshotReader, symbol: str, field: str,
     return result
 
 
+def load_symbol_series(reader: FreeSnapshotReader, symbol: str, dates: Sequence[date],
+                       enrichment: dict[str, dict]) -> dict[str, list[float]]:
+    """All archive fields a factor slice needs, aligned to `dates` (+ turnover from cache)."""
+    fields = ("close", "high", "low", "change", "volume", "factor")
+    series = {field: aligned_series(reader, symbol, field, dates) for field in fields}
+    series["turn"] = [enrichment.get(day.isoformat(), {}).get("turn") or float("nan")
+                      for day in dates]
+    return series
+
+
+def walk_forward_windows(length: int, *, folds: int = 4,
+                         min_train: int = 120) -> list[tuple[slice, slice]]:
+    """Expanding-window walk-forward splits: (train, test) index slices.
+
+    The test slice always follows its train slice, so a fold can only use information
+    available before the period it is evaluated on.
+    """
+    if folds < 1:
+        raise DataDirectoryError("folds must be >= 1")
+    if length <= min_train:
+        return []
+    block = (length - min_train) // folds
+    if block < 5:
+        return []
+    windows = []
+    for index in range(folds):
+        start = min_train + index * block
+        stop = length if index == folds - 1 else start + block
+        windows.append((slice(0, start), slice(start, stop)))
+    return windows
+
+
 def forward_return(closes: Sequence[float], horizon: int = DEFAULT_HORIZON) -> list[float]:
     """Label r[t->t+h] on calendar steps; the last h rows stay NaN (no future data)."""
     if horizon < 1:

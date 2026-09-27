@@ -2,6 +2,7 @@
 
 import math
 import unittest
+import unittest.mock
 from datetime import date
 
 from quant_workbench import factor_pipeline as fp
@@ -76,6 +77,28 @@ class FactorTests(unittest.TestCase):
 
 
 class ExposureTests(unittest.TestCase):
+    def test_load_symbol_series_reads_all_factor_fields(self):
+        # aligned_series is patched, so the reader is never touched
+        with unittest.mock.patch.object(fp, "aligned_series", return_value=[1.0, 2.0]):
+            series = fp.load_symbol_series(None, "SH600000",
+                                           [date(2026, 9, 23), date(2026, 9, 24)],
+                                           {"2026-09-24": {"turn": 0.5}})
+        self.assertEqual(set(series), {"close", "high", "low", "change", "volume", "factor", "turn"})
+        self.assertTrue(math.isnan(series["turn"][0]))
+        self.assertEqual(series["turn"][1], 0.5)
+
+    def test_walk_forward_windows_never_overlap_test(self):
+        windows = fp.walk_forward_windows(200, folds=4, min_train=40)
+        self.assertEqual(len(windows), 4)
+        for train, test in windows:
+            self.assertEqual(train.start, 0)
+            self.assertLessEqual(train.stop, test.start)
+        self.assertEqual(windows[0][1].start, 40)
+        self.assertEqual(windows[-1][1].stop, 200)
+        self.assertEqual(fp.walk_forward_windows(50, folds=4, min_train=120), [])
+        with self.assertRaises(DataDirectoryError):
+            fp.walk_forward_windows(200, folds=0)
+
     def test_label_requires_both_ends_tradable(self):
         flags = [True, False, True, True, True]
         self.assertEqual(fp.label_tradability(flags, horizon=1),
