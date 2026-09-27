@@ -29,7 +29,7 @@ class AttemptsMixin:
             json.dumps(record["outcome"], ensure_ascii=False, allow_nan=False) if record.get("outcome") else None,
             record["created_at"], record.get("queued_at") or record["created_at"], record.get("started_at"),
             record.get("ended_at"), record.get("heartbeat_at"), record.get("cancel_requested_at"),
-            record["created_at"],
+            record["created_at"], record.get("deadline_at"), record.get("policy_revision"),
         )
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -38,7 +38,8 @@ class AttemptsMixin:
                     """INSERT INTO attempts(attempt_id,kind,executor_id,label,probe,status,params_json,
                        idempotency_key,request_id,config_fingerprint,workspace,log_path,pid,exit_code,error_code,
                        error_message,outcome_json,created_at,queued_at,started_at,ended_at,heartbeat_at,
-                       cancel_requested_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       cancel_requested_at,updated_at,deadline_at,policy_revision)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     payload)
             except sqlite3.IntegrityError:
                 if key is None:

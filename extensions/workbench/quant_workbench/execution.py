@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import hashlib
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -292,6 +292,7 @@ class ExecutionService:
             "params": prepared.get("params", params), "idempotency_key": idempotency_key, "request_id": request_id,
             "config_fingerprint": prepared.get("config_fingerprint"), "workspace": prepared.get("workspace"),
             "log_path": prepared.get("log_path"), "created_at": created_at, "queued_at": created_at,
+            "policy_revision": self.policy.revision() if self.policy else None,
         })
         if not created:
             return {"attempt": attempt_dto(row), "created": False}
@@ -302,8 +303,15 @@ class ExecutionService:
                 row["attempt_id"], status="failed", ended_at=utc_now(), error_code="start_failed",
                 error_message=f"{type(exc).__name__}: {exc}")
             raise ExecutionError(f"executor failed to start the attempt: {exc}") from exc
+        started_at = utc_now()
+        deadline = None
+        if self.policy:
+            deadline = (datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+                        + timedelta(seconds=self.policy.timeout_seconds)
+                        ).isoformat(timespec="milliseconds").replace("+00:00", "Z")
         updated = self.repository.update_attempt(
-            row["attempt_id"], status="running", started_at=utc_now(), heartbeat_at=utc_now(),
+            row["attempt_id"], status="running", started_at=started_at, heartbeat_at=started_at,
+            deadline_at=deadline,
             pid=started.get("pid"), workspace=started.get("workspace", prepared.get("workspace")),
             log_path=started.get("log_path", prepared.get("log_path")))
         return {"attempt": attempt_dto(updated or row), "created": True}
@@ -323,8 +331,13 @@ class ExecutionService:
         for row in self.repository.list_open_attempts(limit=500):
             if row.get("status") != "running" or not row.get("started_at"):
                 continue
-            started = datetime.fromisoformat(str(row["started_at"]).replace("Z", "+00:00"))
-            if (moment - started).total_seconds() <= self.policy.timeout_seconds:
+            # The deadline is persisted at start; fall back to deriving it only for legacy rows.
+            if row.get("deadline_at"):
+                deadline = datetime.fromisoformat(str(row["deadline_at"]).replace("Z", "+00:00"))
+            else:
+                started = datetime.fromisoformat(str(row["started_at"]).replace("Z", "+00:00"))
+                deadline = started + timedelta(seconds=self.policy.timeout_seconds)
+            if moment <= deadline:
                 continue
             outcome = self.cancel(row["attempt_id"])
             confirmed = bool(outcome.get("cancel_confirmed"))

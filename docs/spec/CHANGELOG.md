@@ -2,6 +2,13 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — T04 第7片：持久化 deadline 与 policy_revision（schema V6）
+
+- 来源：用户授权在20:30前自主推进并实时刷新spec。
+- 实现：schema 升到 **V6**，`attempts` 新增 `deadline_at`、`policy_revision` 两列；`create_attempt` 写入政策revision，`submit()` 在**确认启动时**按 `started_at + policy.timeout_seconds` 计算并落盘 deadline；`enforce_timeouts()` 优先读**持久化的 deadline**，仅对缺该列的旧记录回退到运行时推导。
+- 语义修正：EXEC13 要求"任务超时从确认启动计时，持久化deadline"，此前是运行时推导（改政策会移动历史任务的截止时间），现已落盘冻结；测试验证"提交后更换政策不会移动已冻结的deadline"。
+- 测试：新增1项（deadline/policy_revision落盘、差额≈政策超时、改政策后仍按原deadline判超时），共20项政策测试；全量门禁 `[gate] ok`。
+
 ## 2026-09-27 — T04 第6片：执行政策与预算接到界面
 
 - 来源：用户"去接到界面吧"。

@@ -22,7 +22,7 @@ def instant_order(value):
 
 
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 ATTEMPT_TERMINAL_STATUSES = ("succeeded", "failed", "cancelled", "interrupted")
 ATTEMPT_OPEN_STATUSES = ("queued", "running")
 
@@ -83,6 +83,7 @@ PRAGMA user_version=2;
 ATTEMPT_MUTABLE_FIELDS = (
     "status", "started_at", "ended_at", "heartbeat_at", "cancel_requested_at", "exit_code",
     "pid", "workspace", "log_path", "config_fingerprint", "error_code", "error_message", "outcome",
+    "deadline_at", "policy_revision",
 )
 
 V3_IMPORT_SCHEMA = """
@@ -148,6 +149,12 @@ CREATE TABLE IF NOT EXISTS agent_budget (
     PRIMARY KEY (policy_revision, scope, kind)
 );
 PRAGMA user_version=5;
+"""
+
+V6_ATTEMPT_POLICY_SCHEMA = """
+ALTER TABLE attempts ADD COLUMN deadline_at TEXT;
+ALTER TABLE attempts ADD COLUMN policy_revision TEXT;
+PRAGMA user_version=6;
 """
 
 
@@ -235,7 +242,7 @@ class SqliteStore:
         """
         with self._connection() as conn:
             version = conn.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1, 2, 3, 4, SCHEMA_VERSION):
+            if version not in (0, 1, 2, 3, 4, 5, SCHEMA_VERSION):
                 raise SchemaVersionError(
                     f"database schema {version}; supported versions are 0..{SCHEMA_VERSION}; refusing to modify")
             if version == 0 and any(row[0] != "sqlite_sequence" for row in conn.execute(
@@ -256,6 +263,9 @@ class SqliteStore:
                 version = 4
             if version == 4:
                 conn.executescript(V5_AGENT_BUDGET_SCHEMA)
+                version = 5
+            if version == 5:
+                conn.executescript(V6_ATTEMPT_POLICY_SCHEMA)
             conn.execute("PRAGMA journal_mode=WAL")
 
     def health(self) -> dict[str, Any]:

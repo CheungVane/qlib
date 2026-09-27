@@ -307,6 +307,30 @@ class AgentBudgetTests(unittest.TestCase):
         rows = self.repo.agent_budget_rows(self.policy.revision())
         self.assertEqual([dict(row) for row in rows][0]["used"], 2)
 
+    def test_deadline_and_policy_revision_are_persisted(self):
+        from datetime import datetime, timedelta
+
+        from quant_workbench.execution import ExecutionService
+
+        first = self.submit("p1")
+        row = self.repo.get_attempt(first["attempt"]["attempt_id"])
+        self.assertEqual(row["policy_revision"], self.policy.revision())
+        self.assertIsNotNone(row["deadline_at"])
+        stored = datetime.fromisoformat(row["deadline_at"].replace("Z", "+00:00"))
+        started = datetime.fromisoformat(row["started_at"].replace("Z", "+00:00"))
+        self.assertAlmostEqual((stored - started).total_seconds(),
+                               self.policy.timeout_seconds, delta=2)
+        # a policy change after the fact must NOT move an already-frozen deadline
+        other = ep.ExecutionPolicy(
+            max_concurrent=5, timeout_seconds=100000, terminate_grace_seconds=2, cpu_seconds=60,
+            memory_bytes=1 << 30, enforce=("cpu",), agent_max_trials=2, agent_max_calls=10,
+            agent_scope="policy_revision")
+        switched = ExecutionService(self.repo, executors=self.executors, policy=other)
+        switched.enforce_timeouts(now=(started + timedelta(seconds=self.policy.timeout_seconds + 5))
+                                 .isoformat().replace("+00:00", "Z"))
+        after = self.repo.get_attempt(first["attempt"]["attempt_id"])
+        self.assertEqual(after["error_code"], "timeout")
+
     def test_policy_summary_reports_limits_and_usage(self):
         summary = self.service.policy_summary()
         self.assertTrue(summary["available"])
