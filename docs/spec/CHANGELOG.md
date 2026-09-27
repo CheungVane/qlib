@@ -2,6 +2,13 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — 更正：RD-Agent 入口的内存上限来自 RD-Agent 自身，不是本平台 policy
+
+- 触发：用户问"qlib 为什么需要容器"，核对"（RD-Agent 执行器已走容器）"这句措辞时发现它会被读成"RD-Agent 入口已受平台内存上限约束"。
+- 事实（代码与上游核对）：`RDAgentExecutor.command()` 启动的是**宿主 subprocess**（`RD-Agent/.venv/bin/python scripts/run_rdagent_factor_smoke.py`），平台不传 `--memory`/`--cpus`；真正的容器由 RD-Agent 自己创建，其上限来自上游 `rdagent/utils/env.py` 的 `DockerConf` 默认值——`mem_limit="48g"`、`cpu_count=None`。在本机 5.77 GiB 的 colima 池里，48g 实际上等于 VM 上限，CPU 更是无约束。
+- 更正：准确说法是**两个入口都没有受 policy 的 `memory_bytes`/`cpu_seconds` 约束**，缺的是平台侧容器路由（Qlib 与 RD-Agent 都要接）；容器能强制内存上限的结论（`docker run --memory=…` 实测 OOM）仍然成立，那是"平台有能力"，不是"执行器已用上"。
+- 影响：A41 的"内存/CPU 硬上限由执行器可核验"对两个入口都未落地，T04 剩余范围不因此缩小；`enforce=["cpu"]` 保持不变。
+
 ## 2026-09-27 — 数据源文档状态刷新：删除与实现记录冲突的"未开始/未验证"
 
 - 来源：用户询问"spec中还记录有哪些现在要做的事"，核对时发现 [DATA_SOURCES](DATA_SOURCES.md) 的 §6/§7/§8/§9 停留在下载前口径，与同文件 §3/§6 的实现记录及 IMPLEMENTATION 的 T05/A16/A17 行直接矛盾。
