@@ -1,6 +1,6 @@
 # 因子层：因子实体、面板入库与分析口径
 
-状态：生效。版本：2（设计刷新；规模与相似度纠正待实现）。生效日期：2026-09-26。
+状态：生效。版本：2.1（交接复审；统计定义与规模合同待实现）。修订日期：2026-09-27（初始生效2026-09-26）。
 关联需求：U18（比较分组）、U19（因子层分析与因子面板入库）、U24（容量分层）；上游要求 ID：DATA01—06、METRIC01—06、COMPARE01、GOV-DERIVED、GOV-SOURCE、ARC07。
 验收：IMPLEMENTATION 阶段 M2 的 A28（分组比较）与阶段 M2 的 A29（因子面板入库）、A30（因子分析口径）。本文不改变结果语义专题（[结果合同](RESULT_CONTRACT.md)）与来源专题（[来源审计](PROVENANCE_AUDIT.md)）。
 
@@ -77,11 +77,15 @@
 | `ic_mean` | 每个交易日横截面 Pearson 相关（因子 vs 未来收益）的均值 | 与样本区间绑定 |
 | `rank_ic_mean` | 同上，改用秩相关（Spearman） | 对异常值更稳健 |
 | `ic_std` / `icir` | IC 序列标准差；`icir = ic_mean / ic_std` | `ic_std=0` 时 `icir=null` |
-| `t_stat` / `p_value` | `t = ic_mean / (NW_se / sqrt(N))`，Newey-West 调整滞后取 `h-1`；p 为双侧正态近似 | 自相关未调整会高估显著性 |
+| `t_stat` / `p_value` | `t = ic_mean / se_mean`；se_mean是均值的Newey-West标准误，不能再除sqrt(N)。滞后L=min(h−1,N−1)，p为双侧正态近似 | 估计量定义见下；旧NW_se命名未明确是否已除sqrt(N)，需专项复验 |
 | `fdr_q` | Benjamini-Hochberg 校正后的 q 值 | 必须披露参与检验的因子数量 |
 | `quantile_spread` | 按因子分 5 组的平均未来收益 Q5−Q1 | 附带单调性判断（分组收益是否单调） |
 | `decay` | 同一因子在 `h ∈ {1,5,10,20}` 下的 `ic_mean` | 描述因子衰减 |
 | `turnover` | 横截面秩的平均换手（相邻交易日的秩变动） | 高换手意味着更高交易成本风险 |
+
+均值标准误定义（新分析版本2）：对完整等间隔IC序列x，N为观测数，`gamma_k = sum((x_t-mean(x))*(x_{t-k}-mean(x)), t=k..N-1)/N`；`omega = gamma_0 + 2*sum((1-k/(L+1))*gamma_k, k=1..L)`；`se_mean=sqrt(omega/N)`。本定义不使用额外小样本修正，omega≤0或标准误非有限时返回不可用；至少N≥max(10,L+2)，有缺失交易日时本版显著性不可用而IC描述统计可保留，不将删缺口后的相邻观测当相邻交易日。算法约定参照 [statsmodels HAC文档](https://www.statsmodels.org/dev/generated/statsmodels.stats.sandwich_covariance.cov_hac.html) 的Bartlett权重；不依赖其默认lag或小样本修正。
+
+独立样例：h=1，IC为十项交替−0.1/+0.1，均值0、omega=0.01、se_mean=sqrt(0.001)、t=0；全部为0.1时标准误为0，显著性不可用。新定义与旧实现是否同值尚未验证；历史数值不覆盖。
 
 ### 4.2 重叠性家族
 
@@ -98,6 +102,8 @@
 | `crowding` | 因子拥挤度 | **未接入**：需要市场层面使用数据 |
 
 未接入项必须在同一结果中显式返回 `not_available` 与缺失输入名称，不得省略或以 0 代替。
+
+两个新字段中的corr均指同一对因子的value_correlation（先求逐日相关，再对有效日期平均）；先取绝对值再平均是不同指标，禁止混用。例如逐日相关+1、−1时corr=0，本定义相似度为0；必须同时保留有符号相关与有效日期数，不能宣称已排除非线性冗余。分析版本选择与DTO兼容规则统一见 [RESULT_CONTRACT](RESULT_CONTRACT.md)。
 
 兼容：旧 `redundancy` 数值与历史结果保持不变，保留其原公式并标注命名局限；后续以新字段和definition_id发布，不在同名旧字段下直接把 `1-abs(corr)` 改成 `abs(corr)`。DTO、UI方向与契约样例需一并更新。
 

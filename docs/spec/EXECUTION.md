@@ -1,6 +1,6 @@
 # 执行层：Attempt、执行器与取消语义
 
-状态：生效。版本：2（设计刷新，新增合同待实现）。生效日期：2026-09-26。
+状态：生效。版本：2.1（执行交接复审，新增合同待实现）。修订日期：2026-09-27（初始生效2026-09-26）。
 关联需求：U03、U04、U09、U11、U12、U13、U23；上游要求 ID：ARC02、ARC04、ARC05、RUN01—RUN03、API02、AGENT04、OPS01、OBS01—OBS02。验收：IMPLEMENTATION 阶段 M3 的 A18、A19。
 
 本文是"工作台从只读看板变成研究平台"的执行合同。它不改变结果语义专题（[RESULT_CONTRACT.md](RESULT_CONTRACT.md)）与来源专题（[PROVENANCE_AUDIT.md](PROVENANCE_AUDIT.md)）；执行成功不等于研究有效，Attempt 成功也不自动等于结果已可信入库。
@@ -43,18 +43,22 @@ Attempt 是平台对"某次真实进程执行"的记录，不是研究结论，�
 
 EXEC01：Attempt 必须持久化在平台数据库，跨服务重启保留；schema 升级必须显式迁移并保留既有 `runs`/`revisions`，未知版本拒绝启动。原生执行状态、平台执行状态与导入状态分别记录。
 
+新增关联字段合同见LIFE01：run_id、attempt序号、definition_revision_id、execution_policy_revision及分阶段执行证据均需持久化；现有DTO/存储尚未具备完整字段，后续按显式迁移验收。
+
 ### 状态机
 
 ```
-queued ──start──▶ running ──exit 0──▶ succeeded
+queued ──未启动且确认取消──▶ cancelled
+   │   ──启动失败证据──▶ failed
+   └──start──▶ running ──exit 0──▶ succeeded
                     │        ──exit!=0─▶ failed
                     │        ──确认取消─▶ cancelled
                     │        ──进程失联且无退出证据─▶ interrupted
 ```
 
 EXEC02：
-- 只有执行器证据（退出码、信号、确认的进程结束）能使 Attempt 落终态；`pid` 不存在且无退出标记时落 `interrupted`，不落 `succeeded`。
-- 终态不可被后续取消或核对覆盖。需要重跑时创建新 Attempt，保留旧 Attempt 与其失败证据（RUN01）。
+- 运行后的终态需要执行器证据（退出码、信号、确认结束）；未启动的queued可凭已持久化的取消确认或启动失败证据结束，此时started_at仍为空。已启动但pid不存在且无退出标记时落interrupted，不落succeeded。
+- 已有确认退出/取消证据的终态不可被后续请求覆盖。interrupted是缺证据的失联判定；若之后取得属于同一Attempt/进程身份的迟到退出或取消确认，可追加状态纠正事件并更新投影，保留原判定与证据。不得仅凭复用的pid或用户取消请求改写。重跑另建Attempt（RUN01）。
 - `cancel_requested_at` 非空而状态仍为 `running` 表示"取消请求中"，界面必须与终态区分（RUN02）。
 - 平台不修改引擎自身记录的运行状态；导入状态仍由 ImportReceipt 表达。
 
@@ -68,7 +72,7 @@ EXEC03（独立进程，ARC05）：执行器实现 `ExecutorPort`：`preflight()
 - 外部引擎允许独立环境与独立依赖；执行器只传递路径、配置与环境变量，不复制上游源码。
 
 EXEC04（幂等，RUN03/API02）：提交必须携带调用方生成的幂等键（非空字符串，长度上限 128）。
-- 同一幂等键的重复提交返回同一 Attempt，并标记 `created=false`，不产生第二个进程。
+- 同一幂等键且有效载荷相同返回同一Attempt并标记created=false，不产生第二个进程；同键不同载荷返回409/idempotency_conflict（CLI非零退出），不启动进程。
 - 幂等键在平台库唯一；并发竞争由数据库唯一约束裁决。
 - 失败后重试必须使用新幂等键与新的 Attempt，不得改写旧 Attempt 的键。
 - 界面与CLI在一次提交期间复用同一幂等键以吸收重复点击；成功启动或被去重后必须换用新键，使用户能对同一条目再次启动新 Attempt，而不是被上一次的键静默挡住。
@@ -86,7 +90,7 @@ EXEC06（前置条件，AGENT04）：提交前必须执行 `preflight()` 并逐�
 - 聊天与 embedding 服务可达（RD-Agent `loop` 模式必需；只检查可达性，不读取或返回密钥）；
 - 数据快照与 `configs/cn/profile.json` 情景指纹一致；
 - 交易日历与费用情景来自当前生效配置；
-- 容器/运行时可用性与资源下限（Linux Docker引擎、CPU/内存下限），以及实际生效的资源上限/并发/超时/Agent预算；上限和预算检查尚未实现，当前探针证据不满足完整AGENT04/EXEC06；
+- 适用的容器/运行时、资源下限及EXEC13规定的上限/并发/超时/Agent预算。非Agent入口仅Agent预算可显式not_applicable；必须项不支持即拒绝，不能以“已披露未支持”作为通过；当前探针证据不满足完整合同；
 - 平台侧 Attempt 持久化可用（数据库 schema 就绪）；
 - 终态证据通道可用（工作目录可写、退出标记与日志路径可用）。
 
@@ -128,6 +132,14 @@ EXEC12（执行结果自动入库，U15）：自动入库是执行链路的一�
 - 自动入库不得改写历史revision或Attempt执行事实；可更新该Attempt的入库状态投影并追加ImportReceipt。重复核对同一Attempt不得重复发布（内容哈希相同即复用）。
 - 提供显式重试入口（CLI 与 HTTP 写接口，走同一服务）：仅对没有 `imported/reused` 回执的 Attempt 执行；重试失败保留最后一次原因。
 - 执行成功、结果入库与结果可信是三件事：`succeeded` 不保证 `imported`，`imported` 也不等于研究有效。
+
+EXEC13（执行政策与预算，LIFE06/AGENT04，待实现）：
+
+- 提交前冻结execution_policy_revision：max_concurrent、timeout_seconds、terminate_grace_seconds、CPU/内存硬上限，以及Agent入口的max_trials/max_calls和各自计数范围。数值为显式配置的正数，不在spec中伪造账户/机器参数；缺失、无效或执行器不能强制实施必须项则拒绝。
+- 首版本地采用有界准入，无调度队列：并发槽在持久化事务中预留；槽满返回409/capacity_exceeded且不创建新任务。queued仅表示已准入尚未启动，不承诺长期排队。读取不得触发启动；跨CLI/API/进程共享计数，确认未启动或已结束后释放；失联但不能确认结束的任务继续占槽并提示核对，重启先核对再开放槽。
+- 任务超时从确认启动计时，持久化deadline；超时触发终止进程组，宽限期后升级终止，确认结束才记failed/timeout。用户取消记cancelled，两者不可混淆；若完成证据早于deadline则保留完成。无法确认结束时保留超时请求和interrupted，不能假报终止。
+- Agent试验/调用次数在发起前原子预留；重试也计数，取消/重启不清空同一预算范围的账目。到限阻止下一次试验/调用，已获准调用可完成并保存产物（仍受任务超时约束），标记budget_exhausted及研究是否完整；不由预算到限推断研究成功。
+- CPU/内存硬上限必须有执行器可核验机制，资源下限检查不构成上限。被上限终止记录failed/resource_limit及证据。若某环境尚不支持，上限能力与A41保持未完成，该环境不得通过完整EXEC06准入；本条不表示现有按钮已按此拒绝。
 
 EXEC11（演进，GOV-UPSTREAM）：Qlib 与 RD-Agent 保持外部引擎边界；执行器是适配层，不修改上游源码，不把 RD-Agent 代码复制进 Qlib。RD-Agent 探针脚本位于本仓库 `scripts/`，RD-Agent checkout 只写其被 Git 忽略的目录。上游更新后重验执行器命令、前置条件检查与适配器契约。
 

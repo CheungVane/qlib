@@ -1,6 +1,6 @@
 # Quant Workbench 核心规范
 
-版本：0.2（2026-09-26个人工作台设计刷新）。状态：生效设计与后续实现基线；本次仅修改spec，新增及纠正合同未完成实现。适用范围：本仓库定制工作台。要求中的“必须”对应验收门槛；标记为“默认/候选”的内容可按变更流程调整。
+版本：0.2.1（2026-09-27执行交接复审）。状态：生效设计与后续实现基线；本次仅修改spec，新增及纠正合同未完成实现。适用范围：本仓库定制工作台。要求中的“必须”对应验收门槛；标记为“默认/候选”的内容可按变更流程调整。
 
 ## 0. 最高项目依据与维护要求 GOV01 / U11
 
@@ -104,7 +104,7 @@ U23新增的实验定义、模型产物、策略版本、试验记录及其与Ru
 
 Run 可以关联多个输入 snapshot，也可以显式标记 `provenance=partial/unknown`。历史导入可只有外部运行 ID、报告、开始时间，而没有准确代码版本；仍可浏览，但不可标记为可复现。
 
-生命周期规则 RUN01：平台 Run 初始 queued，随后 running，终态 succeeded/failed/cancelled；执行进程失联为 interrupted，不能猜成 succeeded。导入对象可有 unknown。created_at 必填；queued 的 started_at/ended_at 为 null；终态时间若来源未记录，保留未知及来源说明。重试使用新 Attempt，保留前次失败。
+生命周期规则 RUN01：Attempt初始queued，运行后为running，确认终态为succeeded/failed/cancelled/interrupted；失联无退出证据不能猜为成功。平台Run投影当前Attempt状态，重试时可重新queued，但旧Attempt的确认终态和原始证据不改，失联状态可按EXEC02追加证据纠正；1:N关系及新Run/重试边界见LIFE01。导入对象可为unknown；created_at必填，未开始时started_at为空，终态缺时间证据时保留未知。queued取消/启动失败与终态纠正规则见EXEC02/05。
 
 取消规则 RUN02：请求取消与已取消不同；只有执行器确认进程结束后才能落终态，保存部分产物状态。取消与完成竞争时以持久化终态与退出证据为准。仅结果导入适配器没有取消执行能力。执行入口、Attempt状态机、执行器端口、幂等键与前置条件见[执行层规范](EXECUTION.md)；未实现的能力不得提供假成功响应。
 
@@ -170,7 +170,7 @@ METRIC06：核心分析指标必须有版本化定义卡，记录公式、输入
 
 ## 8. CLI、API 与 UI
 
-API01：/v1 路径为未来已发布公共 API 的版本；本 spec 0.2 与未发布 schema 不声称兼容承诺。错误有 code、message、request_id、details；列表用稳定排序与游标。上限初始设100条/页、单序列2000点，可配置但必须有硬上限。
+API01：/v1 路径为未来已发布公共 API 的版本；本 spec 0.2.1 与未发布 schema 不声称兼容承诺。错误有 code、message、request_id、details；列表用稳定排序与游标。上限初始设100条/页、单序列2000点，可配置但必须有硬上限。
 
 API02：首阶段提供运行列表/详情、revision（有界分页）、序列、能力、健康查询以及 CLI 导入。比较接口为 `/v1/compare`（单指标口径检查）与 `/v1/compare/table`（UI06 比较表，逐行方向、最优/最劣与原因），CLI 对应 `compare`/`compare-table`。执行接口在M3执行层启用（`/v1/executions`，合同见[执行层规范](EXECUTION.md)）：写操作带幂等标识，写接口校验来源，长操作不在请求线程里训练，读取接口不启动执行；自动入库状态与回执见 EXEC12，显式重试为 `POST /v1/executions/{id}/import` 与 `qwb import-attempt`；平台遥测为 `/v1/observability`（HTTP 与 Attempt 两块）与 `qwb attempt-stats`。CLI `--json` 与 API 返回同一 DTO，时间格式、缺失语义和筛选规则相同；服务错误不得让 CLI 返回退出码0。写操作带幂等标识，长操作不在请求线程里训练。
 
