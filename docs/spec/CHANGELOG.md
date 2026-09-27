@@ -13,6 +13,7 @@
 - 文档补充：`EXECUTION.md` 新增 §5.1"容器路线运行手册"（构建两个镜像、用 `docker inspect` 核验上限、如何跑容器用例与看入口前置），并在验收映射表加入 EXEC13/A41 行。
 - 验证：门禁 `[gate] ok`（Python 290 项 + JS 25 项）；`QWB_CONTAINER_TESTS=1` 下容器与预算用例 19 项全通过；证据文件的 Attempt ID 由截断改为完整。
 - review 追加发现（虚假能力风险）：调用计数依赖 `litellm.completion` 被包装，若上游改用其它客户端，账本会保持 0 次而界面仍显示 `calls_enforced=true`。现由探针在导入后端后**自检包装标记并拒绝运行**（`assert_budget_hook_installed`），并有离线用例覆盖"有预算无钩子即拒绝、无预算则放行"。
+- review 追加（易误读语义）：EXEC13 明确写出"预算作用域是 `policy_revision`，改政策即额度从 0 重算、界面必须显示 scope"，避免下一位把额度重置读成数据被清零。本段为纯文档补充，未改动代码或运行时行为。
 
 ## 2026-09-27 — T04 第12片：RD-Agent 入口容器化，A41 通过
 
