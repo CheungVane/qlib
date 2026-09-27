@@ -93,6 +93,7 @@ def parser() -> argparse.ArgumentParser:
     a = sub.add_parser("factor-analysis", help="single-factor statistics, overlap and increment")
     a.add_argument("factor_ids", nargs="+")
     a.add_argument("--horizons", default="1,5,10,20")
+    a.add_argument("--analysis-version", type=int, choices=[1, 2], default=1)
     a = sub.add_parser("risk", help="performance and risk metrics for one or more runs")
     a.add_argument("run_ids", nargs="+")
     a.add_argument("--periods-per-year", type=int)
@@ -192,7 +193,9 @@ def main(argv: list[str] | None = None) -> int:
             result = service.import_factor_panel(identity, payload)
         elif args.command == 'factor-analysis':
             horizons = [int(value) for value in str(args.horizons).split(',') if value.strip()]
-            result = service.factor_analysis(args.factor_ids, horizons)
+            result = service.factor_analysis(args.factor_ids, horizons, analysis_version=args.analysis_version)
+            if args.analysis_version == 1:
+                print("旧定义，未满足当前纠正合同；可使用 --analysis-version 2", file=sys.stderr)
         elif args.command == 'risk':
             result = service.risk_report(args.run_ids, args.periods_per_year,
                                         analysis_version=args.analysis_version,

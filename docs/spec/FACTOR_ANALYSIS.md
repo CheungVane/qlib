@@ -1,6 +1,6 @@
 # 因子层：因子实体、面板入库与分析口径
 
-状态：生效。版本：2.1（交接复审；统计定义与规模合同待实现）。修订日期：2026-09-27（初始生效2026-09-26）。
+状态：生效。版本：2.1（交接复审；T01-F后端统计纠正已实现；UI与规模合同待验收）。修订日期：2026-09-27（初始生效2026-09-26）。
 关联需求：U18（比较分组）、U19（因子层分析与因子面板入库）、U24（容量分层）；上游要求 ID：DATA01—06、METRIC01—06、COMPARE01、GOV-DERIVED、GOV-SOURCE、ARC07。
 验收：IMPLEMENTATION 阶段 M2 的 A28（分组比较）与阶段 M2 的 A29（因子面板入库）、A30（因子分析口径）。本文不改变结果语义专题（[结果合同](RESULT_CONTRACT.md)）与来源专题（[来源审计](PROVENANCE_AUDIT.md)）。
 
@@ -77,7 +77,7 @@
 | `ic_mean` | 每个交易日横截面 Pearson 相关（因子 vs 未来收益）的均值 | 与样本区间绑定 |
 | `rank_ic_mean` | 同上，改用秩相关（Spearman） | 对异常值更稳健 |
 | `ic_std` / `icir` | IC 序列标准差；`icir = ic_mean / ic_std` | `ic_std=0` 时 `icir=null` |
-| `t_stat` / `p_value` | `t = ic_mean / se_mean`；se_mean是均值的Newey-West标准误，不能再除sqrt(N)。滞后L=min(h−1,N−1)，p为双侧正态近似 | 估计量定义见下；旧NW_se命名未明确是否已除sqrt(N)，需专项复验 |
+| `t_stat` / `p_value` | `t = ic_mean / se_mean`；se_mean是均值的Newey-West标准误，不能再除sqrt(N)。滞后L=min(h−1,N−1)，p为双侧正态近似 | 估计量定义见下；v2使用nw_se_mean；旧版算法保留但不满足本定义 |
 | `fdr_q` | Benjamini-Hochberg 校正后的 q 值 | 必须披露参与检验的因子数量 |
 | `quantile_spread` | 按因子分 5 组的平均未来收益 Q5−Q1 | 附带单调性判断（分组收益是否单调） |
 | `decay` | 同一因子在 `h ∈ {1,5,10,20}` 下的 `ic_mean` | 描述因子衰减 |
@@ -85,7 +85,7 @@
 
 均值标准误定义（新分析版本2）：对完整等间隔IC序列x，N为观测数，`gamma_k = sum((x_t-mean(x))*(x_{t-k}-mean(x)), t=k..N-1)/N`；`omega = gamma_0 + 2*sum((1-k/(L+1))*gamma_k, k=1..L)`；`se_mean=sqrt(omega/N)`。本定义不使用额外小样本修正，omega≤0或标准误非有限时返回不可用；至少N≥max(10,L+2)，有缺失交易日时本版显著性不可用而IC描述统计可保留，不将删缺口后的相邻观测当相邻交易日。算法约定参照 [statsmodels HAC文档](https://www.statsmodels.org/dev/generated/statsmodels.stats.sandwich_covariance.cov_hac.html) 的Bartlett权重；不依赖其默认lag或小样本修正。
 
-独立样例：h=1，IC为十项交替−0.1/+0.1，均值0、omega=0.01、se_mean=sqrt(0.001)、t=0；全部为0.1时标准误为0，显著性不可用。新定义与旧实现是否同值尚未验证；历史数值不覆盖。
+独立样例：h=1，IC为十项交替−0.1/+0.1，均值0、omega=0.01、se_mean=sqrt(0.001)、t=0；全部为0.1时标准误为0，显著性不可用。已核对：旧实现滞后协方差使用N−k分母且将方差下限设为1e−18；v2使用N且不设地板，两个版本可能不同，历史数值不覆盖。
 
 ### 4.2 重叠性家族
 
@@ -93,8 +93,8 @@
 | --- | --- | --- |
 | `value_correlation` | 逐日横截面秩相关的均值（两两） | 面板齐备时可用 |
 | `collinearity` | 由相关矩阵计算 VIF | 相关矩阵可逆时可用；否则返回原因 |
-| `absolute_correlation_similarity`（新定义） | `abs(corr)`（逐对），越大表示越相似；只表示相关相似度，不证明非线性冗余 | 待实现新字段/定义；面板与有效相关值齐备才可算 |
-| `correlation_distance`（新定义） | `1 - abs(corr)`（逐对），越大表示越不相似 | 待实现命名纠正；旧字段 `redundancy` 实际计算此值，不能解读为越大越冗余 |
+| `absolute_correlation_similarity`（新定义） | `abs(corr)`（逐对），越大表示越相似；只表示相关相似度，不证明非线性冗余 | v2已实现；面板与有效相关值齐备才可算 |
+| `correlation_distance`（新定义） | `1 - abs(corr)`（逐对），越大表示越不相似 | v2已实现命名纠正；旧字段 `redundancy` 实际计算此值，不能解读为越大越冗余 |
 | `ic_series_correlation` | 两因子 IC 序列的相关系数 | 需要双方 IC 序列，平台可算 |
 | `orthogonal_ic` | 新因子对既有因子集合横截面回归取残差后的 IC | 需要既有集合，平台可算 |
 | `incremental_ic` | 等权合成 `既有集合 + 新因子` 前后的合成 IC 差 | 需要既有集合，平台可算 |
@@ -114,6 +114,16 @@
 - 探针来源的因子在结果中标记探索性；不得以「通过了显著性」对外声称策略有效。
 
 ## 5. 验收映射
+
+### T01-F实现切片（2026-09-27）
+
+- API/CLI增加 `analysis_version=1|2`，省略保留v1；v2响应 `schema_version=2`，`nw_se_mean`明确表示均值标准误，另返回omega、显著性可用性/原因；描述统计可用不代表显著性可用。v1 CLI/UI提示旧定义限制，完整UI切换归T01-U。
+- v2在各面板共同起止区间内，用已核验内容摘要的快照日历恢复完整日期轴，交集标的按同一顺序重排；缺因子日期填null而非0。h是快照交易日步数，不是删缺口后的行号。区间末尾h天因标签尚未成熟而不进入检验窗口，其余任一日IC缺失则显著性不可用；恢复后的轴仍受2000日期/40万单元格上限保护。
+- 相关输出同时保留有符号矩阵与有效日期数；新相似度/距离按逐对 `pairs` 返回 `left/right/correlation/valid_days/value/definition`。v2不返回旧redundancy字段。每个计算项/统计族提供定义卡，input_refs锁定因子panel_id、content_hash、数据摘要和日历，缺来源性质标unknown，不猜测真实/模拟。同名因子暂拒绝一起分析，防止以名称为键的旧诊断覆盖结果；未记录日历身份拒绝v2请求。
+- BH-FDR只使用主horizon中显著性可用的Rank IC，分别披露请求因子数和实际检验数；失败项不填0，不声称覆盖未导入或未验证的试验全集。NW不加方差地板；精确常数序列直接判零方差，避免均值浮点舍入造出虚假显著性。
+- 此切片验证NW/命名/日期对齐，不认证其余估计量或真实研究有效性。发现的既有换手跨缺口、正交增量混用Pearson/Spearman、留一组合样本不一致仍是待修缺陷，披露不构成放宽§4口径或通过A30；这些字段保留明确的旧算法说明，后续须修正并复验。价格加载暂沿用既有close与可选factor规则，并披露其为当前物化解释；完整价格复权语义、PIT和供应商历史修订验证归数据目录/真实研究验收，不宣称已证明“未使用未来修订数据”。
+
+### 验收表
 
 | 验收 | 条件 | 证据位置 |
 | --- | --- | --- |

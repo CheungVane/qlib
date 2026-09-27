@@ -536,8 +536,11 @@ NOT_AVAILABLE = (
 
 def analyze(entries: list[dict[str, Any]], returns_by_horizon: dict[int, Any], *,
             horizons: tuple[int, ...] = DEFAULT_HORIZONS, dataset: dict[str, Any] | None = None,
-            calendar_id: str | None = None, limitations: tuple[str, ...] = ()) -> dict[str, Any]:
+            calendar_id: str | None = None, limitations: tuple[str, ...] = (),
+            analysis_version: int = 1) -> dict[str, Any]:
     """Compose the factor report: single-factor statistics plus the overlap family."""
+    if type(analysis_version) is not int or analysis_version not in (1, 2):
+        raise FactorError("analysis_version must be 1 or 2")
     np = _numpy()
     if not entries:
         raise FactorError("no factors to analyse")
@@ -570,8 +573,13 @@ def analyze(entries: list[dict[str, Any]], returns_by_horizon: dict[int, Any], *
                 per_horizon[str(horizon)] = {"horizon": horizon, "available": False,
                                              "reason": "no_returns_for_horizon"}
                 continue
-            rank_stats = _series_stats(ic_series(grid, forward, dates, "spearman"), horizon, len(entries))
-            ic_stats = _series_stats(ic_series(grid, forward, dates, "pearson"), horizon, len(entries))
+            if analysis_version == 2:
+                from .factors_v2 import stats
+                rank_stats = stats(ic_series(grid, forward, dates, "spearman"), horizon, len(entries), dates[:-horizon])
+                ic_stats = stats(ic_series(grid, forward, dates, "pearson"), horizon, len(entries), dates[:-horizon])
+            else:
+                rank_stats = _series_stats(ic_series(grid, forward, dates, "spearman"), horizon, len(entries))
+                ic_stats = _series_stats(ic_series(grid, forward, dates, "pearson"), horizon, len(entries))
             per_horizon[str(horizon)] = {
                 "horizon": horizon, "available": bool(rank_stats.get("available") or ic_stats.get("available")),
                 "rank_ic": rank_stats, "ic": ic_stats}
@@ -613,7 +621,7 @@ def analyze(entries: list[dict[str, Any]], returns_by_horizon: dict[int, Any], *
         overlap.update(orthogonal_and_incremental(panels, returns_by_horizon[primary], dates))
     else:
         overlap.update({"orthogonal_ic": {}, "incremental_ic": None})
-    return json_safe({
+    report = {
         "basis": {
             "kind": "platform_factor_analysis",
             "formula": "per-date cross-sectional correlation of factor value vs forward return "
@@ -638,6 +646,8 @@ def analyze(entries: list[dict[str, Any]], returns_by_horizon: dict[int, Any], *
             "收益标签由平台按声明公式从同一数据内容版本的快照计算，未使用未来修订数据",
             *limitations,
         ],
-    })
-
-
+    }
+    if analysis_version == 2:
+        from .factors_v2 import finish
+        report = finish(report, entries)
+    return json_safe(report)

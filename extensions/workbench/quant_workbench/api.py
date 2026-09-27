@@ -156,8 +156,9 @@ def create_app(service: WorkbenchService):
         return service.import_factor_panel(identity, panel)
 
     @app.get("/v1/factor-analysis")
-    def factor_analysis(factor_id: list[str] = Query(...), horizon: list[int] | None = Query(None)):
-        return service.factor_analysis(factor_id, horizon)
+    def factor_analysis(factor_id: list[str] = Query(...), horizon: list[int] | None = Query(None),
+                        analysis_version: int = Query(1, ge=1, le=2)):
+        return service.factor_analysis(factor_id, horizon, analysis_version=analysis_version)
 
     @app.get("/v1/validation")
     def validation(run_id: list[str] = Query(...), horizon: int = Query(1, ge=1, le=60),

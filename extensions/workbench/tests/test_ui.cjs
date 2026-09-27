@@ -357,6 +357,7 @@ test('U18/U19: compare rows carry groups and the factor view renders statistics'
   await x.run("state.view='factors';renderFactors()");
   const html=x.elements['content'].innerHTML;
   assert.match(html,/单因子统计/);
+  assert.match(html,/旧定义，未满足当前纠正合同/);
   assert.match(html,/Rank IC/);
   assert.match(html,/FDR q/);
   assert.match(html,/重叠性：相关性、共线性与冗余/);

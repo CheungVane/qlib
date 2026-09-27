@@ -173,7 +173,10 @@ class WorkbenchService:
                 ("factor_id", "name", "source_instance_id", "external_id", "definition", "dataset",
                  "calendar_id", "provenance", "created_at", "panel_count")}
 
-    def factor_analysis(self, factor_ids: list[str], horizons: list[int] | None = None) -> dict[str, Any]:
+    def factor_analysis(self, factor_ids: list[str], horizons: list[int] | None = None, *,
+                        analysis_version: int = 1) -> dict[str, Any]:
+        if type(analysis_version) is not int or analysis_version not in (1, 2):
+            raise factor_layer.FactorError("analysis_version must be 1 or 2")
         if not factor_ids:
             raise factor_layer.FactorError("factor_id is required")
         requested = list(dict.fromkeys(factor_ids))
@@ -188,10 +191,14 @@ class WorkbenchService:
             stored = self.repository.get_factor_panel(factor_id)
             if stored is None:
                 raise factor_layer.FactorError(f"factor has no panel: {factor_id}")
-            entries.append({"factor_id": factor_id, "name": row["name"], "panel": stored["panel"]})
+            entries.append({"factor_id": factor_id, "name": row["name"], "panel": stored["panel"],
+                            "panel_id": stored["panel_id"], "content_hash": stored["content_hash"],
+                            "provenance": row.get("provenance")})
             datasets.append(row.get("dataset") or {})
             if row.get("calendar_id"):
                 calendars.add(row["calendar_id"])
+            elif analysis_version == 2:
+                raise factor_layer.FactorError("v2 requires a recorded calendar identity")
         versions = {(item.get("id"), item.get("version")) for item in datasets}
         if len(versions) != 1:
             raise factor_layer.FactorError("factors must share one dataset id and content version")
@@ -200,6 +207,11 @@ class WorkbenchService:
             raise factor_layer.FactorError("factors must share one calendar")
         snapshot = self.factor_snapshot_dir(dataset)
         digest = factor_layer.verify_snapshot(snapshot, dataset)
+        if analysis_version == 2:
+            from .factors_v2 import align
+            if len({entry["name"] for entry in entries}) != len(entries):
+                raise factor_layer.FactorError("v2 requires distinct factor names for name-keyed diagnostics")
+            entries = align(entries, snapshot)
         panels = [entry["panel"] for entry in entries]
         dates, instruments = factor_layer.aligned_rows(panels)
         prices = factor_layer.load_close_series(snapshot, dates, instruments)
@@ -211,7 +223,8 @@ class WorkbenchService:
         if prices["missing_instruments"]:
             limitations.append(f"{len(prices['missing_instruments'])} 个标的在快照中缺价格，未参与计算")
         report = factor_layer.analyze(entries, returns, horizons=window, dataset=dataset,
-                                      calendar_id=next(iter(calendars), None), limitations=tuple(limitations))
+                                      calendar_id=next(iter(calendars), None), limitations=tuple(limitations),
+                                      analysis_version=analysis_version)
         report["basis"]["snapshot"] = {"label": snapshot.name, "content_digest": digest["digest"],
                                        "files": digest["file_count"], "price_fields": prices["fields"]}
         return report
