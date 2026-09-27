@@ -166,6 +166,12 @@ Tushare Pro 是 FINV 的日常上游，直连可获得每日指标（市值/换�
 - **可用派生量**：`流通股本 = (archive volume × factor × 100) / turn`；`流通市值 = (archive close / factor) × 流通股本`；停牌日（`tradestatus=0`）无法反推股本，须保留缺口。
 - **仍未完成**：T05 端口接入、A16/A17 验收、特征与标签管线、全市场（非csi500）扩展。
 
+### T05 目录端口与快照登记（2026-09-27）
+
+- 新增 `quant_workbench/data_directory.py`：`build_snapshot_record`（组件清单+内容摘要）、`publish_snapshot`（已发布快照不可追加修改，相同摘要幂等）、`load_snapshot`（摘要校验）、`reproducibility`（证据不完整即受限）、`select_as_of`（不泄漏未来修订）、`resolve_symbol`（代码复用按有效期解析）、`FreeSnapshotReader`（按快照ID+数据根读取日历/成分/字段，不依赖Qlib）。
+- 已登记快照记录：[20260927-free-snapshot-record.json](evidence/20260927-free-snapshot-record.json)，含calendar/universe/bar/status四个组件及内容摘要；数据根不写入记录，改变数据根不改变快照身份。
+- A16/A17 目前只有**部分证据**（合成夹具+登记覆盖）；物化引用、旧路径显式登记、迁移/恢复与同种子复跑仍未实现，不得据此关闭T05或A16/A17。
+
 稳定性实测：EM 两次探测中一次断连、一次成功；YF 三次探测分别为 429、200（载荷很小）、429。免费抓取类来源**必须带重试、失败留痕与降级路径**，不能作为唯一来源。
 
 ## 7. 未验证与风险

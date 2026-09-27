@@ -139,6 +139,11 @@
   "sample_symbol": "sh600000",
   "snapshot_kind": "free_source_qlib_bin",
   "snapshot_label": "free_cn_20260924",
+  "snapshot_record": {
+    "content_digest": "sha256:2d6f5367c1f20addf1fe260a9ef9a5d2dc964c09a0726bf3d80a6d721117966a",
+    "data_root_recorded": false,
+    "path": "20260927-free-snapshot-record.json"
+  },
   "source_class": "free_community_unverified",
-  "verified_at": "2026-09-27T10:10:39Z"
+  "verified_at": "2026-09-27T10:14:37Z"
 }

@@ -1,0 +1,68 @@
+{
+  "components": [
+    {
+      "available_at": null,
+      "content_digest": "e8a7242b58989313787b98c2257da10f391d8a77e64b8810b344c2579cf38f3d",
+      "coverage_end": "2026-09-24",
+      "coverage_start": "2000-01-04",
+      "kind": "calendar",
+      "source_class": "free_community_unverified",
+      "uri": "free_cn_20260924/calendars/day.txt"
+    },
+    {
+      "available_at": null,
+      "content_digest": "f5cfea6bbf3857cc4fd7fa555b2dfa1da4dbf2bf8b3f969b3ea3d2628bd8ab2e",
+      "coverage_end": "2026-09-24",
+      "coverage_start": "2000-01-04",
+      "kind": "universe",
+      "source_class": "free_community_unverified",
+      "uri": "free_cn_20260924/instruments/all.txt"
+    },
+    {
+      "available_at": null,
+      "content_digest": "sha256:4ce65c37755265bec24266e922468195e66166e5f91996595ac8eaade6db85fa",
+      "coverage_end": "2026-09-24",
+      "coverage_start": "2000-01-04",
+      "kind": "bar",
+      "source_class": "free_community_unverified",
+      "uri": "free_cn_20260924/features"
+    },
+    {
+      "available_at": null,
+      "content_digest": "sha256:29771302616f081fb95cb9f9601b33e105284b5d3028e2bd6164193f5547ad09",
+      "coverage_end": "2026-09-24",
+      "coverage_start": "2015-01-05",
+      "kind": "status",
+      "source_class": "free_community_unverified",
+      "uri": "free_cn_20260924_enrichment/turnover"
+    }
+  ],
+  "content_digest": "sha256:2d6f5367c1f20addf1fe260a9ef9a5d2dc964c09a0726bf3d80a6d721117966a",
+  "created_at": "2026-09-27T10:14:38Z",
+  "limitations": [
+    "free community source; not official; do not present as certified market data",
+    "prices are adjusted: raw = adjusted / factor; archive volume is inversely adjusted",
+    "amount unit is thousand CNY",
+    "absolute paths and machine names are deliberately not recorded"
+  ],
+  "materializer": {
+    "name": "verify_free_snapshot",
+    "version": "1"
+  },
+  "provenance": {
+    "archive_sha256": "sha256:4ce65c37755265bec24266e922468195e66166e5f91996595ac8eaade6db85fa",
+    "completeness": "complete",
+    "dolt_commit": "6a34i0k99nu6kae95gsd3njrh1u0b9gm",
+    "investment_data_commit": "b8c129b4d9b838f050eac8b1135111b3b79fc894",
+    "manifest_sha256": "dd2355056a33036a7ace5b9d955f3023668b6e4cf2b1790177e01cdc5782543d"
+  },
+  "schema_version": 1,
+  "snapshot_id": "free_cn_20260924",
+  "source": {
+    "kind": "qlib_bin_release",
+    "release_tag": "2026-09-27",
+    "source_class": "free_community_unverified",
+    "upstream": "investment_data (Tushare/Wind/Caihui/Yahoo/BaoStock derived)"
+  },
+  "status": "published"
+}

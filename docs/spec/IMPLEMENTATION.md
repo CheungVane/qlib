@@ -16,7 +16,7 @@
 | T01-F 因子与NW后端纠正 | 完成，提交50f9f366（基线3a8f52b8） | 新相关相似度/距离、有符号相关与有效天数；NW用N分母且无方差地板；按快照日历补回缺失日期轴，缺IC不作显著性；定义卡锁定panel/hash/dataset；API/CLI兼容。22项因子专项通过；全门禁141项Python（140通过、1跳过），17项JS通过 | 该批UI仍v1，后续T01-U已切换；真实因子新口径复验、其他估计量缺陷和价格语义尚待修验，完整A30开放 |
 | T01-U UI切换 | 完成，提交58fdeeb3（基线8dd1cf9e） | 风险/因子显式v2；输入、来源、公式与不可用原因；revision不符拒绝混显；21项JS通过及浏览器夹具验收，见[证据](evidence/20260927-t01-u.md) | T01/A34限定纠正范围通过；A30其余缺陷、真实研究及完整响应式验收仍开放 |
 | T02-D 验证v2定义冻结 | 完成（2026-09-27文档批次，无代码变更） | 冻结PSR/DSR/PBO公式与估计量约定、收益与rf口径、M/C/N与相关性假设、PBO分块/余数/秩/重复配置规则、v2 DTO与错误样例；独立参考值见[复算脚本](evidence/20260927-t02d-reference.py)与[VALIDATION §2A](VALIDATION.md) | 只通过设计门；A31/A32与A36诊断子项待T02-B实现和验收。提交哈希由下次索引刷新补齐，文档不引用自身哈希 |
-| T05-S 数据源切片（用户指定，非T05完成） | 部分完成：快照与enrichment已落盘（提交edfadd63、7314f8ed） | FINV release 2026-09-27下载并校验（archive SHA-256与清单一致、发布方validate `ok:true`、日历末日2026-09-24、退市股在库、北交所缺口已登记）；定池中证500、区间2015-01-05→2026-09-24；BaoStock换手率1,791/1,802只、4,601,971行、含tradestatus/isST；新增`free_sources.py`、`fetch_csi500_turnover.py`、`verify_free_snapshot.py`与19项测试；证据见[快照登记](evidence/20260927-free-snapshot.json) | T05端口/组件清单/物化引用/旧路径登记/迁移恢复、A16/A17、A40数据访问子项均未做；未跑工作台全量门禁（本worktree无`.venv`）；非csi500扩展与特征/标签管线未做 |
+| T05-S 数据源切片（用户指定，非T05完成） | 部分完成：快照/enrichment已落盘，目录端口与快照登记已实现 | FINV release 2026-09-27下载并校验（archive SHA-256与清单一致、发布方validate `ok:true`、日历末日2026-09-24、退市股在库、北交所缺口已登记）；定池中证500、区间2015-01-05→2026-09-24；BaoStock换手率1,791/1,802只、4,601,971行；新增`free_sources.py`、`data_directory.py`（快照登记/不可变/组件清单/as-of选择/FreeSnapshotReader）、`fetch_csi500_turnover.py`、`verify_free_snapshot.py`与30项测试；快照记录见[record](evidence/20260927-free-snapshot-record.json)、校验摘要见[登记](evidence/20260927-free-snapshot.json) | T05物化引用、旧路径登记、迁移/恢复未做；A16/A17仅合成夹具与登记覆盖，完整验收未通过；A40数据访问子项未做；未跑工作台全量门禁（本worktree无`.venv`）；非csi500扩展与特征/标签管线未做 |
 
 可复现：`scripts/workbench_gate.sh`；风险专项 `extensions/workbench/.venv/bin/python -m unittest discover -s extensions/workbench/tests -p 'test_risk*.py'`。新增回归在 `extensions/workbench/tests/test_risk_v2.py`，覆盖四个独立手算答案、非零rf、v1兼容、缺测不跳过或回退、未知现金流/已扣rf定义不猜测、确切revision与历史不变、CLI/API一致、CVaR尾部不足及非法参数。完整门禁中出现既有执行测试的subprocess ResourceWarning及预期故障注入日志；退出码0，不把这些日志描述为无告警。
 
@@ -80,7 +80,7 @@ T01-F证据：`extensions/workbench/.venv/bin/python -m unittest discover -s ext
 | T02 事后诊断真实性 | 定义已冻结（[VALIDATION §2A](VALIDATION.md)）；可实现 | 不依赖TrialLedger：披露选择范围、N依据、权重和及独立状态；按§2A定义卡实现，N必须进入公式并锁定输入revision。不完整集合只标探索性。出口A31/A32及A36诊断子项 |
 | T03 比较合同 | 无，可开始 | 首批回测指标字段适用表，equity/metric均验证身份缺失/差异、不同初始资金反例；服务端判方向和可比性。出口A13/A27/A28 |
 | T04 执行政策 | 无，可开始 | 持久化并发槽、截止时间、政策修订与Agent计数；启动前检查、超时终止/恢复。出口A41；上限未支持的环境不通过 |
-| T05 数据目录边界 | 仅前置材料就绪（T05-S落盘），本任务未开始 | 按[数据源清单](DATA_SOURCES.md)实现适配器与快照身份（FINV主 + BAO校验 + EM补充）；snapshot身份→组件清单→物化引用；旧路径显式登记，未知不补造；设计并验证迁移/恢复。出口A16/A17和A40数据访问子项。A38分块可独立开展，超旧上限的真实研究须先通过A38 |
+| T05 数据目录边界 | **进行中**：快照登记、组件清单、目录端口与as-of夹具已实现；物化引用/旧路径/迁移恢复未做 | 按[数据源清单](DATA_SOURCES.md)实现适配器与快照身份（FINV主 + BAO校验 + EM补充）；snapshot身份→组件清单→物化引用；旧路径显式登记，未知不补造；设计并验证迁移/恢复。出口A16/A17和A40数据访问子项。A38分块可独立开展，超旧上限的真实研究须先通过A38 |
 | T06 实验/模型/策略对象 | T04、T05；接口草案可先行 | 定义版本、Run/Attempt、模型输入契约/复用、StrategyVersion及TrialLedger基础记账；先冻结DTO/命令样例和迁移，再实现固定流程，无单Stage续跑。出口A35，为T07提供试验事实 |
 | T07 实际验证证据 | T02、T06 | 分折训练、折内预处理、预测/标签、测试集访问与账本快照；失败保持unverified/invalidated。出口A36其余子项，与T02合并后才可标A36通过 |
 | T08 限定真实研究 | T01、T03、T05—T07、DEC01 | 明确来源/股票池/区间的真实链路，必要历史组件通过质量与时间语义验收。出口A37；来源待选只阻塞本任务 |
@@ -203,7 +203,9 @@ M1的完成证据：环境锁、导入命令、成功/失败样本、自动化�
 | 验收ID | 场景与通过条件 | 对应要求 |
 | --- | --- | --- |
 | A16 | 同时输入bar/财务修订/重复代码映射夹具；原始数据可追溯；不同available_at查询不泄漏未来修订；缺字段拒绝或显式降级 | DATA01—05 |
+| A16证据（部分） | `data_directory.select_as_of` 只返回 `available_at<=as_of` 的最新修订，测试覆盖"未来修订不泄漏"与"无可用修订返回None"；`resolve_symbol` 按有效期区间解析代码复用，区间冲突抛错；`FreeSnapshotReader` 缺组件/缺字段抛 `DataDirectoryError`；真实快照按快照ID可读（不看当前profile）。**财务修订使用合成夹具，未接真实财务源；真实bar质量门禁未做** | DATA01—05 / T05 |
 | A17 | 已发布snapshot不被追加修改；物化记录输入版本；同种子配置可复跑，输入缺证据时复现状态受限 | DATA04, ARC06 |
+| A17证据（部分） | `publish_snapshot` 对相同摘要幂等复用、对同ID不同摘要拒绝（不可追加修改）；`load_snapshot` 校验组件摘要与清单一致，篡改即拒绝；`reproducibility()` 要求provenance完整且materializer记录名称与版本，否则返回limited及原因；真实快照已登记content_digest与archive SHA-256。**物化引用、同种子复跑与迁移/恢复未实现** | DATA04, ARC06 / T05 |
 | A18 | 两个不同Qlib配置进程不污染全局状态；进程崩溃标记interrupted；重复提交不产生双任务；重试保留Attempt | ARC05, RUN01/03 |
 | A18证据 | 两次真实Qlib Attempt在不同工作目录与各自`mlflow.db`运行；RD-Agent基线探针19秒、单轮loop探针3分29秒均退出码0（loop同步1个研究会话）；`test_execution.py`覆盖崩溃→interrupted、同幂等键不产生第二个Attempt、失败后新键保留旧Attempt，且桩执行器工作目录被断言限制在测试沙箱内 | EXECUTION.md §5 |
 | A19 | 取消有确认状态；取消/完成竞争不覆盖已确认终态；失败任务保留日志/部分产物；API读取不会启动训练 | RUN02, API02 |

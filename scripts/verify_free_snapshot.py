@@ -17,9 +17,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "extensions" / "workbench"))
+from quant_workbench import data_directory as dd  # noqa: E402
 
 SOURCE_CLASS = "free_community_unverified"
 REQUIRED_MEMBERS = ("calendars/day.txt", "calendars/day_future.txt", "instruments/all.txt",
@@ -52,9 +56,14 @@ def main() -> int:
     parser.add_argument("--enrichment", help="turnover cache directory written by fetch_csi500_turnover.py")
     parser.add_argument("--universe", default="csi500", help="universe file used to scope the enrichment")
     parser.add_argument("--output", required=True)
+    parser.add_argument("--record-output", help="also write a data-directory snapshot record")
+    parser.add_argument("--data-root", help="root the record's component URIs are relative to")
     args = parser.parse_args()
 
     snapshot, manifest_path = Path(args.snapshot).expanduser(), Path(args.manifest).expanduser()
+    if args.data_root and not str(snapshot.resolve()).startswith(
+            str(Path(args.data_root).expanduser().resolve())):
+        raise SystemExit("--snapshot must live under --data-root")
     manifest = json.loads(manifest_path.read_text())
     record = {
         "snapshot_kind": "free_source_qlib_bin",
@@ -146,6 +155,55 @@ def main() -> int:
             "note": ("symbols without cache are names delisted before the fetch window; "
                      "they stay out of the study window instead of being filled"),
         }
+
+    if args.record_output:
+        snapshot_label = snapshot.name
+        components = [
+            {"kind": "calendar", "uri": f"{snapshot_label}/calendars/day.txt",
+             "content_digest": sha256_file(snapshot / "calendars/day.txt"),
+             "source_class": SOURCE_CLASS, "coverage_start": calendar[0], "coverage_end": calendar[-1],
+             "available_at": None},
+            {"kind": "universe", "uri": f"{snapshot_label}/instruments/all.txt",
+             "content_digest": sha256_file(snapshot / "instruments/all.txt"),
+             "source_class": SOURCE_CLASS, "coverage_start": calendar[0], "coverage_end": calendar[-1],
+             "available_at": None},
+            {"kind": "bar", "uri": f"{snapshot_label}/features",
+             "content_digest": manifest.get("archive_sha256"),
+             "source_class": SOURCE_CLASS, "coverage_start": calendar[0], "coverage_end": calendar[-1],
+             "available_at": None},
+        ]
+        if args.enrichment and record.get("enrichment"):
+            enrichment = record["enrichment"]
+            enrichment_manifest_digest = hashlib.sha256(json.dumps(
+                {key: enrichment[key] for key in
+                 ("universe", "universe_symbols", "cached_symbols", "rows",
+                  "first_date", "last_date", "symbols_without_cache")},
+                ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+            components.append(
+                {"kind": "status", "uri": f"{Path(args.enrichment).expanduser().name}/turnover",
+                 "content_digest": "sha256:" + enrichment_manifest_digest,
+                 "source_class": SOURCE_CLASS,
+                 "coverage_start": enrichment["first_date"], "coverage_end": enrichment["last_date"],
+                 "available_at": None})
+        snapshot_record = dd.build_snapshot_record(
+            snapshot_id=snapshot_label,
+            source={"kind": "qlib_bin_release", "source_class": SOURCE_CLASS,
+                    "release_tag": manifest.get("release_tag"),
+                    "upstream": "investment_data (Tushare/Wind/Caihui/Yahoo/BaoStock derived)"},
+            components=components,
+            provenance={"completeness": "complete",
+                        "archive_sha256": manifest.get("archive_sha256"),
+                        "manifest_sha256": record["manifest_sha256"],
+                        "dolt_commit": manifest.get("dolt_commit"),
+                        "investment_data_commit": manifest.get("investment_data_commit")},
+            materializer={"name": "verify_free_snapshot", "version": "1"},
+            limitations=record["limitations"],
+        )
+        Path(args.record_output).write_text(
+            json.dumps(snapshot_record, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+        record["snapshot_record"] = {"path": Path(args.record_output).name,
+                                     "content_digest": snapshot_record["content_digest"],
+                                     "data_root_recorded": False}
 
     Path(args.output).write_text(json.dumps(record, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
     print(json.dumps({"ok": not missing and record["calendar"]["matches_target_trade_date"],

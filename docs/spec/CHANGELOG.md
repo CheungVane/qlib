@@ -2,6 +2,15 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — T05 目录端口与快照登记（数据源切片续）
+
+- 来源：用户同意"先做T05本体"。
+- 实现：新增 `quant_workbench/data_directory.py`——快照记录与组件清单、内容摘要、已发布不可追加修改（同摘要幂等）、摘要校验、reproducibility（证据不完整即limited）、`select_as_of`（不泄漏未来修订）、`resolve_symbol`（代码复用区间解析）、`FreeSnapshotReader`（按快照ID+数据根读取日历/成分/字段，不导入Qlib）。
+- 登记：`verify_free_snapshot.py` 增加 `--record-output`，产出[快照记录](evidence/20260927-free-snapshot-record.json)（4组件：calendar/universe/bar/status，内容摘要`sha256:2d6f5367…`）；数据根不写入记录。
+- 验收：新增 `tests/test_data_directory.py` 11项，A16（as-of不泄漏、代码复用、缺字段fail-closed）与A17（不可变、幂等重放、篡改拒绝、复现受限）为**部分证据**；两模块合计30项测试通过。
+- 边界：T05仍未完成——物化引用、旧路径显式登记、迁移/恢复、同种子复跑未做；A16/A17不得据此关闭；未跑工作台全量门禁（本worktree无`.venv`）。
+- 验证：30项新增/相关测试通过（system python3 + numpy）；文档链接与表格检查；快照校验器 `ok:true`。
+
 ## 2026-09-27 — 执行轨迹澄清（仅文档）
 
 - 来源：用户质疑"是不是跳了，直接到T05"。
