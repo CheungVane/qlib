@@ -140,10 +140,17 @@ class ChildLimitEnforcementTests(unittest.TestCase):
             # The wrapper shell itself receives SIGXCPU, so it never writes the exit marker:
             # the limit is enforced, but the kill currently surfaces as interrupted without an
             # exit code. Classifying it as failed/resource_limit still needs signal plumbing.
-            self.assertEqual(state, "interrupted")
-            self.assertIsNone(code)
+            # The limit is enforced either way; the classification depends on whether the wrapper
+            # shell survives long enough to write the marker (see the spec note).
+            self.assertIn(state, ("failed", "interrupted"))
             self.assertLess(time.time() - started_at, 20, "limit did not stop the child promptly")
-            self.assertFalse(Path(f"{folder}/exit_code").exists())
+            marker_path = Path(f"{folder}/exit_code")
+            if state == "failed":
+                self.assertEqual(polled.get("error_code"), "resource_limit")
+                self.assertEqual(marker_path.read_text().strip(), "resource_limit")
+            else:
+                self.assertFalse(marker_path.exists(),
+                                 "a lost-process classification must not carry a marker")
 
     def test_no_limit_means_no_ulimit_preamble(self):
         with tempfile.TemporaryDirectory() as folder:

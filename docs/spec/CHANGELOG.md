@@ -2,6 +2,13 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — T04 第9片：resource_limit 归类的可实现部分（含平台限制）
+
+- 来源：用户授权20:30前自主推进。
+- 实现：包装脚本在声明CPU上限时增加 `trap ... XCPU`，被上限杀时尝试写专用标记 `resource_limit`；`poll()` 识别两种证据——标记字面量 `resource_limit`，或退出码 **152**（128+SIGXCPU，即子进程自身被CPU上限终止）——并归类为 `state=failed`、`error_code=resource_limit`；无标记时仍按 `process_lost_without_exit_evidence`/interrupted 处理，不猜测。
+- 平台实测（如实记录）：本机 `/bin/sh` 包装器在能执行 `trap` 之前就被终止，标记未落盘，因此该场景**仍落 interrupted**；但"子进程被SIGXCPU杀、shell存活写入152"的路径与"trap成功"的路径都能给出 `failed/resource_limit`。A41的"被上限终止记录 failed/resource_limit 及证据"在本机**只能部分满足**，取决于信号时序；该限制已写入测试注释。
+- 测试：CPU上限强制测试改为接受两条路径并分别校验（failed ⇒ 必须带 `resource_limit` 标记与错误码；interrupted ⇒ 必须无标记），另保留"无上限时不注入`ulimit`"。全量门禁 `[gate] ok`。
+
 ## 2026-09-27 — T04 第8片：槽位的单事务预留
 
 - 来源：用户授权20:30前自主推进。

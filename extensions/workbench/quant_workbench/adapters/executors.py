@@ -54,6 +54,21 @@ def _pid_alive(pid: Any) -> bool:
     return True
 
 
+def _read_marker(path: Path) -> tuple[str | None, int | None]:
+    """Return (resource_limit, exit_code). The wrapper writes the literal string on a
+    resource-limit kill because the numeric code may never be produced."""
+    try:
+        value = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None, None
+    if value == "resource_limit":
+        return "resource_limit", None
+    try:
+        return None, int(value)
+    except ValueError:
+        return None, None
+
+
 def _read_int(path: Path) -> int | None:
     try:
         value = path.read_text(encoding="utf-8").strip()
@@ -212,6 +227,10 @@ class SubprocessExecutor:
         if cpu_limit:
             # POSIX sh: ulimit -t is RLIMIT_CPU in seconds — verified to kill runaway children.
             preamble += f"ulimit -t {int(cpu_limit)}\n"
+            # A CPU-limit kill may prevent the numeric marker from being written; trap the
+            # catchable signal so the platform can classify the end instead of guessing.
+            preamble += (f"trap 'printf %s resource_limit > {shlex.quote(str(marker))}; exit 152' "
+                         "XCPU\n")
         wrapper = (
             preamble
             +
@@ -234,6 +253,11 @@ class SubprocessExecutor:
         run_dir = Path(attempt.get("workspace") or "")
         code = _read_int(run_dir / "exit_code")
         handle = self._processes.get(attempt_id)
+        if code == 152:  # 128 + SIGXCPU(24): the child itself was stopped by the CPU limit
+            self._processes.pop(attempt_id, None)
+            return {"state": "failed", "exit_code": 152, "error_code": "resource_limit",
+                    "error_message": "terminated by the enforced CPU limit",
+                    "ended_at": _now(), "evidence": {"exit_marker": True, "exit_code": 152}}
         if code is None and handle is not None:
             returncode = handle.poll()
             if returncode is not None:
@@ -254,6 +278,11 @@ class SubprocessExecutor:
         if _pid_alive(attempt.get("pid")):
             return {"state": "running"}
         self._processes.pop(attempt_id, None)
+        marker_kind, _ = _read_marker(run_dir / "exit_code")
+        if marker_kind == "resource_limit":
+            return {"state": "failed", "exit_code": None, "error_code": "resource_limit",
+                    "error_message": "terminated by the enforced CPU limit",
+                    "ended_at": _now(), "evidence": {"exit_marker": True, "kind": marker_kind}}
         return {"state": "interrupted", "exit_code": None,
                 "error_code": "process_lost_without_exit_evidence",
                 "error_message": "no exit marker and the recorded process is gone",
