@@ -345,6 +345,49 @@ def validate_bars(reader: "FreeSnapshotReader", symbols: Sequence[str],
             "missing_points": missing_points, "issues": issues[:50]}
 
 
+def coverage_report(reader: "FreeSnapshotReader", instruments: Sequence[dict],
+                    as_of: date | None = None) -> dict:
+    """DATA05 coverage gate: does each instrument's data actually reach its declared end?
+
+    This is the automated version of the manual check that found the Beijing truncation:
+    an instrument whose `instruments` interval claims a later end than its feature series
+    is reported as truncated instead of being silently treated as tradable.
+    """
+    calendar = reader.calendar()
+    truncated, ok, missing, stale = [], 0, [], []
+    for row in instruments:
+        symbol, declared_end = row["symbol"], row["end"]
+        try:
+            head = free_sources.read_bin_head_tail(
+                reader.path("bar") / symbol.lower() / "close.day.bin")
+        except (free_sources.FreeSourceError, OSError):
+            missing.append({"symbol": symbol, "declared_end": declared_end.isoformat()})
+            continue
+        last_index = head["start_index"] + head["points"] - 1
+        if last_index < 0 or last_index >= len(calendar):
+            truncated.append({"symbol": symbol, "declared_end": declared_end.isoformat(),
+                              "actual_end": None})
+            continue
+        actual_end = calendar[last_index]
+        if actual_end < declared_end:
+            truncated.append({"symbol": symbol, "declared_end": declared_end.isoformat(),
+                              "actual_end": actual_end.isoformat(),
+                              "gap_days": (declared_end - actual_end).days})
+        else:
+            ok += 1
+            if as_of and declared_end < as_of:
+                stale.append(symbol)
+    return {"ok": not truncated and not missing, "checked": len(instruments),
+            "instruments_ok": ok, "truncated": len(truncated), "missing_series": len(missing),
+            "truncated_sample": truncated[:20], "missing_sample": missing[:20],
+            "stale_intervals": len(stale),
+            "note": "truncated means the instruments interval claims data the feature series "
+                    "does not contain. It is a flag, not a verdict: a delisting or merger can "
+                    "legitimately end trading before the index removes the name, while a still-"
+                    "listed symbol ending early is a real gap (compare with delist dates). "
+                    "This does not replace the stale-vs-delisted check."}
+
+
 # -- A16 semantics -----------------------------------------------------------
 def select_as_of(records: Iterable[dict], as_of: str, key: str = "available_at") -> dict | None:
     """Latest revision knowable at `as_of`; later revisions are never returned (A16)."""

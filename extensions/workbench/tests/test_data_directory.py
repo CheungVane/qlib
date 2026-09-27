@@ -243,6 +243,44 @@ class AsOfTests(unittest.TestCase):
             dd.resolve_symbol(code_map + [dict(code_map[0])], "SH600000", "2004-06-01")
 
 
+class CoverageGateTests(unittest.TestCase):
+    """T05: interval-vs-data coverage consistency is flagged, with the delisting caveat."""
+
+    def test_declared_interval_beyond_the_series_is_flagged(self):
+        import struct
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            features = root / "features/sh600001"
+            features.mkdir(parents=True)
+            (features / "close.day.bin").write_bytes(
+                struct.pack("<f", 0) + struct.pack("<2f", 1.0, 2.0))  # 2 points only
+            (root / "calendars").mkdir()
+            (root / "calendars/day.txt").write_text("2026-09-23\n2026-09-24\n2026-09-25\n")
+            (root / "instruments").mkdir()
+            (root / "instruments/all.txt").write_text("SH600001\t2020-01-01\t2026-09-25\n")
+            record = dd.build_snapshot_record(
+                snapshot_id="cov", source={"source_class": "free_community_unverified"},
+                components=[{"kind": "bar", "uri": "features", "content_digest": "sha256:f",
+                             "source_class": "free_community_unverified",
+                             "coverage_start": "2026-09-23", "coverage_end": "2026-09-25"},
+                            {"kind": "calendar", "uri": "calendars/day.txt",
+                             "content_digest": "sha256:c", "source_class": "free_community_unverified",
+                             "coverage_start": "2026-09-23", "coverage_end": "2026-09-25"},
+                            {"kind": "universe", "uri": "instruments/all.txt",
+                             "content_digest": "sha256:u", "source_class": "free_community_unverified",
+                             "coverage_start": "2026-09-23", "coverage_end": "2026-09-25"}],
+                provenance={"completeness": "complete"},
+                materializer={"name": "test", "version": "1"})
+            reader = dd.FreeSnapshotReader(root, record)
+            rows = dd.free_sources.load_instruments((root / "instruments/all.txt").read_text())
+            report = dd.coverage_report(reader, rows)
+        self.assertFalse(report["ok"])
+        self.assertEqual(report["truncated"], 1)
+        self.assertEqual(report["truncated_sample"][0]["actual_end"], "2026-09-24")
+        self.assertIn("delisting", report["note"])
+
+
 @unittest.skipUnless(SNAPSHOT_DIR.exists(), "free snapshot is not extracted on this machine")
 class RealSnapshotTests(unittest.TestCase):
     def test_reads_calendar_universe_and_features_without_qlib(self):

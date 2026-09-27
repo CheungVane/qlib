@@ -1,0 +1,96 @@
+{
+  "as_of": "2026-09-24",
+  "gate": "interval_vs_series_coverage",
+  "interpretation": [
+    "truncated is a flag, not a verdict: a real delisting/merger can end trading before the index removes the name",
+    "the full-market interval file shows 0 mismatches because its end dates follow the data",
+    "this gate therefore complements, but does not replace, the stale-vs-delisted check (free_sources.survivorship_report)",
+    "paths and host names are deliberately not recorded"
+  ],
+  "runs": {
+    "all": {
+      "checked": 6161,
+      "instruments_ok": 6161,
+      "missing_series": 0,
+      "note": "truncated means the instruments interval claims data the feature series does not contain. It is a flag, not a verdict: a delisting or merger can legitimately end trading before the index removes the name, while a still-listed symbol ending early is a real gap (compare with delist dates). This does not replace the stale-vs-delisted check.",
+      "ok": true,
+      "stale_intervals": 599,
+      "truncated": 0,
+      "truncated_sample": []
+    },
+    "csi500": {
+      "checked": 22503,
+      "instruments_ok": 22488,
+      "missing_series": 0,
+      "note": "truncated means the instruments interval claims data the feature series does not contain. It is a flag, not a verdict: a delisting or merger can legitimately end trading before the index removes the name, while a still-listed symbol ending early is a real gap (compare with delist dates). This does not replace the stale-vs-delisted check.",
+      "ok": false,
+      "stale_intervals": 21989,
+      "truncated": 15,
+      "truncated_sample": [
+        {
+          "actual_end": "2021-09-01",
+          "declared_end": "2021-12-30",
+          "gap_days": 120,
+          "symbol": "SH600068"
+        },
+        {
+          "actual_end": "2012-02-08",
+          "declared_end": "2012-03-29",
+          "gap_days": 50,
+          "symbol": "SH600102"
+        },
+        {
+          "actual_end": "2012-02-20",
+          "declared_end": "2012-03-29",
+          "gap_days": 38,
+          "symbol": "SH600263"
+        },
+        {
+          "actual_end": "2018-12-27",
+          "declared_end": "2019-06-27",
+          "gap_days": 182,
+          "symbol": "SH600270"
+        },
+        {
+          "actual_end": "2011-02-01",
+          "declared_end": "2011-06-30",
+          "gap_days": 149,
+          "symbol": "SH600553"
+        },
+        {
+          "actual_end": "2010-02-03",
+          "declared_end": "2010-06-30",
+          "gap_days": 147,
+          "symbol": "SH600607"
+        },
+        {
+          "actual_end": "2009-07-31",
+          "declared_end": "2010-01-03",
+          "gap_days": 156,
+          "symbol": "SH600840"
+        },
+        {
+          "actual_end": "2012-03-06",
+          "declared_end": "2012-03-29",
+          "gap_days": 23,
+          "symbol": "SH600991"
+        },
+        {
+          "actual_end": "2026-09-14",
+          "declared_end": "2026-09-24",
+          "gap_days": 10,
+          "symbol": "SH601198"
+        },
+        {
+          "actual_end": "2019-05-23",
+          "declared_end": "2019-06-27",
+          "gap_days": 35,
+          "symbol": "SZ000418"
+        }
+      ]
+    }
+  },
+  "snapshot_content_digest": "sha256:2d6f5367c1f20addf1fe260a9ef9a5d2dc964c09a0726bf3d80a6d721117966a",
+  "snapshot_id": "free_cn_20260924",
+  "verified_at": "2026-09-27T12:02:55Z"
+}
