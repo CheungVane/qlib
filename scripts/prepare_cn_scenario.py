@@ -21,6 +21,16 @@ def profile_path():
     return Path(os.environ.get('QWB_CN_PROFILE', PROJECT / 'configs/cn/profile.json'))
 
 
+def agent_root():
+    """RD-Agent checkout: env override first, then the historical sibling directory.
+
+    The executors and run scripts already honour QWB_RDAGENT_ROOT; compiling the agent
+    template must resolve the same checkout, otherwise the platform silently reads a
+    different tree (or none).
+    """
+    return Path(os.environ.get('QWB_RDAGENT_ROOT') or PROJECT.parent / 'RD-Agent').expanduser()
+
+
 def instruments(bundle):
     fixture = bundle['research']['fixture']
     return {f"{fixture['stock_prefix']}{i:03d}": {'board': fixture['board'], 'status': 'normal'}
@@ -101,7 +111,7 @@ def compile_qlib(bundle, out_dir=None):
 
 
 def compile_agent(bundle):
-    agent = PROJECT.parent / 'RD-Agent'
+    agent = agent_root()
     source = agent / 'rdagent/scenarios/qlib/experiment/factor_template'
     # Versioned directory keeps previous runs/templates intact.
     target = agent / 'git_ignore_folder' / ('qwb_cn_factor_template_' + bundle['fingerprint'][:12])

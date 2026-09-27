@@ -37,6 +37,7 @@ CONTAINER_NAME_PREFIX = "qwb"
 CONTAINER_RUN_DIR = "/qwb/run"
 CONTAINER_DATA_DIR = "/qwb/data"
 CONTAINER_SOURCE_DIR = "/qwb/src"
+AGENT_BUDGET_HOOK_DIR = Path(__file__).resolve().parents[2] / "hooks" / "agent_budget"
 
 
 def container_name(executor_id: str, attempt_id: str) -> str:
@@ -814,13 +815,18 @@ class RDAgentExecutor(SubprocessExecutor):
     LOOP = "rdagent.factor.loop"
 
     def __init__(self, repo_root: str | Path | None = None, agent_root: str | Path | None = None,
-                 profile_path: str | Path | None = None, limits: dict[str, Any] | None = None):
+                 profile_path: str | Path | None = None, limits: dict[str, Any] | None = None,
+                 budget_root: str | Path | None = None):
         super().__init__(repo_root, limits=limits)
         self.agent_root = Path(agent_root or os.environ.get("QWB_RDAGENT_ROOT")
                                or self.repo_root.parent / "RD-Agent").expanduser().resolve()
         self.sanitizer = Sanitizer(self.agent_root)
         self.profile_path = (Path(profile_path).expanduser().resolve() if profile_path
                              else self.repo_root / "configs/cn/profile.json")
+        # The execution-time call ledger lives outside the checkout, next to the platform
+        # database; the child only writes this file, never the platform database.
+        self.budget_root = (Path(budget_root).expanduser().resolve() if budget_root
+                            else self.repo_root / ".data" / "workbench" / "agent_budget")
         self._bundle: dict[str, Any] | None = None
         self._bundle_error: str | None = None
 
@@ -875,7 +881,63 @@ class RDAgentExecutor(SubprocessExecutor):
         coreutils = Path("/opt/homebrew/opt/coreutils/libexec/gnubin")
         if os.uname().sysname == "Darwin" and (coreutils / "timeout").is_file():
             env["PATH"] = f"{coreutils}:{env.get('PATH', '')}"
+        if self.agent_call_enforcement():
+            # Decoupled hook: sitecustomize wraps litellm.completion inside RD-Agent's own
+            # interpreter, so no upstream source changes are needed.
+            env["PYTHONPATH"] = os.pathsep.join(
+                [str(AGENT_BUDGET_HOOK_DIR), env.get("PYTHONPATH", "")]).rstrip(os.pathsep)
+            env["QWB_AGENT_BUDGET_FILE"] = str(self.call_ledger_path())
+            env["QWB_AGENT_BUDGET_LIMIT"] = str(self.call_limit())
+            env["QWB_AGENT_BUDGET_STRICT"] = "1"
         return env
+
+    def agent_call_enforcement(self) -> bool:
+        return True
+
+    def call_limit(self) -> int:
+        return int((self.limits.get("agent_max_calls") or (0,))[0] or 0)
+
+    def call_ledger_path(self) -> Path:
+        scope = str((self.limits.get("agent_scope") or ("policy_revision",))[0] or "policy_revision")
+        revision = str((self.limits.get("policy_revision") or ("unversioned",))[0] or "unversioned")
+        safe = "".join(char if char.isalnum() or char in "-._" else "-" for char in revision)
+        return self.budget_root / f"{safe}-{scope}.json"
+
+    def seed_call_ledger(self, *, attempts_seen: int = 0) -> dict[str, Any]:
+        """Top the ledger up from the durable count before an Agent attempt starts.
+
+        Imported lazily so the platform package never imports the hook at module load.
+        """
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "qwb_agent_budget", AGENT_BUDGET_HOOK_DIR / "qwb_agent_budget.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)  # type: ignore[union-attr]
+        return module.seed(path=self.call_ledger_path(), limit=self.call_limit(),
+                           used=attempts_seen, scope=str((self.limits.get("agent_scope")
+                                                          or ("policy_revision",))[0]))
+
+    def agent_budget_report(self, attempt: dict[str, Any]) -> dict[str, Any] | None:
+        """EXEC13: what the execution-time ledger says about this scope, for reconciliation."""
+        if not self.agent_call_enforcement():
+            return None
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "qwb_agent_budget", AGENT_BUDGET_HOOK_DIR / "qwb_agent_budget.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)  # type: ignore[union-attr]
+        state = module.read_state(self.call_ledger_path())
+        events = [event for event in state.get("events", [])
+                  if event.get("attempt_id") == attempt.get("attempt_id")]
+        attempt_used = sum(int(event.get("units") or 0) for event in events)
+        if not state.get("used") and not attempt_used:
+            return None
+        return {"kind": "calls", "used": int(state.get("used") or 0), "limit": self.call_limit(),
+                "scope": str((self.limits.get("agent_scope") or ("policy_revision",))[0]),
+                "attempt_used": attempt_used,
+                "status": "budget_exhausted" if state.get("blocked_at") else "within_budget",
+                "blocked_by_this_attempt": state.get("blocked_attempt") == attempt.get("attempt_id"),
+                "blocked_at": state.get("blocked_at")}
 
     def cwd(self, kind: str, run_dir: Path) -> Path:
         return self.agent_root
@@ -949,6 +1011,24 @@ class RDAgentExecutor(SubprocessExecutor):
             add("rdagent.limits", "missing",
                 "policy enforces a memory hard limit, but this route runs factor code in a host "
                 "LocalEnv (no container); admission is refused until the container route lands")
+        hook = AGENT_BUDGET_HOOK_DIR / "sitecustomize.py"
+        helper = AGENT_BUDGET_HOOK_DIR / "qwb_agent_budget.py"
+        ledger_dir = self.call_ledger_path().parent
+        if not (hook.is_file() and helper.is_file()):
+            add("rdagent.call_budget", "missing",
+                f"agent call-budget hook is incomplete under {AGENT_BUDGET_HOOK_DIR.name}/")
+        elif not self.call_limit():
+            add("rdagent.call_budget", "missing", "policy has no agent_max_calls value to enforce")
+        else:
+            try:
+                ledger_dir.mkdir(parents=True, exist_ok=True)
+                writable = os.access(ledger_dir, os.W_OK)
+            except OSError:
+                writable = False
+            add("rdagent.call_budget", "ok" if writable else "missing",
+                f"litellm hook + file ledger ({self.call_ledger_path().name}, limit "
+                f"{self.call_limit()})" if writable else
+                f"agent call ledger is not writable: {ledger_dir}")
         runtime = self.docker_runtime()
         if runtime and runtime.startswith("linux/"):
             add("rdagent.docker", "ok", f"Linux Docker engine {runtime}")

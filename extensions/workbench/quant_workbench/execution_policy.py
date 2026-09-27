@@ -162,6 +162,19 @@ def child_limits(policy: ExecutionPolicy) -> dict:
     return limits
 
 
+def agent_limits(policy: ExecutionPolicy) -> dict:
+    """Agent budget entries handed to the executor (EXEC13).
+
+    `agent_max_calls` is enforced outside the platform process: the executor seeds a file
+    ledger with this limit and injects the hook that reserves from it before each LLM call.
+    """
+    return {
+        "agent_max_calls": (policy.agent_max_calls, policy.agent_max_calls),
+        "agent_scope": (policy.agent_scope, policy.agent_scope),
+        "policy_revision": (policy.revision(), policy.revision()),
+    }
+
+
 def container_flags(limits: dict) -> list[str]:
     """Docker flags expressing the policy for a container-routed attempt.
 

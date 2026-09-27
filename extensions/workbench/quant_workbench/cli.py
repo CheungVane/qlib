@@ -24,11 +24,12 @@ def build_service(root: Path, with_executors: bool = True) -> WorkbenchService:
     observer = RDAgentStatusProvider(agent_root) if agent_root else None
     execution = None
     if with_executors:
-        from .execution_policy import child_limits, load_policy
-        limits = child_limits(load_policy())
+        from .execution_policy import agent_limits, child_limits, load_policy
+        policy = load_policy()
+        limits = {**child_limits(policy), **agent_limits(policy)}
         execution = ExecutionService(repository,
                                      executors=[QlibCNExecutor(limits=limits),
-                                                RDAgentExecutor(limits=limits)],
+                                                RDAgentExecutor(limits=limits, budget_root=root / "agent_budget")],
                                      importer=AttemptResultImporter(repository))
     from .adapters.local_data_directory import LocalDataDirectory
     data_root = Path(os.environ.get("QWB_DATA_ROOT")

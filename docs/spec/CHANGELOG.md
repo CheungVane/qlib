@@ -2,6 +2,16 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — T04 第11片：`agent_max_calls` 强制（不改 RD-Agent 源码）
+
+- 来源：用户"`agent_max_calls` 没有强制，去做吧，如果需要修改 rd-agent 的源代码，记得尽量与原始架构解耦"。
+- 机制（解耦）：新增仓库内 `extensions/workbench/hooks/agent_budget/`（仅标准库）：`sitecustomize.py` 是 Python 标准启动钩子，`qwb_agent_budget.py` 用 meta-path loader 在 `litellm` 被导入后包装 `completion`，**不改 RD-Agent 任何文件**。执行器只对 Agent Attempt 设置 `PYTHONPATH`+`QWB_AGENT_BUDGET_FILE/LIMIT/STRICT`，其余 Python 进程完全不受影响（有测试专门验证"无平台环境时不写账本"）。
+- 计数与到限：每次调用前在 `flock` 保护的文件账本里原子预留；到限时**不发出调用**，抛 `AgentCallBudgetExhausted`（`qwb_agent_call_budget_exhausted`）。计数单位是"一次 `litellm.completion` 调用"（其内部重试不再细分），embedding 不计入。账本 `used` 单调不回退；服务在启动前用 durable count 续接、在终态把用量单调核对进 V5 `agent_budget` 表，因此取消/重启不清空。
+- 暴露：`policy_summary().agent.calls_enforced` 由执行器能力得出（现为 true），`used.calls` 来自账本；`notes.memory` 的旧文案（"当前执行器为裸子进程"）改为容器实况；执行面板新增内存上限与"Agent 调用 used/max"。
+- 顺带修：`scripts/prepare_cn_scenario.py` 编译 Agent 模板时**忽略 `QWB_RDAGENT_ROOT`**、硬编码兄弟目录，会静默编译到另一个（或不存在的）checkout；改为 `agent_root()` 优先读该环境变量。
+- 验证：门禁 `[gate] ok`（Python 全套 + JS 25）。真实引擎：用 RD-Agent 自己的 venv 导入其 backend 后 `completion.__qwb_budget_wrapped__=True`；跑 `--mode loop` 并把 limit 设为 3，循环恰好发出 3 次调用后被拦，**其内部 10 次重试全部被拒、账本 `used=3` 无超支**，上游以 `Failed to create chat completion after 10 retries` 结束。另有 4 进程并发抢占只放出恰好 limit 个名额的测试。证据见[agent-call-budget](evidence/20260927-agent-call-budget.json)。
+- 边界：平台级 RD-Agent Attempt 仍未跑通——该入口按内存必须项拒绝准入（`rdagent.limits`），故调用计数是在**真实引擎调用点**而非平台 Attempt 上验证的；A41 仍不通过，仅剩 RD-Agent 容器路由。
+
 ## 2026-09-27 — T04 第10片：Qlib 入口容器化，内存/CPU 硬上限落地
 
 - 来源：用户对"为什么要设上限"给出结论"那要容器"，授权把 Qlib 执行器改走容器。

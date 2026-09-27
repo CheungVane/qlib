@@ -225,9 +225,21 @@ class ExecutionService:
             "agent": {"max_trials": self.policy.agent_max_trials,
                       "max_calls": self.policy.agent_max_calls,
                       "scope": self.policy.agent_scope, "used": used,
-                      "calls_enforced": False},
-            "notes": {"memory": "内存硬上限需容器路径；当前执行器为裸子进程，故未强制"},
+                      "calls_enforced": any(self._agent_call_enforcement(executor)
+                                            for executor in self.executors)},
+            "notes": {"memory": "内存硬上限由容器 cgroup 强制（Qlib 入口）；RD-Agent 入口尚未"
+                                "容器化，因此在 memory 属必须项期间拒绝准入",
+                      "calls": "调用次数由执行期文件账本强制（sitecustomize 包装 litellm."
+                               "completion），终态核对进本表"},
         }
+
+    @staticmethod
+    def _agent_call_enforcement(executor) -> bool:
+        probe = getattr(executor, "agent_call_enforcement", None)
+        try:
+            return bool(probe()) if callable(probe) else False
+        except Exception:
+            return False
 
     def capabilities(self) -> dict[str, Any]:
         return {
@@ -282,6 +294,14 @@ class ExecutionService:
         executor, checks, reasons = self._preflight(kind)
         if reasons:
             raise PreconditionFailed(checks, reasons)
+
+        seed = getattr(executor, "seed_call_ledger", None)
+        if callable(seed) and self._agent_call_enforcement(executor):
+            # EXEC13: the call counter must survive across attempts, so the durable count
+            # seeds the execution-time ledger before the child can reserve from it.
+            durable = {row["kind"]: row["used"]
+                       for row in self.repository.agent_budget_rows(self.policy.revision())}
+            seed(attempts_seen=int(durable.get("calls", 0)))
 
         attempt_id = str(uuid.uuid4())
         prepared = executor.prepare(attempt_id, kind, params)
@@ -400,6 +420,20 @@ class ExecutionService:
                 outcome = executor.outcome(terminal)
             except Exception as exc:  # outcome collection must never overwrite the execution result
                 outcome = {"collection_error": f"{type(exc).__name__}: {exc}"}
+            reporter = getattr(executor, "agent_budget_report", None)
+            if callable(reporter):
+                try:
+                    report = reporter(terminal)
+                except Exception as exc:
+                    report = {"kind": "calls", "status": "report_failed",
+                              "error": f"{type(exc).__name__}: {exc}"}
+                if report:
+                    reconciled = self.repository.record_agent_budget(
+                        policy_revision=self.policy.revision(),
+                        scope=str(report.get("scope") or self.policy.agent_scope), kind="calls",
+                        limit=self.policy.agent_max_calls, used=int(report.get("used") or 0))
+                    outcome = {**(outcome or {}), "agent_budget": {
+                        "calls": {**report, "durable_used": reconciled["used"]}}}
             if state == "succeeded":
                 outcome = self._auto_import(terminal, outcome)
             self.repository.update_attempt(

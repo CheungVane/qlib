@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "batch": "T04 agent_max_calls enforcement (EXEC13)",
+  "date": "2026-09-27",
+  "policy": {
+    "revision": "sha256:8e32acbd5c71b7f8cebd59bbe8c24d01",
+    "agent_max_trials": 12,
+    "agent_max_calls": 200,
+    "agent_scope": "policy_revision"
+  },
+  "mechanism": {
+    "injection": "PYTHONPATH=<repo>/extensions/workbench/hooks/agent_budget + sitecustomize.py",
+    "interception": "importlib meta-path loader wraps litellm.completion after litellm is imported",
+    "ledger": "platform root/agent_budget/<policy_revision>-<scope>.json, flock-guarded, atomic replace",
+    "reconciliation": "attempt terminal state copies the runtime count into the V5 agent_budget table (monotonic max), so cancel/restart cannot hand budget back",
+    "unit": "one wrapped litellm.completion call (client-level retries inside that call are not split)",
+    "upstream_changes": "none — RD-Agent source is untouched; the hook is a standard interpreter hook"
+  },
+  "injection_verified_against_the_real_engine": {
+    "interpreter": "RD-Agent/.venv/bin/python",
+    "litellm.completion_wrapped": true,
+    "rdagent.oai.backend.litellm.completion_wrapped": true
+  },
+  "real_engine_run": {
+    "command": "RD-Agent .venv python scripts/run_rdagent_factor_smoke.py --mode loop",
+    "environment": {
+      "QWB_AGENT_BUDGET_LIMIT": 3,
+      "QWB_ATTEMPT_ID": "agent-limit-check"
+    },
+    "ledger": {
+      "limit": 3,
+      "used": 3,
+      "events": 3,
+      "blocked_at": "2026-09-27T12:58:42Z",
+      "blocked_kind": "completion"
+    },
+    "upstream_result": "RuntimeError: Failed to create chat completion after 10 retries",
+    "interpretation": "the loop made exactly 3 calls; every later call — including all of the backend's internal retries — was refused by the hook, so the budget was not overrun and the run ended instead of silently spending more"
+  },
+  "tests": {
+    "ledger_limit_blocks_and_records": "pass",
+    "seeding_never_lowers_used": "pass",
+    "four_concurrent_processes_grant_exactly_the_limit": "pass",
+    "fake_litellm_counts_then_raises_AgentCallBudgetExhausted": "pass",
+    "hook_inert_without_platform_environment": "pass",
+    "executor_env_and_checks": "pass",
+    "service_reconciles_calls_into_durable_ledger": "pass",
+    "gate": "[gate] ok (Python suite + JS 25)"
+  },
+  "limits": [
+    "platform-level RD-Agent admission is still refused by the mandatory memory limit (rdagent.limits: host LocalEnv, no container), so the enforcement was verified against the real engine's own call site rather than through a platform Attempt",
+    "embedding calls are deliberately not counted (EXEC13 defines the unit as generative calls)",
+    "denied calls are recorded once as blocked_at, not as individual events"
+  ],
+  "conclusion": "agent_max_calls is now enforced before the call is issued, with a durable, restart-safe count and no RD-Agent source modification. A41 still does not pass: the RD-Agent container route (memory hard limit) is the remaining item."
+}

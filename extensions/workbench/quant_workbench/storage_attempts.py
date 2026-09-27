@@ -163,6 +163,28 @@ class AttemptsMixin:
                 "WHERE policy_revision=? ORDER BY scope, kind", (policy_revision,)).fetchall()
         return [dict(row) for row in rows]
 
+    def record_agent_budget(self, *, policy_revision: str, scope: str, kind: str, limit: int,
+                            used: int) -> dict[str, Any]:
+        """Reconcile an execution-time count into the durable ledger.
+
+        Used for counts produced outside the platform process (the container/hook ledger).
+        Monotonic per (revision, scope, kind): the stored value never decreases, so a lost or
+        reset runtime counter cannot hand budget back.
+        """
+        now = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT used FROM agent_budget WHERE policy_revision=? AND scope=? AND kind=?",
+                (policy_revision, scope, kind)).fetchone()
+            current = int(row["used"]) if row else 0
+            resolved = max(current, int(used))
+            conn.execute(
+                "INSERT INTO agent_budget(policy_revision,scope,kind,used,updated_at) "
+                "VALUES(?,?,?,?,?) ON CONFLICT(policy_revision,scope,kind) "
+                "DO UPDATE SET used=excluded.used, updated_at=excluded.updated_at",
+                (policy_revision, scope, kind, resolved, now))
+        return {"used": resolved, "limit": limit, "previous": current}
+
     @staticmethod
     def _attempt_row(row: sqlite3.Row) -> dict[str, Any]:
         record = dict(row)
