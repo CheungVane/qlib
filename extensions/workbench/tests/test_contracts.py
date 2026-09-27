@@ -22,7 +22,9 @@ CORE_DTO_KEYS = {
     "/v1/capabilities": ["agent_observers", "execution_kinds", "executor", "executors",
                          "live_data", "result_importers", "storage"],
     "/v1/executions": ["items", "next_cursor"],
-    "/v1/executions/catalog": ["checked_at", "items"],
+    # T04: `policy` was added deliberately so the frozen execution policy and its usage are
+    # visible through the catalog; the key set changes with the contract test in the same commit.
+    "/v1/executions/catalog": ["checked_at", "items", "policy"],
     "/v1/provenance/capabilities": ["items"],
     "/v1/research": ["items", "next_offset", "total"],
     "/v1/runs": ["items", "next_cursor"],

@@ -2,6 +2,14 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — T04 第6片：执行政策与预算接到界面
+
+- 来源：用户"去接到界面吧"。
+- 实现：`ExecutionService.policy_summary()` 汇总冻结政策与用量，经 `/v1/executions/catalog` 返回（并加入 `capabilities()`）；字段含 revision、来源、并发、超时、宽限、CPU秒、内存字节、`enforce`、**未强制项**、Agent试验上限/已用/scope 与 `calls_enforced=false`。UI 执行面板新增"执行政策"区，逐项展示并**显式写出未强制的能力**（"未强制：内存硬上限（需容器路径）；Agent 调用次数（子进程无法回报调用数）"），同时说明"槽满或达试验上限时拒绝准入且不创建 Attempt，超期任务由状态核对路径终止"。
+- 契约：`/v1/executions/catalog` 顶层键新增 `policy`，按 API03 要求**与键冻结测试同一提交**更新（非静默漂移）。
+- 测试：新增1项JS（政策区渲染、未强制项与不可用政策提示）与1项Python（`policy_summary` 报告上限与用量）；全量门禁 `[gate] ok`（Python 250项、JS 24项）。
+- 缺口（如实记录）：`agent_max_calls` 仍未强制（需执行器→平台回报通道）；Qlib执行器未走容器；`failed/resource_limit`归类、deadline持久化、槽位单事务预留仍待做。**A41不通过**。
+
 ## 2026-09-27 — T04 第5片：Agent 试验预算预留
 
 - 来源：用户"接着来吧"。

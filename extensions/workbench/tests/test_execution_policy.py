@@ -307,6 +307,15 @@ class AgentBudgetTests(unittest.TestCase):
         rows = self.repo.agent_budget_rows(self.policy.revision())
         self.assertEqual([dict(row) for row in rows][0]["used"], 2)
 
+    def test_policy_summary_reports_limits_and_usage(self):
+        summary = self.service.policy_summary()
+        self.assertTrue(summary["available"])
+        self.assertEqual(summary["max_concurrent"], 5)
+        self.assertEqual(summary["unenforced"], ["memory"])
+        self.assertFalse(summary["agent"]["calls_enforced"])
+        self.submit("s1")
+        self.assertEqual(self.service.policy_summary()["agent"]["used"]["trials"], 1)
+
     def test_non_agent_kinds_do_not_consume_the_agent_trial_budget(self):
         try:
             from tests.test_execution import StubExecutor

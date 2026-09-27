@@ -534,3 +534,16 @@ test('T01-U: selected historical revision never displays latest risk values',asy
  assert.match(html,/版本与页面选择不一致/);assert.match(html,/historical/);assert.match(html,/latest/);
  assert.doesNotMatch(html,/>99/);
 });
+
+test('T04: execution panel shows the frozen policy and what is not enforced',()=>{
+  const x=ui();
+  const html=x.run("executionPolicyNote({available:true,revision:'sha256:abcdef0123456789',source:'execution_policy.json',max_concurrent:2,timeout_seconds:3600,terminate_grace_seconds:10,cpu_seconds:3600,enforce:['cpu'],unenforced:['memory'],agent:{max_trials:12,max_calls:200,used:{trials:3},calls_enforced:false},notes:{memory:'内存硬上限需容器路径'}})");
+  assert.match(html,/执行政策/);
+  assert.match(html,/并发 2/);
+  assert.match(html,/Agent 试验 3\/12 次/);
+  assert.match(html,/未强制：内存硬上限/);
+  assert.match(html,/Agent 调用次数/);
+  const missing=x.run("executionPolicyNote({available:false,error:'PolicyError: missing'})");
+  assert.match(missing,/执行政策不可用/);
+  assert.match(missing,/拒绝新准入/);
+});

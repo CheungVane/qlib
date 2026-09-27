@@ -205,13 +205,35 @@ class ExecutionService:
                     "reasons": sorted(set(reasons)),
                     "checked_at": preflight.get("checked_at"),
                 })
-        return {"items": items, "checked_at": utc_now()}
+        return {"items": items, "checked_at": utc_now(), "policy": self.policy_summary()}
+
+    def policy_summary(self) -> dict[str, Any]:
+        """EXEC13/T04: the frozen policy and its usage, so limits are visible rather than implied."""
+        if not self.policy:
+            return {"available": False, "error": self.policy_error or "no_policy"}
+        used = {row["kind"]: row["used"]
+                for row in self.repository.agent_budget_rows(self.policy.revision())}
+        return {
+            "available": True, "revision": self.policy.revision(), "source": self.policy.source,
+            "max_concurrent": self.policy.max_concurrent,
+            "timeout_seconds": self.policy.timeout_seconds,
+            "terminate_grace_seconds": self.policy.terminate_grace_seconds,
+            "cpu_seconds": self.policy.cpu_seconds, "memory_bytes": self.policy.memory_bytes,
+            "enforce": list(self.policy.enforce),
+            "unenforced": [name for name in ("cpu", "memory") if name not in self.policy.enforce],
+            "agent": {"max_trials": self.policy.agent_max_trials,
+                      "max_calls": self.policy.agent_max_calls,
+                      "scope": self.policy.agent_scope, "used": used,
+                      "calls_enforced": False},
+            "notes": {"memory": "内存硬上限需容器路径；当前执行器为裸子进程，故未强制"},
+        }
 
     def capabilities(self) -> dict[str, Any]:
         return {
             "executor": "subprocess_v1" if self.executors else "not_implemented",
             "kinds": sorted(self._by_kind),
             "executors": [executor.executor_id for executor in self.executors],
+            "policy": self.policy_summary(),
         }
 
     # -- lifecycle -------------------------------------------------------

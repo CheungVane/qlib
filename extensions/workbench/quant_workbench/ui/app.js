@@ -512,7 +512,17 @@ function executionPanel(catalog,attempts){
                   unknown:'结果去向未登记'}[x.result_destination]||'结果去向未登记';
   return `<details class="execution-entry" ${x.available?'':'open'}><summary><span class="entry-title">${esc(x.label)} ${x.probe?badge('limited'):''} ${x.available?badge('measured'):badge('unsupported')}${help('exec.kind.'+x.kind,x.label)}</span><small class="block muted">${esc(meta.summary||x.description||'')}</small></summary><p class="panel-note">执行器 <code>${esc(x.executor_id)}</code> · 数据性质 ${esc(x.data_nature||'未记录')} · 结果去向 ${esc(importer)}<br>${esc(x.description||'')}</p>${executionChecks(x)}</details>`;
  }).join('');
- return card('启动研究（隔离进程）',form+entries,'三种入口的用途、数据性质与结果去向都写在下面；点问号看完整说明');
+ return card('启动研究（隔离进程）',executionPolicyNote(catalog.policy)+form+entries,'三种入口的用途、数据性质与结果去向都写在下面；点问号看完整说明');
+}
+function executionPolicyNote(policy){
+ if(!policy)return '';
+ if(policy.available===false)return `<p class="warning">执行政策不可用：${esc(policy.error||'未加载')}；按规范将拒绝新准入。</p>`;
+ const used=(policy.agent&&policy.agent.used)||{};
+ const trials=`${used.trials??0}/${(policy.agent&&policy.agent.max_trials)??'未记录'}`;
+ const unenforced=(policy.unenforced||[]).map(name=>name==='memory'?'内存硬上限':name).join('、');
+ return `<div class="policy-note"><p class="panel-note"><strong>执行政策</strong>（revision <code>${esc(String(policy.revision||'').slice(0,16))}</code>，来源 ${esc(policy.source||'未记录')}）：并发 ${policy.max_concurrent??'未记录'} · 单任务超时 ${policy.timeout_seconds??'未记录'}s · 超时宽限 ${policy.terminate_grace_seconds??'未记录'}s · CPU 上限 ${policy.cpu_seconds??'未记录'}s · Agent 试验 ${esc(trials)} 次</p>
+ ${unenforced?`<p class="warning">未强制：${esc(unenforced)}${policy.notes&&policy.notes.memory?`（${esc(policy.notes.memory)}）`:''}${policy.agent&&policy.agent.calls_enforced===false?'；Agent 调用次数（子进程无法回报调用数）':''}</p>`:''}
+ <p class="panel-note">槽满或达到 Agent 试验上限时，准入会被拒绝且不创建 Attempt；超期任务由状态核对路径终止。</p></div>`;
 }
 function entryFeedback(kind){
  const item=execEntryMeta(kind);
