@@ -547,3 +547,16 @@ test('T04: execution panel shows the frozen policy and what is not enforced',()=
   assert.match(missing,/执行政策不可用/);
   assert.match(missing,/拒绝新准入/);
 });
+
+test('A40/T05: data page shows registered snapshots and their coverage',()=>{
+  const x=ui();
+  const html=x.run("snapshotPanel({available:true,items:[{snapshot_id:'free_cn_20260924',content_digest:'sha256:2d6f5367c1f20addf1fe260a9ef9a5d2',calendar:{first:'2000-01-04',last:'2026-09-24',days:6479},components:[{kind:'calendar'},{kind:'universe'},{kind:'bar'},{kind:'status'}],reproducibility:{state:'reproducible',reason:null}}]})");
+  assert.match(html,/free_cn_20260924/);
+  assert.match(html,/2000-01-04 → 2026-09-24/);
+  assert.match(html,/6479 天/);
+  assert.match(html,/calendar · universe · bar · status/);
+  assert.match(html,/reproducible/);
+  const missing=x.run("snapshotPanel({available:false,reason:'data_directory_not_configured'})");
+  assert.match(missing,/未配置数据目录/);
+  assert.match(missing,/data_directory_not_configured/);
+});
