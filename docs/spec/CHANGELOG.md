@@ -2,6 +2,15 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — T03 比较合同复验：mode 不得绕过身份校验
+
+- 来源：用户"顺序做吧"，执行 spec 顺序中的 T03。
+- 发现的两处真实缺口：①**equity 模式此前不校验`evaluation_id`**；②**metric 模式此前不校验`execution_id`与资金口径字段**（initial_equity/cashflow_policy/price_basis/benchmark_id），而 RESULT_CONTRACT 身份分层要求排名必须具备 dataset+execution_id+evaluation_id，且金额/收益/风险行无论mode都必须核对资金口径——即 `mode=metric` 可绕过equity要求。
+- 实现：`metrics` 新增 `field_applicability`/`requires_execution_basis`/`requires_money_basis`，把"首批回测指标字段适用表"登记为契约（回测行必需执行身份；金额/收益/风险行必需资金口径；纯比率行豁免资金口径但仍需执行身份）；`assess()` 改为按该表校验，equity模式补 evaluation_id 检查。
+- 测试：新增 `T03IdentityCounterexampleTests` 6项——equity缺评估身份、metric不同成本情景（并排可用/不排名）、不同初始资金、未知现金流、纯比率行豁免、适用表覆盖；同时更新 `test_review_regressions.py` 的R05夹具补 `evaluation_id`（该夹具此前缺评估身份，按现行spec本就不可排名，属夹具过期而非实现放宽）。
+- 影响：**历史缺评估身份的对象变为不可排名**（fail-closed，符合"缺少任一身份时保持不可排名"）；比较页UI未改，方向与可比性仍由服务端判定。D08关闭，T03完成。
+- 验证：全量门禁 `[gate] ok`（Python 230项含新增6项、2跳过；JS 23项）。
+
 ## 2026-09-27 — T02-U 验证卡切换v2与浏览器验收
 
 - 来源：用户"去做"，执行 spec 的下一步 T02-U。

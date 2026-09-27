@@ -19,12 +19,15 @@ EVALUATION = "scenario-fingerprint-1"
 
 
 def package(equity=(1000000, 1010000), drawdown=(-0.05, -0.12), cost=(1200, 900),
-            turnover=(0.4, 0.5), dataset_version="content-v1", evaluation_id=EVALUATION):
+            turnover=(0.4, 0.5), dataset_version="content-v1", evaluation_id=EVALUATION,
+            execution_id=EVALUATION, initial_equity=1000000, cashflow_policy="none",
+            price_basis="qlib_adjusted_account", benchmark_id="SH000905"):
     p = json.loads(FIXTURE.read_text())
     p["run"]["dataset"] = {"id": "dataset1", "version": dataset_version}
     p["run"]["synthetic"] = True
-    comparison = {"execution_id": EVALUATION, "initial_equity": 1000000, "cashflow_policy": "none",
-                  "price_basis": "qlib_adjusted_account", "benchmark_id": "SH000905"}
+    comparison = {"execution_id": execution_id, "initial_equity": initial_equity,
+                  "cashflow_policy": cashflow_policy, "price_basis": price_basis,
+                  "benchmark_id": benchmark_id}
     if evaluation_id is not None:
         comparison["evaluation_id"] = evaluation_id
     p["evidence"] = {"comparison": comparison}
@@ -242,6 +245,68 @@ class SnapshotContentTests(unittest.TestCase):
             changed = snapshot_content_digest(root)
             self.assertNotEqual(changed["digest"], first["digest"])
             self.assertEqual(changed["file_count"], 2)
+
+
+class T03IdentityCounterexampleTests(unittest.TestCase):
+    """T03 / A13：身份缺失或差异时必须并排、不得排名，且 mode 不能绕过口径。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.service = WorkbenchService(LocalResultRepository(Path(self.tmp.name)))
+
+    def publish(self, payload, identity):
+        return self.service.import_package("test", identity, "generic_v1", payload)["run_id"]
+
+    def pair(self, **overrides):
+        left = self.publish(package(**overrides), "left")
+        right = self.publish(package(), "right")
+        return left, right
+
+    def test_equity_mode_requires_evaluation_identity(self):
+        left, right = self.pair(evaluation_id="scenario-fingerprint-2")
+        result = self.service.compare([left, right], "platform.equity", "equity")
+        self.assertFalse(result["ranking_allowed"])
+        self.assertIn("evaluation_unknown_or_differs", result["reasons"])
+
+    def test_metric_mode_cannot_bypass_execution_identity(self):
+        left, right = self.pair(execution_id="scenario-fingerprint-2")
+        result = self.service.compare([left, right], "native.qlib.total_cost", "metric")
+        self.assertFalse(result["ranking_allowed"], "不同成本情景不得默认排名")
+        self.assertIn("execution_scenario_unknown_or_differs", result["reasons"])
+        self.assertTrue(result["overlay_allowed"], "并排查看仍然允许")
+
+    def test_metric_mode_requires_funding_basis_for_money_rows(self):
+        left, right = self.pair(initial_equity=500000)
+        result = self.service.compare([left, right], "native.qlib.total_cost", "metric")
+        self.assertFalse(result["ranking_allowed"])
+        self.assertIn("initial_equity_unknown_or_differs", result["reasons"])
+
+    def test_metric_mode_requires_known_cashflow_policy(self):
+        left, right = self.pair(cashflow_policy="unknown")
+        result = self.service.compare([left, right], "native.qlib.total_cost", "metric")
+        self.assertFalse(result["ranking_allowed"])
+        self.assertTrue({"cashflow_policy_unknown_or_differs", "cashflow_not_supported"}
+                        & set(result["reasons"]))
+
+    def test_ratio_only_row_is_exempt_from_money_fields(self):
+        left, right = self.pair(initial_equity=500000)
+        result = self.service.compare([left, right], "native.qlib.turnover", "metric")
+        self.assertNotIn("initial_equity_unknown_or_differs", result["reasons"])
+
+    def test_declared_applicability_table_covers_first_batch(self):
+        from quant_workbench import metrics
+
+        for row in metrics.COMPARE_ROWS:
+            table = metrics.field_applicability(row["metric_id"])
+            self.assertEqual(table["metric_id"], row["metric_id"])
+            self.assertTrue(table["requires_evaluation_id"])
+        self.assertTrue(metrics.field_applicability("platform.equity")["requires_money_basis"])
+        self.assertTrue(metrics.field_applicability("native.qlib.return")["requires_money_basis"])
+        self.assertTrue(metrics.field_applicability("platform.drawdown")["requires_money_basis"])
+        turnover = metrics.field_applicability("native.qlib.turnover")
+        self.assertFalse(turnover["requires_money_basis"])
+        self.assertTrue(turnover["requires_execution_id"], "纯比率行仍要执行身份")
 
 
 if __name__ == "__main__":

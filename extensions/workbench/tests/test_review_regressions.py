@@ -29,7 +29,8 @@ FIXTURE=ROOT/'extensions/workbench/examples/generic-result.json'
 def package():
     p=json.loads(FIXTURE.read_text())
     p['evidence']={'comparison':{'execution_id':'scenario1','initial_equity':1000000,
-        'cashflow_policy':'none','price_basis':'adjusted','benchmark_id':'benchmark1'}}
+        'cashflow_policy':'none','price_basis':'adjusted','benchmark_id':'benchmark1',
+        'evaluation_id':'evaluation1'}}
     p['run']['dataset']={'id':'dataset1','version':'content1'}
     p['series']=p['series'][:1]
     p['series'][0]['currency']='CNY'

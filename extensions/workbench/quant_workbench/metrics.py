@@ -29,6 +29,33 @@ BACKTEST_METRICS = {
 GROUP_LABELS = {"training": "训练", "research": "研究", "backtest": "回测", "other": "其他/未登记"}
 RANKABLE_GROUPS = ("backtest",)
 
+# 首批回测指标字段适用表（T03）：金额/收益/风险类指标**无论mode如何**都必须核对资金与执行口径，
+# 不能被mode=metric绕过（RESULT_CONTRACT 身份分层与 COMPARE01）；纯比率类可豁免。
+MONEY_BASIS_FIELDS = ("initial_equity", "cashflow_policy", "price_basis", "benchmark_id")
+RATIO_ONLY_METRICS = {"native.qlib.turnover", "native.qlib.total_turnover"}
+
+
+def requires_execution_basis(metric_id: str) -> bool:
+    """Rankable backtest rows always need a real execution identity, in both modes."""
+    return metric_id in BACKTEST_METRICS or metric_id == "platform.equity"
+
+
+def requires_money_basis(metric_id: str) -> bool:
+    """金额/收益/风险类还需要资金口径字段；纯比率类豁免（但仍需执行身份）。"""
+    if metric_id in RATIO_ONLY_METRICS:
+        return False
+    return requires_execution_basis(metric_id)
+
+
+def field_applicability(metric_id: str) -> dict:
+    """Declared per-metric applicability, so the rule is a contract rather than scattered code."""
+    group = metric_group(metric_id)
+    money = requires_money_basis(metric_id)
+    return {"metric_id": metric_id, "group": group, "rankable_group": group in RANKABLE_GROUPS,
+            "requires_execution_id": requires_execution_basis(metric_id),
+            "requires_evaluation_id": True,
+            "requires_money_basis": money, "money_basis_fields": list(MONEY_BASIS_FIELDS)}
+
 
 def metric_group(metric_id: str) -> str:
     if metric_id in BACKTEST_METRICS:

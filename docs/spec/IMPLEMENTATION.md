@@ -4,7 +4,7 @@
 
 持续实施授权：按T01—T10逐步实施，每完成一个小里程碑回写spec，并按GOV02提交推送。**当前有两条轨道，不要混读**：
 
-- **主线（原定顺序）**：T01-R/F/U 与 **T02 全线（D 定义冻结 / B 后端实现 / U 界面切换）已完成**；下一步按 spec 是 T03（比较合同复验）或 T04（执行政策）。
+- **主线（原定顺序）**：T01-R/F/U、**T02 全线（D/B/U）与 T03（比较合同复验）已完成**；下一步按 spec 是 **T04（执行政策与预算）**。
 - **数据源轨道（用户2026-09-27明确要求）**：来源调研→下载→csi500落地→因子研究切片，记为下表 **T05-S / T08-P**。T05-S 是T05的前置材料，**不是T05里程碑完成**；T08-P 是因子研究试点，**不是T08完成**。
 - **依赖与环境（2026-09-27补齐）**：`extensions/workbench/.venv` 已按 `analysis`+`api`+`test`+`data-fetch`+`qlib-import` 五组 extra 安装（Python 3.14.7，`uv.lock`同步更新）；全量门禁 `scripts/workbench_gate.sh` **通过：Python 196项（2跳过）+ JS 21项**。安装过程中暴露并修复了既有的 sqlite 连接泄漏（见CHANGELOG）。
 - 因此本阶段不是"跳过T02"：用户指定了数据优先，两条轨道并行；主线顺序未变更。
@@ -19,6 +19,7 @@
 | T02-D 验证v2定义冻结 | 完成（2026-09-27文档批次，无代码变更） | 冻结PSR/DSR/PBO公式与估计量约定、收益与rf口径、M/C/N与相关性假设、PBO分块/余数/秩/重复配置规则、v2 DTO与错误样例；独立参考值见[复算脚本](evidence/20260927-t02d-reference.py)与[VALIDATION §2A](VALIDATION.md) | 只通过设计门；A31/A32与A36诊断子项待T02-B实现和验收。提交哈希由下次索引刷新补齐，文档不引用自身哈希 |
 | T02-B 验证v2实现（后端/API/CLI） | 完成（2026-09-27） | 新增`validation_v2.py`：PSR/DSR/PBO按§2A实现，**声明N进入Φ⁻¹**、CSCV秩用ω=r/(K+1)且排除自身、等长分块并披露丢弃余数、重复配置折叠、零离散度与非有限值fail-closed；收益口径复用风险v2的登记映射（禁止静默回退）；新增`leakage.uniqueness.weight_sum`（不再叫effective_samples）；service/API/CLI增加`analysis_version=1|2`与成对`revision_id`，默认v1不变；22项测试复现§2A.9全部参考值（PSR 0.6645/0.8024/0.8990/0.9557；DSR N=4/10/20=0.6075/0.4944/0.4235；PBO夹具0与1/3） | **T02-U未做**：UI仍请求v1、无浏览器验收；真实TrialLedger与训练协议归T06/T07；A36不关闭 |
 | T02-U 界面切换v2 | 完成（2026-09-27） | 验证卡显式请求`analysis_version=2`，遇到v1响应显示"旧定义，未满足当前纠正合同"而不混用；展示逐期Sharpe、PSR/DSR逐项可用性与原因、可用配置数、**声明试验数N及其来源**、Σw并标注"不是独立样本量"、共同观测交集窗口、相关性假设、PBO丢弃余数/折叠重复、被排除配置与原因、探索性警告、定义卡与限制；说明文案同步（不再称"有效样本数"）；JS新增3项（v2正常/v1拒显/不可用与退化）；浏览器实机验收见[截图](evidence/20260927-t02u-validation.png) | T02整条线由此收口；A36仍待T06/T07；A30其他估计量缺陷独立保留 |
+| T03 比较合同复验 | 完成（2026-09-27） | 新增`metrics.field_applicability`登记**首批回测指标字段适用表**（执行身份对回测行必需；资金口径字段对金额/收益/风险行必需、纯比率行豁免）；修复两处真实缺口：equity模式此前**未校验evaluation_id**、metric模式此前**未校验execution_id与资金口径**（mode不得绕过）；新增6项反例测试（equity缺评估身份、metric不同成本情景、不同初始资金、未知现金流、纯比率豁免、适用表覆盖） | A13/A27/A28的匹配身份缺失/差异反例已覆盖；D08关闭；比较页UI行为未改（仍由服务端判方向与可比性） |
 | T05-S 数据源切片（用户指定，非T05完成） | 完成：快照与缓存落盘，目录端口、质量门禁、物化、旧路径与迁移恢复均已实现并实测 | FINV release 2026-09-27下载校验（SHA-256一致、发布方validate `ok:true`、日历末日2026-09-24、退市股在库、北交所缺口已登记）；定池中证500、区间2015-01-05→2026-09-24；BaoStock换手率1,791/1,802只、4,601,971行（源端随后拉黑本机，缓存保全）；新增`free_sources.py`、`data_directory.py`（登记/不可变/组件清单/as-of/FreeSnapshotReader/物化/bar门禁/legacy/迁移恢复）、`fetch_csi500_turnover.py`、`verify_free_snapshot.py`、`register_free_snapshot.py`与55项相关测试；全量门禁绿（Python全量+JS21）；操作手册与资产清单见[DATA_SOURCES §7](DATA_SOURCES.md)；证据见[record](evidence/20260927-free-snapshot-record.json)、[登记](evidence/20260927-free-snapshot.json)、[t05-directory](evidence/20260927-t05-directory.json) | T05本体剩余：真实财务修订源、真实bar覆盖/范围门禁、A40数据访问子项，以及**把data_directory接入应用层**（`application.py`仍走`configs/cn/profile.json`，ARC11未在应用层落地）；A16/A17仅部分证据；非csi500扩展未做 |
 | T08-P 因子研究管线（试点，非T08完成） | 完成：标签/两端可交易/暴露/中性化/评价/稳定性/成本门槛/样本外walk-forward全链路 | `factor_pipeline.py`＋`run_factor_research.py`：421交易日、500只、12假设，7个过FDR、6个过成本门槛、仅`volatility_20_h5_neutralized`同时通过（样本内）。`run_factor_walkforward.py`：扩张窗口4折，选择只用训练窗口（FDR+成本双门槛），**仅1折选出4个假设，训练均值IC−0.0376→测试块+0.0066、符号不保持**。证据见[research](evidence/20260927-factor-research.json)与[walkforward](evidence/20260927-factor-walkforward.json) | **样本内结论未在样本外复现**（样本极小，不能反证全部因子无效）；仍缺purged/embargo协议、组合层验证、冲击成本；行业为统计代理、size是推导值；A30/A33/A37不关闭；T06/T07账本与训练证据仍缺 |
 
@@ -54,7 +55,7 @@ T01-F证据：`extensions/workbench/.venv/bin/python -m unittest discover -s ext
 | D05 真实数据与规模 | 正式数据目录未接入，因子仍受单JSON上限限制；分块清单、分析预算及独立数据目录解析未实现；2026-09-27已按用户授权下载FINV快照并落盘csi500换手率缓存（未接入端口、未落库），见[数据源清单](DATA_SOURCES.md)与[快照登记](evidence/20260927-free-snapshot.json) | DATA06、ARC11；A37/A38/A40；A16/A17仍未完成 |
 | D06 架构与部署 | 应用服务聚合多种职责，端口未完整覆盖实际调用；因子读取依赖当前CN配置，执行依赖仓库scripts/.venv；前端共享状态与页面仍集中 | ARC10—12；A40，保留C2/C7/C10未完成项 |
 | D07 执行预算 | 无并发/超时/Agent预算完整保护；容器资源下限检查不满足AGENT04资源上限要求 | LIFE06、EXEC06、AGENT04；A41 |
-| D08 比较合同 | 已统一三类匹配身份和当前仅回测组排名；当前代码是否完整符合收敛后的各模式条件尚未复验 | COMPARE01/U18；A13/A27/A28需包含所有匹配身份缺失/差异反例 |
+| D08 比较合同 | **已复验并关闭（T03，2026-09-27）**：三类匹配身份与仅回测组排名统一；补齐equity模式的evaluation_id校验与metric模式的execution_id/资金口径校验（mode不得绕过），首批字段适用表由`metrics.field_applicability`声明 | COMPARE01/U18；A13/A27/A28反例已覆盖 |
 | D09 交易与前瞻 | 无部署、账户/订单账本、独立前瞻跟踪与券商对账能力 | U25、TRADE01—06；A39；不宣称自动交易已接入 |
 
 ### 新增验收（A34限定纠正项已通过，其余状态见对应任务）
@@ -82,7 +83,7 @@ T01-F证据：`extensions/workbench/.venv/bin/python -m unittest discover -s ext
 | --- | --- | --- |
 | T01 指标纠正与兼容 | R/F/U完成；A34通过 | 按RESULT_CONTRACT定义卡/手算样例实现版本2风险/因子响应，保留版本1，UI显式选2；NW标准误专项复验。出口A34及受影响A30/A33，不代表所有统计量已认证 |
 | T02 事后诊断真实性 | 定义已冻结（[VALIDATION §2A](VALIDATION.md)）；可实现 | 不依赖TrialLedger：披露选择范围、N依据、权重和及独立状态；按§2A定义卡实现，N必须进入公式并锁定输入revision。不完整集合只标探索性。出口A31/A32及A36诊断子项 |
-| T03 比较合同 | 无，可开始 | 首批回测指标字段适用表，equity/metric均验证身份缺失/差异、不同初始资金反例；服务端判方向和可比性。出口A13/A27/A28 |
+| T03 比较合同 | **已完成**（2026-09-27） | 首批回测指标字段适用表（`field_applicability`），equity/metric均验证身份缺失/差异与不同初始资金反例；服务端判方向和可比性。出口A13/A27/A28 |
 | T04 执行政策 | 无，可开始 | 持久化并发槽、截止时间、政策修订与Agent计数；启动前检查、超时终止/恢复。出口A41；上限未支持的环境不通过 |
 | T05 数据目录边界 | **接近完成**：快照登记、组件清单、目录端口、物化可复跑、bar质量门禁、旧路径登记、迁移与恢复均已实现并实测；剩余真实财务修订源、真实bar覆盖门禁与A40子项 | 按[数据源清单](DATA_SOURCES.md)实现适配器与快照身份（FINV主 + BAO校验 + EM补充）；snapshot身份→组件清单→物化引用；旧路径显式登记，未知不补造；设计并验证迁移/恢复。出口A16/A17和A40数据访问子项。A38分块可独立开展，超旧上限的真实研究须先通过A38 |
 | T06 实验/模型/策略对象 | T04、T05；接口草案可先行 | 定义版本、Run/Attempt、模型输入契约/复用、StrategyVersion及TrialLedger基础记账；先冻结DTO/命令样例和迁移，再实现固定流程，无单Stage续跑。出口A35，为T07提供试验事实 |
@@ -181,6 +182,7 @@ M1的完成证据：环境锁、导入命令、成功/失败样本、自动化�
 | A11 | 同一页面显示Qlib和JSON结果；切换运行时图表与元信息一起更新；URL可恢复选择；原生名称不引发特殊业务分支 | ARC03, UI01/03 |
 | A12 | available零值、empty、unsupported、not_recorded、error、stale各有不同呈现；所有模拟数据相关视图保留标记 | ARC08, METRIC03 |
 | A13 | 并排查看不同成本情景可用；不一致单位阻止直接叠图；未知版本或口径差异阻止默认排名并解释原因 | COMPARE01 |
+| A13证据（T03） | 不同`execution_id`（不同成本情景）在metric模式下`ranking_allowed=False`、`overlay_allowed=True`——并排可用、默认不排名；单位/轴/定义版本不一致阻止叠图；未知dataset版本与缺失目标身份均阻止排名并给原因。反例见`tests/test_compare_table.py::T03IdentityCounterexampleTests` | COMPARE01 / T03 |
 | A14 | 改布局并重启仍保留；并发保存旧revision返回冲突；删除查询注册项显示不可用并保留配置；可恢复默认 | UI02/03 |
 | A15 | 小屏页面、加载/错误态、键盘选择和图表数值可访问；长序列降采样标识明确，缩放查询不突破API上限 | ARC07, UI01 |
 | A27 | 比较页一行一指标、一列一运行；红=最优绿=最劣仅在该行口径允许时出现，并有文字标记；方向未登记/口径不通过/差异在容差内/缺测时保持中性并写明原因；方向与优劣由服务端给出 | UI06 / U17 / COMPARE01 |

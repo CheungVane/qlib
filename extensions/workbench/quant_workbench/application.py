@@ -12,6 +12,7 @@ from .metrics import (
     metric_group, rank, row_value, summarize,
 )
 from . import factors as factor_layer
+from . import metrics as metrics_layer
 from . import validation as validation_layer
 from . import risk as risk_layer
 from . import series_view
@@ -464,15 +465,19 @@ class WorkbenchService:
         if len(windows) != 1: reasons.append('date_window_differs')
         if any(not summarize(m)['complete'] for _,m in found): reasons.append('missing_observations')
         contexts = [rev['result'].get('evidence', {}).get('comparison', {}) for rev in revisions]
-        if mode == 'equity':
+        # Identity layering (RESULT_CONTRACT): dataset + execution_id + evaluation_id must all be
+        # known and equal. Money/return/risk rows additionally need the资金口径 fields whichever
+        # mode the caller picked — `mode=metric` must not bypass the equity requirements (T03).
+        applicability = metrics_layer.field_applicability(metric_id)
+        check([c.get('evaluation_id') for c in contexts], 'evaluation_unknown_or_differs')
+        if mode == 'equity' or applicability['requires_execution_id']:
             check([c.get('execution_id') for c in contexts], 'execution_scenario_unknown_or_differs')
-            for key in ('initial_equity','cashflow_policy','price_basis','benchmark_id'):
+        if mode == 'equity' or applicability['requires_money_basis']:
+            for key in metrics_layer.MONEY_BASIS_FIELDS:
                 check([c.get(key) for c in contexts], key+'_unknown_or_differs')
             if any(c.get('cashflow_policy') != 'none' for c in contexts): reasons.append('cashflow_not_supported')
             if any(type(c.get('initial_equity')) not in (int,float) or c['initial_equity'] <= 0 for c in contexts):
                 reasons.append('initial_equity_invalid')
-        else:
-            check([c.get('evaluation_id') for c in contexts], 'evaluation_unknown_or_differs')
         # Research experiment identity may differ: listed as an experimental variable (U17/B-1).
         experiments = [c.get('experiment_id') for c in contexts]
         variables = []
