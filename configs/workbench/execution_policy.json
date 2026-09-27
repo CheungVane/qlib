@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "note": "执行政策（EXEC13/T04）。数值是显式工程配置，不是账户或机器参数；修改即产生新的 policy_revision。",
+  "max_concurrent": 2,
+  "timeout_seconds": 3600,
+  "terminate_grace_seconds": 10,
+  "cpu_seconds": 3600,
+  "memory_bytes": 4294967296,
+  "enforce": ["cpu"],
+  "unenforced_limits": {
+    "memory": "本机（macOS）拒绝为子进程设置有限的 RLIMIT_AS/RLIMIT_DATA；内存硬上限不可强制，A41 在该环境保持未完成。若把 \"memory\" 加入 enforce，准入会直接拒绝。"
+  },
+  "agent_budget": {
+    "max_trials": 12,
+    "max_calls": 200,
+    "scope": "policy_revision"
+  }
+}

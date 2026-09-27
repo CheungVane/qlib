@@ -2,6 +2,15 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — T04 执行政策（第1片）：政策冻结与资源上限能力探测
+
+- 来源：用户"继续"，按 spec 顺序执行 T04。
+- 实现：新增 `configs/workbench/execution_policy.json`（max_concurrent / timeout_seconds / terminate_grace_seconds / cpu_seconds / memory_bytes / agent_budget，均为显式正数）与 `execution_policy.py`：`load_policy` 对缺字段、0/负数、布尔、字符串、非法 `enforce` 一律拒绝；`revision()` 对冻结值取内容哈希；`probe_enforcement()` **真跑子进程探测**；`unsupported_limits()` 命名不可强制项；`child_limits()` 输出待注入上限。9项测试。
+- **平台能力实测（决定A41收口）**：CPU硬上限**可强制**——子进程设 `RLIMIT_CPU=1` 后 1 秒被 SIGXCPU 终止（rc −24）；内存硬上限**在本机不可强制**——macOS 对 `RLIMIT_AS` 与 `RLIMIT_DATA` 均返回 `ValueError: current limit exceeds maximum limit`，且 400MB 分配照样成功。故配置只声明 `enforce=["cpu"]`，把内存不可强制登记为可见限制；若声明需要内存强制，`unsupported_limits()` 返回 `["memory"]`（准入必须拒绝）。
+- 按 spec 收口：EXEC13 明确"若某环境尚不支持，上限能力与A41保持未完成，该环境不得通过完整EXEC06准入"——因此 **A41 不通过**，T04 标为部分完成。
+- 未完成（下一步）：持久化并发槽准入、deadline 与超时终止监督、Agent 试验/调用原子预留与跨重启计数、把 CPU 上限注入子进程（执行器已用 `/bin/sh` 包装，`ulimit -t` 可注入）。
+- 验证：全量门禁 `[gate] ok`（Python 239项含新增9项、2跳过；JS 23项）。
+
 ## 2026-09-27 — T03 比较合同复验：mode 不得绕过身份校验
 
 - 来源：用户"顺序做吧"，执行 spec 顺序中的 T03。
