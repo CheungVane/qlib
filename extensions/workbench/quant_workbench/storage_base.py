@@ -22,7 +22,7 @@ def instant_order(value):
 
 
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 ATTEMPT_TERMINAL_STATUSES = ("succeeded", "failed", "cancelled", "interrupted")
 ATTEMPT_OPEN_STATUSES = ("queued", "running")
 
@@ -138,6 +138,18 @@ CREATE INDEX IF NOT EXISTS factor_panels_factor ON factor_panels(factor_id, publ
 PRAGMA user_version=4;
 """
 
+V5_AGENT_BUDGET_SCHEMA = """
+CREATE TABLE IF NOT EXISTS agent_budget (
+    policy_revision TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    used INTEGER NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (policy_revision, scope, kind)
+);
+PRAGMA user_version=5;
+"""
+
 
 class SchemaVersionError(RuntimeError):
     pass
@@ -223,7 +235,7 @@ class SqliteStore:
         """
         with self._connection() as conn:
             version = conn.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1, 2, 3, SCHEMA_VERSION):
+            if version not in (0, 1, 2, 3, 4, SCHEMA_VERSION):
                 raise SchemaVersionError(
                     f"database schema {version}; supported versions are 0..{SCHEMA_VERSION}; refusing to modify")
             if version == 0 and any(row[0] != "sqlite_sequence" for row in conn.execute(
@@ -241,6 +253,9 @@ class SqliteStore:
                 version = 3
             if version == 3:
                 conn.executescript(V4_FACTOR_SCHEMA)
+                version = 4
+            if version == 4:
+                conn.executescript(V5_AGENT_BUDGET_SCHEMA)
             conn.execute("PRAGMA journal_mode=WAL")
 
     def health(self) -> dict[str, Any]:

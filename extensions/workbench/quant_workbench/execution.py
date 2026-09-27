@@ -67,6 +67,13 @@ class CapacityExceeded(ExecutionError):
     status_code = 409
 
 
+class BudgetExhausted(ExecutionError):
+    """EXEC13: the Agent trial/call budget is used up; the next call must be blocked."""
+
+    code = "budget_exhausted"
+    status_code = 409
+
+
 class ExecutorPort(Protocol):
     """Executor boundary.
 
@@ -238,6 +245,16 @@ class ExecutionService:
         if len(open_attempts) >= self.policy.max_concurrent:
             raise CapacityExceeded(
                 f"execution capacity is full ({self.policy.max_concurrent} concurrent attempts)")
+        # EXEC13: Agent entries reserve a trial before launch; retries count because every
+        # submit reserves again, and the ledger is never cleared by cancel/restart.
+        if str(kind).startswith("rdagent."):
+            reservation = self.repository.reserve_agent_budget(
+                policy_revision=self.policy.revision(), scope=self.policy.agent_scope,
+                kind="trials", limit=self.policy.agent_max_trials)
+            if not reservation["allowed"]:
+                raise BudgetExhausted(
+                    f"agent trial budget exhausted ({reservation['used']}/{reservation['limit']} "
+                    f"for policy {self.policy.revision()}); research completeness is not implied")
 
         executor, checks, reasons = self._preflight(kind)
         if reasons:

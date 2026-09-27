@@ -250,5 +250,75 @@ class ConcurrencyAdmissionTests(unittest.TestCase):
         self.assertEqual(self.repo.get_attempt(row["attempt_id"])["status"], "succeeded")
 
 
+class AgentBudgetTests(unittest.TestCase):
+    """EXEC13 / A41: Agent trials are reserved before launch and blocked at the limit."""
+
+    def setUp(self):
+        try:
+            from tests.test_execution import StubExecutor
+        except ImportError:
+            from test_execution import StubExecutor  # type: ignore[no-redef]
+        from quant_workbench.execution import ExecutionService
+        from quant_workbench.storage import LocalResultRepository
+
+        class AgentStub(StubExecutor):
+            kinds = ("rdagent.factor.baseline",)
+
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        self.repo = LocalResultRepository(root)
+        self.policy = ep.ExecutionPolicy(
+            max_concurrent=5, timeout_seconds=60, terminate_grace_seconds=2, cpu_seconds=60,
+            memory_bytes=1 << 30, enforce=("cpu",), agent_max_trials=2, agent_max_calls=10,
+            agent_scope="policy_revision")
+        self.executors = [AgentStub(root)]
+        self.service = ExecutionService(self.repo, executors=self.executors, policy=self.policy)
+
+    def tearDown(self):
+        for attempt in self.repo.list_open_attempts():
+            try:
+                self.service.cancel(attempt["attempt_id"])
+            except Exception:
+                pass
+
+    def submit(self, key):
+        return self.service.submit("rdagent.factor.baseline", {}, idempotency_key=key)
+
+    def test_trial_budget_blocks_the_next_call_and_survives_cancel(self):
+        from quant_workbench.execution import BudgetExhausted, ExecutionService
+
+        self.submit("b1")
+        self.submit("b2")
+        with self.assertRaises(BudgetExhausted) as raised:
+            self.submit("b3")
+        self.assertEqual(raised.exception.code, "budget_exhausted")
+        self.assertEqual(raised.exception.status_code, 409)
+        self.assertEqual(len(self.repo.list_open_attempts()), 2, "refusal must not create an attempt")
+        # cancelling does not clear the ledger
+        for attempt in self.repo.list_open_attempts():
+            self.service.cancel(attempt["attempt_id"])
+        with self.assertRaises(BudgetExhausted):
+            self.submit("b4")
+        # a restarted service over the same repository still sees the same ledger
+        restarted = ExecutionService(self.repo, executors=self.executors, policy=self.policy)
+        with self.assertRaises(BudgetExhausted):
+            restarted.submit("rdagent.factor.baseline", {}, idempotency_key="b5")
+        rows = self.repo.agent_budget_rows(self.policy.revision())
+        self.assertEqual([dict(row) for row in rows][0]["used"], 2)
+
+    def test_non_agent_kinds_do_not_consume_the_agent_trial_budget(self):
+        try:
+            from tests.test_execution import StubExecutor
+        except ImportError:
+            from test_execution import StubExecutor  # type: ignore[no-redef]
+        from quant_workbench.execution import ExecutionService
+
+        root = Path(self.tmp.name)
+        service = ExecutionService(self.repo, executors=[StubExecutor(root)], policy=self.policy)
+        service.submit("stub.exit", {"script": "exit 0"}, idempotency_key="plain1")
+        self.assertEqual(self.repo.agent_budget_rows(self.policy.revision()), [])
+
+
 if __name__ == "__main__":
     unittest.main()

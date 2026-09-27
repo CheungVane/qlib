@@ -116,6 +116,37 @@ class AttemptsMixin:
                 "ORDER BY instant_order(created_at) ASC LIMIT ?", (*ATTEMPT_OPEN_STATUSES, limit)).fetchall()
         return [self._attempt_row(row) for row in rows]
 
+    def reserve_agent_budget(self, *, policy_revision: str, scope: str, kind: str,
+                             limit: int, amount: int = 1) -> dict[str, Any]:
+        """EXEC13: atomic reservation. Refuses (without writing) when the limit would be exceeded.
+
+        The ledger is keyed by (policy_revision, scope, kind) and is never decremented by
+        cancellation or restart — a retry reserves again, which is the intended behaviour.
+        """
+        if amount < 1:
+            raise ValueError("amount must be >= 1")
+        now = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT used FROM agent_budget WHERE policy_revision=? AND scope=? AND kind=?",
+                (policy_revision, scope, kind)).fetchone()
+            used = int(row["used"]) if row else 0
+            if used + amount > limit:
+                return {"allowed": False, "used": used, "limit": limit}
+            conn.execute(
+                "INSERT INTO agent_budget(policy_revision,scope,kind,used,updated_at) "
+                "VALUES(?,?,?,?,?) ON CONFLICT(policy_revision,scope,kind) "
+                "DO UPDATE SET used=excluded.used, updated_at=excluded.updated_at",
+                (policy_revision, scope, kind, used + amount, now))
+            return {"allowed": True, "used": used + amount, "limit": limit}
+
+    def agent_budget_rows(self, policy_revision: str) -> list[dict[str, Any]]:
+        with self._connection() as conn:
+            rows = conn.execute(
+                "SELECT scope, kind, used, updated_at FROM agent_budget "
+                "WHERE policy_revision=? ORDER BY scope, kind", (policy_revision,)).fetchall()
+        return [dict(row) for row in rows]
+
     @staticmethod
     def _attempt_row(row: sqlite3.Row) -> dict[str, Any]:
         record = dict(row)

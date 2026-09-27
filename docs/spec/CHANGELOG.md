@@ -2,6 +2,14 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — T04 第5片：Agent 试验预算预留
+
+- 来源：用户"接着来吧"。
+- 实现：schema 升到 **V5**，新增 `agent_budget(policy_revision, scope, kind, used, updated_at)`；`reserve_agent_budget()` 在**单事务内**先读后写——超限时直接返回不允许且**不写账本**，允许时 `used += amount` 并落盘（键为策略revision+scope+kind，故换政策即新账本）。`ExecutionService.submit()` 对 `rdagent.*` 入口在启动前预留 1 次 trial；到限抛 `BudgetExhausted`（code=`budget_exhausted`、409），**不创建 Attempt**。
+- 语义：重试**再次计数**（每次提交都预留）；**取消与重启都不清空**账本——测试覆盖"取消后仍被拒"与"新服务实例读同一仓库仍被拒"；非Agent入口不消耗trial额度。
+- 测试：新增2项，共18项政策测试；全量门禁 `[gate] ok`（含V5迁移）。
+- 缺口（如实记录）：**`agent_max_calls` 未强制**——子进程无法把 LLM 调用数回报给平台，需要执行器→平台的计数通道，故EXEC13"Agent到限阻止下一调用"只完成了trial这一半；预算余额尚未在界面展示；容器路由、`failed/resource_limit`归类、deadline持久化、槽位单事务预留仍待做。**A41不通过**。
+
 ## 2026-09-27 — T04 第4片：超时终止监督
 
 - 来源：用户"可以。记得回写spec"。
