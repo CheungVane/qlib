@@ -41,6 +41,22 @@ ENGINE_IMAGE = os.environ.get("QWB_RDAGENT_IMAGE") or "qwb-rdagent-cpu:local"
 RUNTIME = "container" if IN_CONTAINER else "host_process"
 
 
+def assert_budget_hook_installed(backend_module) -> None:
+    """Fail closed when the platform asked for call budgeting but the hook did not take.
+
+    The hook wraps `litellm.completion`; if RD-Agent ever calls a different client, the ledger
+    would stay empty and the platform would still report `calls_enforced=true`. Refusing to run
+    is the only honest option.
+    """
+    if not os.environ.get("QWB_AGENT_BUDGET_FILE"):
+        return
+    completion = getattr(backend_module, "completion", None)
+    if not getattr(completion, "__qwb_budget_wrapped__", False):
+        raise RuntimeError(
+            "agent call budget is configured but the litellm hook is not installed on the "
+            "backend this probe uses; refusing to run uncounted")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=("baseline", "loop"), default="baseline")
@@ -84,6 +100,9 @@ def main() -> None:
     RD_AGENT_SETTINGS.cache_with_pickle = False
     import rdagent.scenarios.qlib.experiment.factor_experiment as factor_experiment
     from rdagent.scenarios.qlib.experiment.workspace import QlibFBWorkspace
+    # The backend module is what actually calls the LLM; verify the budget hook reached it.
+    import rdagent.oai.backend.litellm as rdagent_llm_backend
+    assert_budget_hook_installed(rdagent_llm_backend)
 
     # RD-Agent's Mac factor path assumes Conda. Evaluate the generated code with the
     # interpreter of this probe: the host RD-Agent venv, or the container that carries Qlib

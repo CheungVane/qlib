@@ -185,6 +185,41 @@ class ExecutorWiringTests(unittest.TestCase):
 
 
 class ServiceReconciliationTests(unittest.TestCase):
+    def test_probe_refuses_to_run_when_the_budget_hook_is_missing(self):
+        """Fail closed: an unwrapped backend would silently run uncounted."""
+        spec = importlib.util.spec_from_file_location(
+            "run_rdagent_factor_smoke_under_test",
+            ROOT / "scripts" / "run_rdagent_factor_smoke.py")
+        scripts_dir = str(ROOT / "scripts")
+        inserted = scripts_dir not in sys.path
+        if inserted:
+            sys.path.insert(0, scripts_dir)
+        try:
+            probe = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(probe)  # type: ignore[union-attr]
+        finally:
+            if inserted:
+                sys.path.remove(scripts_dir)
+
+        class Unwrapped:
+            @staticmethod
+            def completion(**kwargs):
+                return None
+
+        previous = os.environ.get("QWB_AGENT_BUDGET_FILE")
+        try:
+            os.environ["QWB_AGENT_BUDGET_FILE"] = "/tmp/ledger.json"
+            with self.assertRaises(RuntimeError) as raised:
+                probe.assert_budget_hook_installed(Unwrapped)
+            self.assertIn("not installed", str(raised.exception))
+            os.environ.pop("QWB_AGENT_BUDGET_FILE", None)
+            probe.assert_budget_hook_installed(Unwrapped)  # no budgeting requested -> allowed
+        finally:
+            if previous is None:
+                os.environ.pop("QWB_AGENT_BUDGET_FILE", None)
+            else:
+                os.environ["QWB_AGENT_BUDGET_FILE"] = previous
+
     def test_agent_template_compilation_honours_the_configured_checkout(self):
         spec = importlib.util.spec_from_file_location(
             "prepare_cn_scenario_under_test", ROOT / "scripts" / "prepare_cn_scenario.py")

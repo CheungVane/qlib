@@ -12,6 +12,7 @@
 - 文档过时更正（此前会误导下一位执行者）：`EXECUTION.md` 的"当前实现未覆盖…资源配额/并发上限…子进程内存/CPU硬限制"与"EXEC13 待实现"已按实况改写；`RESEARCH_LIFECYCLE.md` 的"当前保护未实现"改为已实现并指向证据；`RDAGENT_INTEGRATION.md` 的"资源上限未满足"与宿主 `.venv` 复现路径改写为两条路径（平台入口受政策约束、宿主直跑仅调试）；`IMPLEMENTATION.md` 的 U13 行更正；政策配置 `container.note` 与 `policy_summary().notes.memory` 里"RD-Agent 尚未接容器"的旧文案更正。
 - 文档补充：`EXECUTION.md` 新增 §5.1"容器路线运行手册"（构建两个镜像、用 `docker inspect` 核验上限、如何跑容器用例与看入口前置），并在验收映射表加入 EXEC13/A41 行。
 - 验证：门禁 `[gate] ok`（Python 290 项 + JS 25 项）；`QWB_CONTAINER_TESTS=1` 下容器与预算用例 19 项全通过；证据文件的 Attempt ID 由截断改为完整。
+- review 追加发现（虚假能力风险）：调用计数依赖 `litellm.completion` 被包装，若上游改用其它客户端，账本会保持 0 次而界面仍显示 `calls_enforced=true`。现由探针在导入后端后**自检包装标记并拒绝运行**（`assert_budget_hook_installed`），并有离线用例覆盖"有预算无钩子即拒绝、无预算则放行"。
 
 ## 2026-09-27 — T04 第12片：RD-Agent 入口容器化，A41 通过
 
