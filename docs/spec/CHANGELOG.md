@@ -2,6 +2,12 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — A40 修正：legacy 登记不得混入快照列表
+
+- 来源：用真实注册表做A40端到端演示时发现——`list_snapshots()` 的 `*.json` 通配把 `*.legacy.json` 也当成快照列出，于是 `cn_data.legacy`/`qwb_cn_current.legacy` 会以"不可读快照"出现在接口与页面上。
+- 修复：`data_directory.list_snapshots()` 显式排除 `*.legacy.json`；legacy 登记仍由 `list_legacy()` 单独提供。新增1项测试（同一注册表中 legacy 与快照并存时，列表只含快照）。
+- 复验：真实注册表下 `data_snapshots()` 现在只返回 `free_cn_20260924`（日历2000-01-04→2026-09-24、6479天、reproducible、摘要不含绝对路径）；全量门禁 `[gate] ok`。
+
 ## 2026-09-27 — A40 第三步：已登记快照显示到数据页
 
 - 来源：用户授权20:30前自主推进（也承接此前"接到界面"的方向）。

@@ -122,3 +122,26 @@ class ServiceAndApiTests(unittest.TestCase):
         with patch.object(cli, "build_service", return_value=self.service), redirect_stdout(out2):
             self.assertEqual(cli.main(["data-snapshot", "snap"]), 0)
         self.assertEqual(json.loads(out2.getvalue())["snapshot_id"], "snap")
+
+
+class LegacySeparationTests(unittest.TestCase):
+    """Legacy registrations must not masquerade as readable snapshots."""
+
+    def test_list_snapshots_excludes_legacy_registrations(self):
+        import tempfile
+        from pathlib import Path as _Path
+
+        from quant_workbench import data_directory as dd
+
+        with tempfile.TemporaryDirectory() as folder:
+            registry = _Path(folder)
+            dd.register_legacy(registry, legacy_id="cn_data", path_label="cn_data",
+                               reason="pre-existing local data without digest")
+            record = dd.build_snapshot_record(
+                snapshot_id="snap", source={"source_class": "free_community_unverified"},
+                components=[{"kind": "calendar", "uri": "x", "content_digest": "sha256:c",
+                             "source_class": "free_community_unverified",
+                             "coverage_start": "2026-01-01", "coverage_end": "2026-01-02"}])
+            dd.publish_snapshot(registry, record)
+            self.assertEqual(dd.list_snapshots(registry), ["snap"])
+            self.assertEqual([item["legacy_id"] for item in dd.list_legacy(registry)], ["cn_data"])

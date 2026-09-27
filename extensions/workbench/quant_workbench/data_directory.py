@@ -102,7 +102,9 @@ def publish_snapshot(registry: str | Path, record: dict) -> Path:
 
 
 def list_snapshots(registry: str | Path) -> list[str]:
-    return sorted(path.stem for path in Path(registry).glob("*.json"))
+    """Snapshot ids only: `*.legacy.json` registrations are reported by `list_legacy`."""
+    return sorted(path.name[:-len(".json")] for path in Path(registry).glob("*.json")
+                  if not path.name.endswith(".legacy.json"))
 
 
 def load_snapshot(registry: str | Path, snapshot_id: str) -> dict:
