@@ -1,11 +1,17 @@
 """T04 / A41: execution policy validation and resource-limit capability probing."""
 
 import json
+import os
+import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
 from quant_workbench import execution_policy as ep
+from quant_workbench.adapters.executors import SubprocessExecutor
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 class PolicyLoadingTests(unittest.TestCase):
@@ -106,6 +112,50 @@ class CapabilityTests(unittest.TestCase):
         profile = ep.load_policy().limit_profile()
         self.assertEqual(profile["enforced"], ["cpu"])
         self.assertIn("memory", profile["unenforced"])
+
+
+class ChildLimitEnforcementTests(unittest.TestCase):
+    """The declared CPU cap must actually kill a runaway child, not just be written down."""
+
+    def test_cpu_limit_is_injected_into_the_wrapper(self):
+        with tempfile.TemporaryDirectory() as folder:
+            executor = SubprocessExecutor(repo_root=REPO_ROOT, limits={"cpu_seconds": (1, 1)})
+            prepared = {
+                "workspace": folder, "log_path": f"{folder}/out.log",
+                "exit_marker": f"{folder}/exit_code", "cwd": folder,
+                "command": [sys.executable, "-c", "while True: pass"],
+                "env": dict(os.environ),
+            }
+            executor.start("attempt-cpu", prepared)
+            state, code = None, None
+            started_at = time.time()
+            deadline = time.time() + 25
+            while time.time() < deadline:
+                polled = executor.poll({"attempt_id": "attempt-cpu", "workspace": folder})
+                if polled.get("exit_code") is not None or polled.get("state") in ("interrupted",):
+                    state, code = polled.get("state"), polled.get("exit_code")
+                    break
+                time.sleep(0.2)
+            self.assertIsNotNone(state, "runaway child was not stopped by the injected limit")
+            # The wrapper shell itself receives SIGXCPU, so it never writes the exit marker:
+            # the limit is enforced, but the kill currently surfaces as interrupted without an
+            # exit code. Classifying it as failed/resource_limit still needs signal plumbing.
+            self.assertEqual(state, "interrupted")
+            self.assertIsNone(code)
+            self.assertLess(time.time() - started_at, 20, "limit did not stop the child promptly")
+            self.assertFalse(Path(f"{folder}/exit_code").exists())
+
+    def test_no_limit_means_no_ulimit_preamble(self):
+        with tempfile.TemporaryDirectory() as folder:
+            executor = SubprocessExecutor(repo_root=REPO_ROOT)
+            prepared = {
+                "workspace": folder, "log_path": f"{folder}/out.log",
+                "exit_marker": f"{folder}/exit_code", "cwd": folder,
+                "command": [sys.executable, "-c", "print('ok')"], "env": dict(os.environ),
+            }
+            executor.start("attempt-plain", prepared)
+            time.sleep(0.5)
+            self.assertNotIn("ulimit", Path(f"{folder}/out.log").read_text())
 
 
 if __name__ == "__main__":

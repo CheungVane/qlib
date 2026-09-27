@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 import resource
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -94,8 +95,12 @@ def load_policy(path: str | Path | None = None) -> ExecutionPolicy:
     )
 
 
-def probe_enforcement() -> dict:
-    """Actually try the limits in throwaway children; never assume support."""
+PROBE_IMAGE = "python:3.12-alpine"
+PROBE_MEMORY_BYTES = 134217728
+
+
+def _probe_cpu_rlimit() -> bool:
+    """macOS/Linux support RLIMIT_CPU; verified by actually killing a child."""
     cpu_supported = False
     probe = ("import resource;resource.setrlimit(resource.RLIMIT_CPU,(1,1));\n"
              "while True: pass")
@@ -104,16 +109,41 @@ def probe_enforcement() -> dict:
         cpu_supported = finished.returncode in (-24, -9)  # SIGXCPU / SIGKILL
     except subprocess.TimeoutExpired:
         cpu_supported = False
-    memory_supported = False
-    probe_mem = ("import resource;resource.setrlimit(resource.RLIMIT_AS,(134217728,134217728));"
-                 "print('ok')")
+    return cpu_supported
+
+
+def _probe_memory_container() -> bool:
+    """Memory hard limits are enforceable through cgroups, not macOS rlimits.
+
+    Verified by running a container that tries to exceed its cap: an OOM kill (137)
+    proves the limit is real; anything else means we must not claim support.
+    """
+    if shutil.which("docker") is None:
+        return False
     try:
-        finished = subprocess.run([sys.executable, "-c", probe_mem], capture_output=True, timeout=20)
-        memory_supported = finished.returncode == 0
+        finished = subprocess.run(
+            ["docker", "run", "--rm", f"--memory={PROBE_MEMORY_BYTES}b",
+             f"--memory-swap={PROBE_MEMORY_BYTES}b", PROBE_IMAGE, "python", "-c",
+             f"bytearray({PROBE_MEMORY_BYTES * 3})"],
+            capture_output=True, timeout=300)
     except (subprocess.TimeoutExpired, OSError):
-        memory_supported = False
-    return {"cpu": cpu_supported, "memory": memory_supported,
-            "probe": {"cpu_seconds": 1, "memory_bytes": 134217728}}
+        return False
+    return finished.returncode == 137
+
+
+def probe_enforcement() -> dict:
+    """Actually probe each mechanism in throwaway processes; never assume support."""
+    cpu_rlimit = _probe_cpu_rlimit()
+    memory_container = _probe_memory_container()
+    return {
+        "cpu": cpu_rlimit,
+        "memory": memory_container,
+        "mechanisms": {"cpu": "rlimit_cpu", "memory": "container_cgroup"},
+        "probe": {"cpu_seconds": 1, "memory_bytes": PROBE_MEMORY_BYTES, "image": PROBE_IMAGE},
+        "notes": {"memory": "macOS rlimit cannot cap memory; the container path is verified "
+                            "by an OOM probe, but an executor only benefits once it runs in "
+                            "that container"},
+    }
 
 
 def unsupported_limits(policy: ExecutionPolicy, capabilities: dict) -> list[str]:
@@ -129,3 +159,12 @@ def child_limits(policy: ExecutionPolicy) -> dict:
     if "memory" in policy.enforce:
         limits["memory_bytes"] = (policy.memory_bytes, policy.memory_bytes)
     return limits
+
+
+def container_limits(policy: ExecutionPolicy) -> list[str]:
+    """Docker flags for the container path; memory only when the policy enforces it."""
+    flags = [f"--cpus={max(1, policy.cpu_seconds // 3600)}"]
+    if "memory" in policy.enforce:
+        flags.append(f"--memory={policy.memory_bytes}b")
+        flags.append(f"--memory-swap={policy.memory_bytes}b")
+    return flags

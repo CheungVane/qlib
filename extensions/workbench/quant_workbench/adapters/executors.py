@@ -101,9 +101,12 @@ class SubprocessExecutor:
     executor_id = "subprocess"
     kinds: tuple[str, ...] = ()
 
-    def __init__(self, repo_root: str | Path | None = None, source_root: str | Path | None = None):
+    def __init__(self, repo_root: str | Path | None = None, source_root: str | Path | None = None,
+                 limits: dict[str, Any] | None = None):
         self.repo_root = find_repo_root(repo_root)
         self.source_root = Path(source_root).expanduser().resolve() if source_root else self.repo_root
+        # Resource limits the policy asked us to enforce on the child process.
+        self.limits = dict(limits or {})
         self.sanitizer = Sanitizer(self.source_root)
         self._preflight: dict[str, Any] | None = None
         self._preflight_at = 0.0
@@ -204,8 +207,14 @@ class SubprocessExecutor:
         log_path = Path(prepared["log_path"])
         marker = Path(prepared["exit_marker"])
         log_path.touch(exist_ok=True)
+        preamble = "umask 022\n"
+        cpu_limit = (self.limits.get("cpu_seconds") or (None,))[0]
+        if cpu_limit:
+            # POSIX sh: ulimit -t is RLIMIT_CPU in seconds — verified to kill runaway children.
+            preamble += f"ulimit -t {int(cpu_limit)}\n"
         wrapper = (
-            "umask 022\n"
+            preamble
+            +
             f"{shlex.join(prepared['command'])} >> {shlex.quote(str(log_path))} 2>&1\n"
             "code=$?\n"
             f"printf '%s' \"$code\" > {shlex.quote(str(marker))}\n"
@@ -217,7 +226,8 @@ class SubprocessExecutor:
             start_new_session=True)
         self._processes[attempt_id] = process
         (run_dir / "pid").write_text(str(process.pid), encoding="utf-8")
-        return {"pid": process.pid, "workspace": str(run_dir), "log_path": str(log_path)}
+        return {"pid": process.pid, "workspace": str(run_dir), "log_path": str(log_path),
+                "limits": dict(self.limits)}
 
     def poll(self, attempt: dict[str, Any]) -> dict[str, Any]:
         attempt_id = attempt["attempt_id"]
@@ -325,8 +335,9 @@ class QlibCNExecutor(SubprocessExecutor):
     kinds = ("qlib.cn_synthetic_backtest",)
     KIND = "qlib.cn_synthetic_backtest"
 
-    def __init__(self, repo_root: str | Path | None = None, profile_path: str | Path | None = None):
-        super().__init__(repo_root)
+    def __init__(self, repo_root: str | Path | None = None, profile_path: str | Path | None = None,
+                 limits: dict[str, Any] | None = None):
+        super().__init__(repo_root, limits=limits)
         self.profile_path = (Path(profile_path).expanduser().resolve() if profile_path
                              else self.repo_root / "configs/cn/profile.json")
         self._bundle: dict[str, Any] | None = None
@@ -534,8 +545,8 @@ class RDAgentExecutor(SubprocessExecutor):
     LOOP = "rdagent.factor.loop"
 
     def __init__(self, repo_root: str | Path | None = None, agent_root: str | Path | None = None,
-                 profile_path: str | Path | None = None):
-        super().__init__(repo_root)
+                 profile_path: str | Path | None = None, limits: dict[str, Any] | None = None):
+        super().__init__(repo_root, limits=limits)
         self.agent_root = Path(agent_root or os.environ.get("QWB_RDAGENT_ROOT")
                                or self.repo_root.parent / "RD-Agent").expanduser().resolve()
         self.sanitizer = Sanitizer(self.agent_root)

@@ -24,7 +24,11 @@ def build_service(root: Path, with_executors: bool = True) -> WorkbenchService:
     observer = RDAgentStatusProvider(agent_root) if agent_root else None
     execution = None
     if with_executors:
-        execution = ExecutionService(repository, executors=[QlibCNExecutor(), RDAgentExecutor()],
+        from .execution_policy import child_limits, load_policy
+        limits = child_limits(load_policy())
+        execution = ExecutionService(repository,
+                                     executors=[QlibCNExecutor(limits=limits),
+                                                RDAgentExecutor(limits=limits)],
                                      importer=AttemptResultImporter(repository))
     return WorkbenchService(repository, observer, ResearchSnapshots(root / "research"), execution)
 

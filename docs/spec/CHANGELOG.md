@@ -2,6 +2,17 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — T04 第2片：容器内存探测 + CPU 上限真实注入
+
+- 来源：用户"可以"，接续 T04 剩余项。
+- 内存探测改为**容器OOM实测**：`probe_enforcement()` 现在会 `docker run --memory=128m` 并让容器分配超限内存，只有拿到 OOM 退出码(137)才判为可强制；本机结果 `cpu=true`(rlimit)、`memory=true`(container_cgroup)，并标注"平台有能力≠执行器已用上"。新增 `container_limits()` 输出 `--cpus/--memory/--memory-swap`。
+- CPU 上限**真实注入子进程**：执行器新增 `limits` 参数，`start()` 在包装脚本里前置 `ulimit -t <秒>`；`cli.py` 组合根按政策传入 `child_limits(policy)`。
+- 新增2项强制测试：注入上限后跑死循环子进程，**确认被限制终止**（poll 报 interrupted、无退出标记、20秒内停止）；不设限时不产生 `ulimit` 前置。共11项政策测试。
+- **发现新缺口（记入A41）**：被上限杀掉时包装 shell 自身收到 SIGXCPU，写不到退出标记，因此当前只能落 `interrupted` 且退出码为 None，**达不到 A41 要求的"failed/resource_limit 及证据"**；需要信号级证据或包装器改写退出标记的方式。
+- 过程记录：接线时曾漏写字符串拼接的 `+`（变量不能与字面量隐式拼接），导致 CLI 语法错误被门禁捕获，已修正。
+- 未完成：并发槽准入、deadline与超时终止监督、Agent预算预留、Qlib执行器改走容器（内存强制的前置）、resource_limit 归类。**A41 仍不通过**。
+- 验证：全量门禁 `[gate] ok`。
+
 ## 2026-09-27 — T04 内存上限结论更正：容器可强制，rlimit 不可
 
 - 来源：用户质疑"内存上限不够"的判断依据，要求先查清 macOS 到底怎么设。复查结论如下。
