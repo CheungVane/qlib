@@ -8,7 +8,7 @@
   "memory_bytes": 4294967296,
   "enforce": ["cpu"],
   "unenforced_limits": {
-    "memory": "本机（macOS）拒绝为子进程设置有限的 RLIMIT_AS/RLIMIT_DATA；内存硬上限不可强制，A41 在该环境保持未完成。若把 \"memory\" 加入 enforce，准入会直接拒绝。"
+    "memory": "macOS 的 rlimit 无法强制内存：man 2 setrlimit 未列出 RLIMIT_AS；ulimit -v/-d/-m 在本机全部返回 Invalid argument。但容器可强制且已实测：docker run --memory=256m 下分配 400MB 被 OOM 杀掉（rc 137），不加限制则成功。故内存硬上限的落地路径是把引擎执行改为走容器（--memory/--cpus），而不是 rlimit；当前 Qlib 执行器仍是裸子进程故未启用。若把 \"memory\" 加入 enforce，准入会直接拒绝直到该路径接入。"
   },
   "agent_budget": {
     "max_trials": 12,

@@ -74,7 +74,7 @@ T01-F证据：`extensions/workbench/.venv/bin/python -m unittest discover -s ext
 | A39-L | 选定券商/账户/环境并获相应授权后，在真实接口验证订单及恢复对账，证据去敏；先完成交易详细设计与A39-F/R，未选择券商时本项保持阻塞 | TRADE06 |
 | A40 | 分析通过数据目录端口按历史snapshot定位；改变当前profile或数据根不改变历史数据身份；服务所需端口完整，CLI/API语义一致；声明的部署方式可启动/恢复，前端拆分保持URL/选择/刷新行为 | ARC10—12 |
 | A41 | 并发满拒绝新准入；超时终止运行进程并保留证据；Agent到限阻止下一调用；CPU/内存硬限制实测生效，未支持则该环境验收不通过；启动失败/queued取消/迟到退出纠正可追溯；重启/取消不清空同范围预算事实 | LIFE06、EXEC06、AGENT04 |
-| A41证据（部分，T04） | 政策冻结与能力探测已实现：缺字段/非法值拒绝、内容哈希revision、**真实探测**出`cpu=true`（RLIMIT_CPU实测SIGXCPU）与`memory=false`（macOS拒绝有限RLIMIT_AS/RLIMIT_DATA）；`unsupported_limits()`命名所有不可强制项，声明`enforce=["memory"]`时返回`["memory"]`。**并发准入、超时终止、Agent预算预留、子进程上限注入均未实现，故A41不通过**；且该环境内存硬上限不可强制，按EXEC13不得通过完整EXEC06准入 | LIFE06、EXEC06、AGENT04 / T04 |
+| A41证据（部分，T04） | 政策冻结与能力探测已实现：缺字段/非法值拒绝、内容哈希revision、**真实探测**出`cpu=true`（RLIMIT_CPU实测1秒SIGXCPU）与`memory=false`；`unsupported_limits()`命名不可强制项，声明`enforce=["memory"]`时返回`["memory"]`。**内存能力的更正结论（2026-09-27复查）**：macOS rlimit 无法强制内存——`man 2 setrlimit`未列RLIMIT_AS，`ulimit -v/-d/-m`在本机全部Invalid argument；但**容器可强制且已实测**（`docker run --memory=256m`下400MB分配被OOM杀，rc137；不加限制则成功）。因此障碍不是平台而是实现路径：Qlib执行器尚未走容器。**并发准入、超时终止、Agent预算预留、子进程上限注入仍未实现，故A41不通过** | LIFE06、EXEC06、AGENT04 / T04 |
 | A42 | 保存/复制实验、比较配置差异、复用模型、保存候选策略，跨专业页面保留同一实验及确切版本；统一发现入口可跳转，来源与关键限制始终可见 | LIFE07、U21/U26 |
 
 ### 可交接任务与依赖（0.2.1）
