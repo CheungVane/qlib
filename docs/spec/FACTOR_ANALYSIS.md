@@ -109,7 +109,7 @@
 
 ### 4.3 输出与标记
 
-- 每个分析结果带 `basis`（公式、持有期、样本区间、因子集合）、`data_version`、`factor_count`（参与检验数量）、`limitations`。
+- 每个分析结果带 `basis`（公式、持有期、样本区间、因子集合）及 `limitations`。当前DTO的数据内容版本位于 `basis.dataset.version`，选中因子数位于 `basis.factor_count`；v2实际FDR检验数另为 `basis.parameters.tested_factor_count`，请求因子数为 `basis.parameters.requested_factor_count`。`data_version`为语义称呼，不是已存在的顶层字段；不得把选中数量当成实际成功检验数量。
 - 单一分析请求的因子数量与面板规模有上限；超出返回拒绝原因与建议。
 - 探针来源的因子在结果中标记探索性；不得以「通过了显著性」对外声称策略有效。
 
