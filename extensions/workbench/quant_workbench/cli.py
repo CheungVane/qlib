@@ -30,7 +30,13 @@ def build_service(root: Path, with_executors: bool = True) -> WorkbenchService:
                                      executors=[QlibCNExecutor(limits=limits),
                                                 RDAgentExecutor(limits=limits)],
                                      importer=AttemptResultImporter(repository))
-    return WorkbenchService(repository, observer, ResearchSnapshots(root / "research"), execution)
+    from .adapters.local_data_directory import LocalDataDirectory
+    data_root = Path(os.environ.get("QWB_DATA_ROOT")
+                     or (Path.home() / ".qlib" / "qlib_data")).expanduser()
+    registry = data_root / "_registry"
+    directory = LocalDataDirectory(registry, data_root) if registry.is_dir() else None
+    return WorkbenchService(repository, observer, ResearchSnapshots(root / "research"), execution,
+                            directory)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -116,6 +122,9 @@ def parser() -> argparse.ArgumentParser:
     a = sub.add_parser('review')
     a.add_argument('run_id')
     a.add_argument("--revision-id")
+    a = sub.add_parser("data-snapshots", help="list registered data snapshots (T05/A40)")
+    a = sub.add_parser("data-snapshot", help="show one registered data snapshot")
+    a.add_argument("snapshot_id")
     a = sub.add_parser("execution-catalog", help="show execution entries and their preconditions")
     a.add_argument("--refresh", action="store_true")
     a = sub.add_parser("execute", help="start one isolated research attempt")
@@ -213,6 +222,14 @@ def main(argv: list[str] | None = None) -> int:
                                                  args.embargo, args.trials, args.blocks,
                                                  analysis_version=args.analysis_version,
                                                  revision_ids=args.revision_ids)
+        elif args.command == 'data-snapshots':
+            result = service.data_snapshots()
+        elif args.command == 'data-snapshot':
+            snapshot = service.data_snapshot(args.snapshot_id)
+            if snapshot is None:
+                print(f"snapshot not available: {args.snapshot_id}", file=sys.stderr)
+                return 1
+            result = snapshot
         elif args.command == 'review':
             result = service.review(args.run_id, args.revision_id)
         elif args.command == 'execution-catalog':

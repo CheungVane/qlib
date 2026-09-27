@@ -259,6 +259,18 @@ def create_app(service: WorkbenchService):
         """UI06: one row per metric, one column per run, best/worst computed server-side."""
         return service.compare_table(run_id, metric_id)
 
+    @app.get("/v1/data-snapshots")
+    def data_snapshots():
+        """T05/A40: registered snapshots resolved by id, never by the current profile."""
+        return service.data_snapshots()
+
+    @app.get("/v1/data-snapshots/{snapshot_id}")
+    def data_snapshot(snapshot_id: str):
+        snapshot = service.data_snapshot(snapshot_id)
+        if snapshot is None:
+            raise HTTPException(404, f"snapshot not available: {snapshot_id}")
+        return snapshot
+
     @app.get("/v1/executions/catalog")
     def executions_catalog(refresh: bool = False):
         return service.execution_catalog(refresh)

@@ -2,6 +2,14 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — A40 第二步：快照目录接入 service/API/CLI
+
+- 来源：用户授权20:30前自主推进。
+- 实现：`WorkbenchService` 增加可选 `data_directory` 与只读方法 `data_snapshots()`/`data_snapshot(id)`；`build_service()` 在 `QWB_DATA_ROOT`（默认 `~/.qlib/qlib_data`）下存在 `_registry` 时自动装配 `LocalDataDirectory`；新增 API `GET /v1/data-snapshots`、`GET /v1/data-snapshots/{id}`（未知快照返回**404**，未配置目录返回 `available=false` 与原因，不伪装成功）与 CLI `qwb data-snapshots` / `qwb data-snapshot <id>`。
+- 语义：未知或不可读快照按"不可用（404）"处理，而不是"请求非法（400）"——测试覆盖该差异。
+- 测试：新增3项（service+API列表/详情/404、未配置目录如实报不可用、CLI两条命令）；全量门禁 `[gate] ok`（含API03新路由与OpenAPI覆盖检查）。
+- 边界：**分析路径仍读当前CN配置**，尚未改为按snapshot解析，故A40与ARC11仍不通过；适配器只提供读取与摘要。
+
 ## 2026-09-27 — A40 第一步：本地数据目录适配器
 
 - 来源：用户授权20:30前自主推进；T05 剩余项之一为"把 data_directory 接入应用层"（ARC11/A40）。

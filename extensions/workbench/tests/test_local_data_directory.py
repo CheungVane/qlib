@@ -61,3 +61,64 @@ class LocalDataDirectoryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ServiceAndApiTests(unittest.TestCase):
+    """The adapter must reach the service, API and CLI without touching analysis paths."""
+
+    def setUp(self):
+        from fastapi.testclient import TestClient
+
+        from quant_workbench.api import create_app
+        from quant_workbench.application import WorkbenchService
+        from quant_workbench.storage import LocalResultRepository
+
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        adapter, _ = LocalDataDirectoryTests().build(root)
+        self.service = WorkbenchService(LocalResultRepository(root / "db"), data_directory=adapter)
+        self.client = TestClient(create_app(self.service))
+
+    def test_service_and_api_expose_snapshots(self):
+        payload = self.service.data_snapshots()
+        self.assertTrue(payload["available"])
+        self.assertEqual([item["snapshot_id"] for item in payload["items"]], ["snap"])
+        response = self.client.get("/v1/data-snapshots")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["items"][0]["snapshot_id"], "snap")
+        detail = self.client.get("/v1/data-snapshots/snap")
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json()["calendar"]["last"], "2026-09-24")
+        self.assertEqual(self.client.get("/v1/data-snapshots/absent").status_code, 404)
+
+    def test_missing_directory_reports_unavailable_instead_of_empty_success(self):
+        from fastapi.testclient import TestClient
+
+        from quant_workbench.api import create_app
+        from quant_workbench.application import WorkbenchService
+        from quant_workbench.storage import LocalResultRepository
+
+        root = Path(self.tmp.name)
+        service = WorkbenchService(LocalResultRepository(root / "db2"))
+        payload = TestClient(create_app(service)).get("/v1/data-snapshots").json()
+        self.assertFalse(payload["available"])
+        self.assertEqual(payload["reason"], "data_directory_not_configured")
+
+    def test_cli_lists_and_shows_snapshots(self):
+        import io
+        import json
+        from contextlib import redirect_stdout
+        from unittest.mock import patch
+
+        from quant_workbench import cli
+
+        out = io.StringIO()
+        with patch.object(cli, "build_service", return_value=self.service), redirect_stdout(out):
+            code = cli.main(["data-snapshots"])
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out.getvalue())["items"][0]["snapshot_id"], "snap")
+        out2 = io.StringIO()
+        with patch.object(cli, "build_service", return_value=self.service), redirect_stdout(out2):
+            self.assertEqual(cli.main(["data-snapshot", "snap"]), 0)
+        self.assertEqual(json.loads(out2.getvalue())["snapshot_id"], "snap")

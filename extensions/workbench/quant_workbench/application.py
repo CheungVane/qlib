@@ -35,12 +35,37 @@ class WorkbenchService:
     GENERIC_RUN_TITLES = {"mlflow_recorder", "mlflow", "default", ""}
 
     def __init__(self, repository: ResultRepository, rdagent: AgentObservationPort | None = None,
-                 research=None, execution=None):
+                 research=None, execution=None, data_directory=None):
         self.repository = repository
         self.rdagent = rdagent
         self.research = research
         # named *_service so the attribute cannot shadow the read methods below
         self.execution_service = execution
+        # ARC11/T05: analysis should resolve by snapshot id, not by the current CN profile.
+        self.data_directory = data_directory
+
+    def data_snapshots(self) -> dict[str, Any]:
+        """Registered snapshots with their summaries (T05/A40); read-only."""
+        if self.data_directory is None or not self.data_directory.available():
+            return {"available": False, "items": [],
+                    "reason": "data_directory_not_configured"}
+        items = []
+        for snapshot_id in self.data_directory.list_snapshots():
+            try:
+                items.append(self.data_directory.summary(snapshot_id))
+            except Exception as error:
+                items.append({"snapshot_id": snapshot_id, "unreadable_reason":
+                              f"{type(error).__name__}: {error}"})
+        return {"available": True, "items": items}
+
+    def data_snapshot(self, snapshot_id: str) -> dict[str, Any] | None:
+        """Unknown or unreadable snapshots are 'not available' (404), not a malformed request."""
+        if self.data_directory is None or not self.data_directory.available():
+            return None
+        try:
+            return self.data_directory.summary(snapshot_id)
+        except Exception:
+            return None
 
     def rdagent_status(self) -> dict[str, Any]:
         if self.rdagent is None:
