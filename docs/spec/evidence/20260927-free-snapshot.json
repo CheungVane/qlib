@@ -1,0 +1,119 @@
+{
+  "archive_bytes_actual": 566505035,
+  "archive_sha256_actual": "4ce65c37755265bec24266e922468195e66166e5f91996595ac8eaade6db85fa",
+  "archive_sha256_matches_manifest": true,
+  "calendar": {
+    "days": 6479,
+    "first": "2000-01-04",
+    "last": "2026-09-24",
+    "matches_target_trade_date": true
+  },
+  "instruments": {
+    "by_exchange_prefix": {
+      "BJ": 597,
+      "SH": 2472,
+      "SZ": 3092
+    },
+    "csi1000_beijing_rows": 0,
+    "csi1000_rows": 33008,
+    "csi300_beijing_rows": 0,
+    "csi300_rows": 16198,
+    "csi500_beijing_rows": 0,
+    "csi500_rows": 22503,
+    "csiall_beijing_rows": 953,
+    "csiall_rows": 119178,
+    "delisted_example": {
+      "end": "2017-02-13",
+      "start": "2000-01-04",
+      "symbol": "SH600005"
+    },
+    "distinct_symbols": 6161,
+    "rows": 6161,
+    "stale_beijing_instruments": 250,
+    "stale_beijing_sample": [
+      {
+        "end": "2025-09-30",
+        "symbol": "BJ430017"
+      },
+      {
+        "end": "2025-09-30",
+        "symbol": "BJ430047"
+      },
+      {
+        "end": "2025-09-30",
+        "symbol": "BJ430090"
+      },
+      {
+        "end": "2025-09-30",
+        "symbol": "BJ430139"
+      },
+      {
+        "end": "2025-09-30",
+        "symbol": "BJ430198"
+      }
+    ],
+    "top_end_dates": [
+      [
+        "2026-09-24",
+        5562
+      ],
+      [
+        "2025-09-30",
+        241
+      ],
+      [
+        "2025-04-30",
+        6
+      ],
+      [
+        "2022-06-15",
+        6
+      ],
+      [
+        "2006-04-28",
+        5
+      ],
+      [
+        "2024-06-26",
+        5
+      ]
+    ]
+  },
+  "limitations": [
+    "free community source; not official; do not present as certified market data",
+    "prices are adjusted: raw = adjusted / factor; archive volume is inversely adjusted",
+    "amount unit is thousand CNY",
+    "absolute paths and machine names are deliberately not recorded"
+  ],
+  "manifest": {
+    "archive_sha256": "sha256:4ce65c37755265bec24266e922468195e66166e5f91996595ac8eaade6db85fa",
+    "archive_size_bytes": 566505035,
+    "dolt_commit": "6a34i0k99nu6kae95gsd3njrh1u0b9gm",
+    "future_end_date": "2026-12-31",
+    "future_start_date": "2026-09-28",
+    "investment_data_commit": "b8c129b4d9b838f050eac8b1135111b3b79fc894",
+    "qlib_commit": "b87a2c294d364a33fb739359886acffe8ec907d1",
+    "release_tag": "2026-09-27",
+    "target_trade_date": "2026-09-24"
+  },
+  "manifest_sha256": "dd2355056a33036a7ace5b9d955f3023668b6e4cf2b1790177e01cdc5782543d",
+  "missing_members": [],
+  "paths_recorded": false,
+  "sample_fields": [
+    "adjclose",
+    "amount",
+    "change",
+    "close",
+    "factor",
+    "high",
+    "low",
+    "open",
+    "volume",
+    "vwap"
+  ],
+  "sample_symbol": "sh600000",
+  "snapshot_kind": "free_source_qlib_bin",
+  "snapshot_label": "free_cn_20260924",
+  "source_class": "free_community_unverified",
+  "verified_at": "2026-09-27T10:01:51Z"
+}

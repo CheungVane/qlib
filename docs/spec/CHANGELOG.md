@@ -2,6 +2,15 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — FINV 快照落地与三项缺口实现（T05 首片）
+
+- 来源：用户授权下载主源并落地，同时要求实现日频市值、PIT行业、生存者偏差三项处置。
+- 快照：下载 release `2026-09-27`（566,505,035字节），archive SHA-256 与清单逐位一致，发布方 `validate_archive.py --require-publishable` 返回 `ok:true`；解包到独立版本目录（不覆盖既有 `cn_data`/`qwb_cn_current`），日历末日 `2026-09-24`。快照登记见[免费快照登记](evidence/20260927-free-snapshot.json)，来源类别 `free_community_unverified`，未记录绝对路径。
+- 解包实证（更正此前未验证的推断）：字段共10个（adjclose/amount/change/close/factor/high/low/open/volume/vwap）；价格为复权价（原始=复权÷factor）；volume反向复权（原始手数=volume×factor）；amount单位为千元；三者与BaoStock/东财逐值一致（9.00元 / 528,364手 / 475,964,884元）。退市股在库（`SH600005` 2000-01-04→2017-02-13）。**发现北交所缺口**：597只中241只区间终止于2025-09-30，抽样 `BJ430047/430090/430198` 的 `delist_date` 为空，属数据缺口而非退市；csi300/500/1000不含北交所可规避。
+- 实现：新增 `quant_workbench/free_sources.py`（bin读取、单位换算、流通股本反推、区间化universe与生存者偏差报告、收益聚类统计行业）与14项测试；新增 `scripts/verify_free_snapshot.py` 生成快照身份记录（只读、不记录绝对路径与主机名）。
+- 边界：快照**已落盘但未接入数据目录**；T05/A16/A17/A37仍待实现，本次不声明"真实数据已接入"。全市场换手率批量拉取（日频流通市值所需）与统计行业的正式接入仍待T05后续。
+- 验证：字节数与SHA-256校验、发布方脚本 `ok:true`、解包结构核对、14项新测试通过（system python3 + numpy）。**未运行工作台全量门禁**：本 worktree 无 `extensions/workbench/.venv`，未重跑既有套件。
+
 ## 2026-09-27 — 三个数据缺口展开与处置方案
 
 - 来源：用户要求展开日频股本/市值、PIT行业分类、生存者偏差三个缺口。

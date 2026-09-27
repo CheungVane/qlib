@@ -52,7 +52,7 @@
 
 ### 缺口一：日频股本 / 市值
 
-- 精确边界：主源 `show tables` 实测共 14 张表，**没有任何股本或市值表**；发布包按 `qlib/normalize.py` 的 `COLUMNS`（`open/close/high/low/vwap/volume`）加未复权 `amount` 与复权 `factor` 导出，**不含换手率、ST/停牌标记和股本**（archive 内实际字段未解包核验）。
+- 精确边界：主源 `show tables` 实测共 14 张表，**没有任何股本或市值表**；解包核验发布包字段为 `adjclose/amount/change/close/factor/high/low/open/volume/vwap` 共 10 个，**不含换手率、ST/停牌标记和股本**。
 - 影响面：市值类因子、规模中性化、市值分组、市值加权；也无法按市值构造 universe。
 - 免费缓解（推荐）：用恒等式 **流通股本 ≈ 成交量 ÷ 换手率**。实测 2026-09-24 浦发银行：`52,836,397 ÷ 0.1586% = 33,314,247,793`，对比季度披露 `liqaShare = 33,305,838,300`，相对误差 **0.025%**。
 - 数据来源：换手率在 BAO API 与主源 Dolt 表 `bao_a_stock_eod_info.turn` 中都有（6 位小数），但**不在发布包内**，接入时需额外取一次；EM 换手率只有 2 位小数，反推误差可接近 1%，不用于此用途。
@@ -67,7 +67,7 @@
 ### 缺口三：生存者偏差
 
 - 传播途径：用今天的成分股当历史 universe、供应商只返回在市代码、或自己用当前股票名单过滤。
-- 实测：BAO 保留退市股（600005 在 2016 年 244 行、2026 年无数据）；主源 `ts_a_stock_list` 含 `list_date` / `delist_date` 两列（实测 000001.SZ）；发布包内 `instruments` 是否含退市股区间**未解包核验**。
+- 实测：BAO 保留退市股（600005 在 2016 年 244 行、2026 年无数据）；主源 `ts_a_stock_list` 含 `list_date` / `delist_date` 两列（实测 000001.SZ）；发布包内 `instruments/all.txt` 已确认保留退市区间（`SH600005` 2000-01-04→2017-02-13），但北交所 241 只存在**过期区间**，见 §3.1。
 - 细节：A 股退市含"退市整理期"，摘牌后转老三板、免费日线通常缺失；标签窗口跨越摘牌的样本收益不可计算，必须 fail-closed 或显式排除并记录，不得静默丢样本。
 - 处置：①universe 只从含日期区间的 `instruments/all.txt` 构造，绝不用当前名单；②用 `delist_date` 与交易所公告做每年退市数量对账；③同一因子分别在全集与"仅存活"样本上算 IC，差值即该因子的生存者偏差暴露；④把跨摘牌样本规则写死在标签定义里。
 
@@ -92,10 +92,13 @@
 
 ### 3.1 FINV：推荐作为日线主源
 
-- 交付形态最贴合本仓库：release 里是 `qlib_bin.tar.gz` + `qlib_bin.manifest.json`，README 指示解包到 Qlib 数据目录（`tar --strip-components=1`），预期为标准 `calendars/`、`instruments/`、`features/` 布局；**本机未解包核验实际成员**。
+- 交付形态已验证：解包后为 `calendars/`、`instruments/`、`features/`；`calendars/day.txt` 末日 **2026-09-24** 与清单 `target_trade_date` 一致；archive 566,505,035 字节、SHA-256 与清单逐位一致；发布方 `validate_archive.py --require-publishable` 返回 `ok:true`。
 - 可复现性最强：清单给出 `target_trade_date`、`archive_sha256`、`dolt_commit`、`investment_data_commit`、`qlib_commit`、`image_digest`，并有 `qlib/validate_archive.py --require-publishable` 校验发布产物。
-- 指数成分：`qlib/dump_index_weight.py` 把 Tushare 指数权重转成带变更日期的 instruments，脚本 `INDEX_MAP` 覆盖 csi300/csi500/csi800/csi1000/csiall（中证全指）；archive 内实际包含哪些指数未解包核验。
-- **风险（必须登记）**：上游是 Tushare 等派生数据，每日更新仅走 Tushare；2019 年前用 Wind/Caihui 静态源做价格基准与多源合并，跨年代口径不完全一致；复权价以各股票首个日期为 factor=1.0，跨股票的水平值不可直接比较（用收益/排序则不受影响）；本仓库未解包核验 archive 内部结构与 `$factor` 生成细节。
+- 指数成分：archive 内含 csi300/csi500/csi800/csi1000/csiall 五个 instruments 文件（各 16,198 / 22,503 / — / 33,008 / 119,178 行区间）。csi300/csi500/csi1000 **不含北交所**；csiall 含 953 行北交所区间。
+- 退市覆盖已核验：`instruments/all.txt` 中 `SH600005` 区间为 2000-01-04→2017-02-13，退市股保留在库，可以作为防生存者偏差的 universe 来源。
+- **字段与单位（解包实测）**：每个标的 10 个字段 `adjclose/amount/change/close/factor/high/low/open/volume/vwap`。价格是**复权价**（`原始价 = 复权价 ÷ factor`）；`volume` 是**反向复权**的（`原始手数 = volume × factor`）；`amount` 单位是**千元**。「收盘 6.1169 × factor 0.6797 → 原始 9.00、量 528,364 手」与 BaoStock/东财逐值一致。
+- **北交所缺口（必须登记）**：597 只北交所标的中，347 只更新到 2026-09-24，**241 只区间终止于 2025-09-30**；抽样 `BJ430047/430090/430198` 在源股票表中 `delist_date` 为空（仍在上市），说明是数据缺口而非退市。用 csi300/500/1000 作 universe 可规避；用全 A 或 csiall 必须显式决定是否纳入北交所。
+- **风险（必须登记）**：上游是 Tushare 等派生数据，每日更新仅走 Tushare；2019 年前用 Wind/Caihui 静态源做价格基准与多源合并，跨年代口径不完全一致；复权价以各股票首个日期为 factor=1.0，跨股票的水平值不可直接比较（用收益/排序则不受影响）。
 - 因此标记为 **B（社区维护、可校验、非官方）**，不得称"官方行情"，不得用于实盘或排名结论。
 
 ### 3.2 BAO：推荐作为校验与补充源
@@ -150,7 +153,9 @@ Tushare Pro 是 FINV 的日常上游，直连可获得每日指标（市值/换�
 
 可复跑：[scripts/probe_data_sources.py](../../scripts/probe_data_sources.py)（`python3 scripts/probe_data_sources.py --output docs/spec/evidence/<date>-free-data-probe.json`）；本次结果见[免费数据源探测](evidence/20260927-free-data-probe.json)。
 
-本次实测结论：最新交易日 **2026-09-24**（2026-09-25 中秋节休市、09-26/27 周末，下一交易日 09-28，10-01/02 国庆休市），三个免费来源（FINV / BAO / EM）在"到 2026 年 9 月"这一要求上一致。仅做只读探测，**未下载 566MB 数据包、未落库、未接数据目录**。
+本次实测结论：最新交易日 **2026-09-24**（2026-09-25 中秋节休市、09-26/27 周末，下一交易日 09-28，10-01/02 国庆休市），三个免费来源（FINV / BAO / EM）在"到 2026 年 9 月"这一要求上一致。探测本身只读。
+
+2026-09-27 按用户授权下载并登记 FINV 快照（label `free_cn_20260924`）：archive 566,505,035 字节、SHA-256 与清单一致、发布方校验 `ok:true`、日历末日 2026-09-24、退市股与北交所缺口均已核验，记录见[免费快照登记](evidence/20260927-free-snapshot.json)。快照**已落盘但尚未接入数据目录**：T05、A16、A17 仍未完成，本文不因此声明"真实数据已接入"。
 
 稳定性实测：EM 两次探测中一次断连、一次成功；YF 三次探测分别为 429、200（载荷很小）、429。免费抓取类来源**必须带重试、失败留痕与降级路径**，不能作为唯一来源。
 
