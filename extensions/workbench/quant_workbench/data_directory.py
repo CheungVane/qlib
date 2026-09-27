@@ -373,6 +373,7 @@ class FreeSnapshotReader:
     def __init__(self, data_root: str | Path, record: dict):
         self.data_root = Path(data_root)
         self.record = record
+        self._calendar: list[date] | None = None
 
     def component(self, kind: str) -> dict:
         matches = [item for item in self.record["components"] if item["kind"] == kind]
@@ -386,8 +387,10 @@ class FreeSnapshotReader:
         return self.data_root / self.component(kind)["uri"]
 
     def calendar(self) -> list[date]:
-        text = self.path("calendar").read_text().split()
-        return [date.fromisoformat(item) for item in text]
+        if self._calendar is None:
+            text = self.path("calendar").read_text().split()
+            self._calendar = [date.fromisoformat(item) for item in text]
+        return self._calendar
 
     def instruments(self, name: str = "all") -> list[dict]:
         return free_sources.load_instruments(self.path("universe").read_text()) if name == "all" \

@@ -1,0 +1,58 @@
+{
+  "factors": {
+    "momentum_20": {
+      "days": 396,
+      "ic_series_digest": "sha256:6e032d6e5c945d397e05944d6c10c5dac48842b8e88f33db33c5224c828a3607",
+      "mean_rank_ic": -0.05503121782214378,
+      "positive_share": 0.4292929292929293,
+      "std_rank_ic": 0.19827076192178666
+    },
+    "turnover_20": {
+      "days": 397,
+      "ic_series_digest": "sha256:5237a652839b5a12b909f73d5ca943a746b3d715de678ff7623a5383e9c82af7",
+      "mean_rank_ic": -0.02147335171923745,
+      "positive_share": 0.4659949622166247,
+      "std_rank_ic": 0.2795635734425682
+    },
+    "volatility_20": {
+      "days": 396,
+      "ic_series_digest": "sha256:1e9fd380c7fc19c42f5556411502f4598154b2e4fa02b9b7ad24957a740949eb",
+      "mean_rank_ic": -0.028891530851414632,
+      "positive_share": 0.47474747474747475,
+      "std_rank_ic": 0.277230181988637
+    }
+  },
+  "label": {
+    "basis": "adjusted close on the snapshot calendar",
+    "horizon": 5,
+    "kind": "forward_return",
+    "note": "last h rows have no label; suspensions inside the window are spanned"
+  },
+  "limitations": [
+    "free_community_unverified sources; exploratory only",
+    "one-word limit detection is an approximation from high==low and |change|",
+    "sell-side tradability at t+h is not yet filtered",
+    "factor values are raw; no industry/size neutralisation yet"
+  ],
+  "paths_recorded": false,
+  "slice": "csi500_factor_pipeline_first",
+  "snapshot_content_digest": "sha256:2d6f5367c1f20addf1fe260a9ef9a5d2dc964c09a0726bf3d80a6d721117966a",
+  "snapshot_id": "free_cn_20260924",
+  "tradability": {
+    "excluded_st": true,
+    "filtered_rows": 1723,
+    "missing_turnover": 0,
+    "rule": "tradestatus==1 and not one-word limit board",
+    "symbols": 500,
+    "tradable_rows": 208777
+  },
+  "universe": {
+    "name": "csi500",
+    "symbols": 500
+  },
+  "window": {
+    "end": "2026-09-24",
+    "start": "2025-01-02",
+    "trading_days": 421
+  }
+}

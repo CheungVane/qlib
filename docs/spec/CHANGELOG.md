@@ -2,6 +2,14 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — 首个特征与标签切片（T08-P 试点）
+
+- 来源：用户"可以，继续"，接续 T05 之后搭建特征/标签链路。
+- 实现：新增 `quant_workbench/factor_pipeline.py`——`aligned_series`（按快照日历对齐）、`forward_return`（日历步进标签，末尾h行无标签）、`tradable`（停牌/ST/一字板过滤，`change`按小数处理）、`momentum`/`volatility`/`mean_of`、`cross_sectional_rank`（并列取平均秩）、`rank_ic`（Spearman，重叠<3返回None）；新增 `scripts/run_factor_slice.py`。
+- 实测（csi500，2025-01-02→2026-09-24）：421个交易日、500只、208,777可交易行、过滤1,723行；均值Rank IC：20日动量−0.055、20日波动−0.029、20日平均换手−0.021，含逐因子IC序列摘要；证据见[20260927-factor-slice.json](evidence/20260927-factor-slice.json)。
+- 定位：**仅证明管线可用，不是alpha有效证据**——无行业/规模中性化、无t+h卖出可交易性过滤、无多重检验与样本外；A30/A33/A37不因此关闭，T08未完成。
+- 测试：新增9项，与数据目录/免费源合计47项通过（system python3 + numpy）；未跑工作台全量门禁（本worktree无`.venv`）。
+
 ## 2026-09-27 — T05 物化、质量门禁、旧路径与迁移（数据源切片收尾）
 
 - 来源：用户"继续t05"。

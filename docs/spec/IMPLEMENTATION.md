@@ -17,6 +17,7 @@
 | T01-U UI切换 | 完成，提交58fdeeb3（基线8dd1cf9e） | 风险/因子显式v2；输入、来源、公式与不可用原因；revision不符拒绝混显；21项JS通过及浏览器夹具验收，见[证据](evidence/20260927-t01-u.md) | T01/A34限定纠正范围通过；A30其余缺陷、真实研究及完整响应式验收仍开放 |
 | T02-D 验证v2定义冻结 | 完成（2026-09-27文档批次，无代码变更） | 冻结PSR/DSR/PBO公式与估计量约定、收益与rf口径、M/C/N与相关性假设、PBO分块/余数/秩/重复配置规则、v2 DTO与错误样例；独立参考值见[复算脚本](evidence/20260927-t02d-reference.py)与[VALIDATION §2A](VALIDATION.md) | 只通过设计门；A31/A32与A36诊断子项待T02-B实现和验收。提交哈希由下次索引刷新补齐，文档不引用自身哈希 |
 | T05-S 数据源切片（用户指定，非T05完成） | 部分完成：快照/enrichment已落盘，目录端口与快照登记已实现 | FINV release 2026-09-27下载并校验（archive SHA-256与清单一致、发布方validate `ok:true`、日历末日2026-09-24、退市股在库、北交所缺口已登记）；定池中证500、区间2015-01-05→2026-09-24；BaoStock换手率1,791/1,802只、4,601,971行；新增`free_sources.py`、`data_directory.py`（快照登记/不可变/组件清单/as-of选择/FreeSnapshotReader）、`fetch_csi500_turnover.py`、`verify_free_snapshot.py`与30项测试；快照记录见[record](evidence/20260927-free-snapshot-record.json)、校验摘要见[登记](evidence/20260927-free-snapshot.json) | T05物化引用、旧路径登记、迁移/恢复未做；A16/A17仅合成夹具与登记覆盖，完整验收未通过；A40数据访问子项未做；未跑工作台全量门禁（本worktree无`.venv`）；非csi500扩展与特征/标签管线未做 |
+| T08-P 特征与标签管线（试点，非T08完成） | 完成首片：csi500 上跑通标签/可交易过滤/因子/RankIC | `factor_pipeline.py`（日历步进标签、停牌与一字板过滤、动量/波动/换手因子、截面秩与RankIC）＋`scripts/run_factor_slice.py`；实测421个交易日、500只、208,777可交易行（过滤1,723行），20日动量RankIC均值-0.055、波动-0.029、换手-0.021，含逐因子IC序列摘要，证据见[20260927-factor-slice.json](evidence/20260927-factor-slice.json) | **只是管线可用性证据，不是alpha有效证据**：未做行业/规模中性化、未过滤t+h可交易性、未做多重检验与样本外；A30/A33/A37不因此关闭；T06/T07的账本与训练证据仍缺 |
 
 可复现：`scripts/workbench_gate.sh`；风险专项 `extensions/workbench/.venv/bin/python -m unittest discover -s extensions/workbench/tests -p 'test_risk*.py'`。新增回归在 `extensions/workbench/tests/test_risk_v2.py`，覆盖四个独立手算答案、非零rf、v1兼容、缺测不跳过或回退、未知现金流/已扣rf定义不猜测、确切revision与历史不变、CLI/API一致、CVaR尾部不足及非法参数。完整门禁中出现既有执行测试的subprocess ResourceWarning及预期故障注入日志；退出码0，不把这些日志描述为无告警。
 
@@ -80,7 +81,7 @@ T01-F证据：`extensions/workbench/.venv/bin/python -m unittest discover -s ext
 | T02 事后诊断真实性 | 定义已冻结（[VALIDATION §2A](VALIDATION.md)）；可实现 | 不依赖TrialLedger：披露选择范围、N依据、权重和及独立状态；按§2A定义卡实现，N必须进入公式并锁定输入revision。不完整集合只标探索性。出口A31/A32及A36诊断子项 |
 | T03 比较合同 | 无，可开始 | 首批回测指标字段适用表，equity/metric均验证身份缺失/差异、不同初始资金反例；服务端判方向和可比性。出口A13/A27/A28 |
 | T04 执行政策 | 无，可开始 | 持久化并发槽、截止时间、政策修订与Agent计数；启动前检查、超时终止/恢复。出口A41；上限未支持的环境不通过 |
-| T05 数据目录边界 | **接近完成**：快照登记、组件清单、目录端口、物化可复跑、bar质量门禁、旧路径登记、迁移与恢复均已实现并实测；剩余真实财务修订源与A40子项 | 按[数据源清单](DATA_SOURCES.md)实现适配器与快照身份（FINV主 + BAO校验 + EM补充）；snapshot身份→组件清单→物化引用；旧路径显式登记，未知不补造；设计并验证迁移/恢复。出口A16/A17和A40数据访问子项。A38分块可独立开展，超旧上限的真实研究须先通过A38 |
+| T05 数据目录边界 | **接近完成**：快照登记、组件清单、目录端口、物化可复跑、bar质量门禁、旧路径登记、迁移与恢复均已实现并实测；剩余真实财务修订源、真实bar覆盖门禁与A40子项 | 按[数据源清单](DATA_SOURCES.md)实现适配器与快照身份（FINV主 + BAO校验 + EM补充）；snapshot身份→组件清单→物化引用；旧路径显式登记，未知不补造；设计并验证迁移/恢复。出口A16/A17和A40数据访问子项。A38分块可独立开展，超旧上限的真实研究须先通过A38 |
 | T06 实验/模型/策略对象 | T04、T05；接口草案可先行 | 定义版本、Run/Attempt、模型输入契约/复用、StrategyVersion及TrialLedger基础记账；先冻结DTO/命令样例和迁移，再实现固定流程，无单Stage续跑。出口A35，为T07提供试验事实 |
 | T07 实际验证证据 | T02、T06 | 分折训练、折内预处理、预测/标签、测试集访问与账本快照；失败保持unverified/invalidated。出口A36其余子项，与T02合并后才可标A36通过 |
 | T08 限定真实研究 | T01、T03、T05—T07、DEC01 | 明确来源/股票池/区间的真实链路，必要历史组件通过质量与时间语义验收。出口A37；来源待选只阻塞本任务 |
