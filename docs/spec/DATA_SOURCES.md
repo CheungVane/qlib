@@ -214,7 +214,42 @@ Tushare Pro 是 FINV 的日常上游，直连可获得每日指标（市值/换�
 
 稳定性实测：EM 两次探测中一次断连、一次成功；YF 三次探测分别为 429、200（载荷很小）、429。免费抓取类来源**必须带重试、失败留痕与降级路径**，不能作为唯一来源。
 
-## 7. 未验证与风险
+## 7. 数据管线操作手册与资产清单（2026-09-27）
+
+### 7.1 磁盘资产（均在仓库之外，位于 `~/.qlib/qlib_data/`）
+
+| 资产 | 相对位置 | 用途 | 能否重建 |
+| --- | --- | --- | --- |
+| 原始归档 | `_downloads/2026-09-27/qlib_bin.tar.gz` 与 `.manifest.json` | 下载与校验的原始凭据 | 可（GitHub Release，需网络） |
+| 行情快照 | `free_cn_20260924/`（calendars/instruments/features） | 日线、复权因子、历史成分、日历 | 可（解包归档并校验） |
+| 换手率缓存 | `free_cn_20260924_enrichment/turnover/*.csv` | `turn`/`tradestatus`/`isST` | **当前不可重建**（BaoStock 黑名单，见 §6） |
+| 快照注册表 | `_registry/*.json` 与 `_registry/*.legacy.json` | 快照身份、旧路径登记 | 可由快照记录与归档重建 |
+| 物化样例 | `_registry` 同级的 `panel-csi500-*.csv` | 可复跑物化校验 | 可（同输入+同 seed 摘要一致） |
+| 迁移备份 | `registry-backup/<时间戳>/` | schema 迁移前的备份 | 可由注册表重建 |
+
+换手率缓存是**唯一不可重建**的资产：源端当前拒绝本机登录，缓存若丢失，只能等解封或改用别的来源。
+
+### 7.2 从零重建顺序（每步可独立验证）
+
+1. 校验归档并生成快照记录：`python3 scripts/verify_free_snapshot.py --data-root ~/.qlib/qlib_data --snapshot … --manifest … --archive … --enrichment … --universe csi500 --output <登记> --record-output <快照记录>`
+2. 采集换手率（源端不可用时退出码3，已写入的文件保留）：`python3 scripts/fetch_csi500_turnover.py --instruments <快照>/instruments/csi500.txt --out <enrichment> --workers 2`
+3. 发布快照、登记旧路径、跑质量门禁与物化：`python3 scripts/register_free_snapshot.py --data-root … --registry … --record … --legacy cn_data --legacy qwb_cn_current`
+4. 研究链路：`run_factor_slice.py` → `run_factor_research.py` → `run_factor_walkforward.py`
+5. 交付门禁：`scripts/workbench_gate.sh`（Python 全量 + JS）
+
+### 7.3 关键不变量（违反即拒绝，不得放宽）
+
+- 归档 `sha256` 必须等于清单值；解包日历末日必须等于 `target_trade_date`（本次均为 2026-09-24）
+- 价格是复权价（原始=复权÷factor）、volume 反向复权、amount 单位为千元
+- NaN 是缺失不是损坏；停牌日不反推股本；无缓存的标的保留缺口不补造
+- 已发布快照不可追加修改；legacy 路径不可升格为快照
+- 北交所缺口（241只止于2025-09-30）必须显式披露；csi300/500/1000 成分可规避
+
+### 7.4 替换数据源时要改什么
+
+只新增适配器与新的 `snapshot_id`：分析代码、因子脚本与门禁都不改；旧来源标 `legacy_unknown`，旧结果与旧 revision 不重标，重跑产生新快照。
+
+## 8. 未验证与风险
 
 - FINV archive 内部结构、字段单位、`$factor` 生成规则未解包核验；其许可条款中"数据"部分未核实。
 - BAO 财务数据的可用时点与修订语义未验证；只能标"近似 PIT"。
@@ -222,7 +257,7 @@ Tushare Pro 是 FINV 的日常上游，直连可获得每日指标（市值/换�
 - Tushare 积分门槛、交易所官方接口、海外数据源均未验证。
 - 尚未回答：股票池（全 A / csi300 / csi500 / csi1000）、起始区间、频率。这些属 DEC01，需在 T05/T08 落地前明确。
 
-## 8. 验收映射与下一步
+## 9. 验收映射与下一步
 
 | 后续工作 | 出口 | 状态 |
 | --- | --- | --- |
