@@ -5,7 +5,8 @@
 持续实施授权：按T01—T10逐步实施，每完成一个小里程碑回写spec，并按GOV02提交推送。**当前有两条轨道，不要混读**：
 
 - **主线（原定顺序）**：T01-R/F/U与T02-D已完成，**下一步是T02-B**（按VALIDATION §2A实现验证v2）。T02-B尚未开始。
-- **数据源轨道（用户2026-09-27明确要求）**：来源调研→下载→csi500落地，记为下表 **T05-S 数据源切片**。它是T05的前置材料，**不是T05里程碑完成**：端口接入、物化引用、旧路径登记、迁移/恢复与A16/A17均未做。
+- **数据源轨道（用户2026-09-27明确要求）**：来源调研→下载→csi500落地→因子研究切片，记为下表 **T05-S / T08-P**。T05-S 是T05的前置材料，**不是T05里程碑完成**；T08-P 是因子研究试点，**不是T08完成**。
+- **依赖声明**：因子研究运行依赖 `extensions/workbench` 的 `analysis` extra（numpy）；数据采集脚本依赖新增的 `data-fetch` extra（`baostock>=0.9.4,<1`）。本 worktree 两个 extra 都未安装（无`.venv`），实测用系统 python3 完成。
 - 因此本阶段不是"跳过T02"：用户指定了数据优先，两条轨道并行；主线顺序未变更。
 
 事实核对：代码基线58fdeeb3（数据源切片另含新增模块与脚本，见T05-S行）；文档批次6d59bc97（可执行性复审）、T02-D定义冻结与[免费数据源登记](DATA_SOURCES.md)。
@@ -17,7 +18,7 @@
 | T01-U UI切换 | 完成，提交58fdeeb3（基线8dd1cf9e） | 风险/因子显式v2；输入、来源、公式与不可用原因；revision不符拒绝混显；21项JS通过及浏览器夹具验收，见[证据](evidence/20260927-t01-u.md) | T01/A34限定纠正范围通过；A30其余缺陷、真实研究及完整响应式验收仍开放 |
 | T02-D 验证v2定义冻结 | 完成（2026-09-27文档批次，无代码变更） | 冻结PSR/DSR/PBO公式与估计量约定、收益与rf口径、M/C/N与相关性假设、PBO分块/余数/秩/重复配置规则、v2 DTO与错误样例；独立参考值见[复算脚本](evidence/20260927-t02d-reference.py)与[VALIDATION §2A](VALIDATION.md) | 只通过设计门；A31/A32与A36诊断子项待T02-B实现和验收。提交哈希由下次索引刷新补齐，文档不引用自身哈希 |
 | T05-S 数据源切片（用户指定，非T05完成） | 部分完成：快照/enrichment已落盘，目录端口与快照登记已实现 | FINV release 2026-09-27下载并校验（archive SHA-256与清单一致、发布方validate `ok:true`、日历末日2026-09-24、退市股在库、北交所缺口已登记）；定池中证500、区间2015-01-05→2026-09-24；BaoStock换手率1,791/1,802只、4,601,971行；新增`free_sources.py`、`data_directory.py`（快照登记/不可变/组件清单/as-of选择/FreeSnapshotReader）、`fetch_csi500_turnover.py`、`verify_free_snapshot.py`与30项测试；快照记录见[record](evidence/20260927-free-snapshot-record.json)、校验摘要见[登记](evidence/20260927-free-snapshot.json) | T05物化引用、旧路径登记、迁移/恢复未做；A16/A17仅合成夹具与登记覆盖，完整验收未通过；A40数据访问子项未做；未跑工作台全量门禁（本worktree无`.venv`）；非csi500扩展与特征/标签管线未做 |
-| T08-P 特征与标签管线（试点，非T08完成） | 完成首片：csi500 上跑通标签/可交易过滤/因子/RankIC | `factor_pipeline.py`（日历步进标签、停牌与一字板过滤、动量/波动/换手因子、截面秩与RankIC）＋`scripts/run_factor_slice.py`；实测421个交易日、500只、208,777可交易行（过滤1,723行），20日动量RankIC均值-0.055、波动-0.029、换手-0.021，含逐因子IC序列摘要，证据见[20260927-factor-slice.json](evidence/20260927-factor-slice.json) | **只是管线可用性证据，不是alpha有效证据**：未做行业/规模中性化、未过滤t+h可交易性、未做多重检验与样本外；A30/A33/A37不因此关闭；T06/T07的账本与训练证据仍缺 |
+| T08-P 因子研究管线（试点，非T08完成） | 完成：标签/两端可交易过滤/暴露/中性化/评价/FDR全链路可跑 | `factor_pipeline.py`（日历步进标签、t与t+h两侧可交易、流通市值与PIT统计行业、size+行业中性化、NW t、分位差、秩换手、BH-FDR）＋`run_factor_slice.py`/`run_factor_research.py`；实测421交易日、500只、12假设：h=5动量raw −0.055(t−3.11)→中性化−0.051(t−4.40)，换手−0.022(t−0.84)→−0.043(t−2.94)，7/12通过FDR；证据见[factor-research](evidence/20260927-factor-research.json) | **仍不是alpha或可交易证据**：h=5分位差−0.22%~+0.61%且与IC符号不一致、行业为统计代理、size由推导得到、未做beta/风格中性化与样本外滚动检验；A30/A33/A37不关闭；T06/T07账本与训练证据仍缺 |
 
 可复现：`scripts/workbench_gate.sh`；风险专项 `extensions/workbench/.venv/bin/python -m unittest discover -s extensions/workbench/tests -p 'test_risk*.py'`。新增回归在 `extensions/workbench/tests/test_risk_v2.py`，覆盖四个独立手算答案、非零rf、v1兼容、缺测不跳过或回退、未知现金流/已扣rf定义不猜测、确切revision与历史不变、CLI/API一致、CVaR尾部不足及非法参数。完整门禁中出现既有执行测试的subprocess ResourceWarning及预期故障注入日志；退出码0，不把这些日志描述为无告警。
 

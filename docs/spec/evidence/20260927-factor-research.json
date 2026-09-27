@@ -1,0 +1,252 @@
+{
+  "factor_rank_turnover": {
+    "momentum_20": {
+      "days": 400,
+      "mean_rank_turnover": 0.07135733216542599
+    },
+    "turnover_20": {
+      "days": 401,
+      "mean_rank_turnover": 0.008853048787377062
+    },
+    "volatility_20": {
+      "days": 400,
+      "mean_rank_turnover": 0.02449949251879181
+    }
+  },
+  "families": {
+    "fdr": "benjamini_hochberg",
+    "hypotheses_tested": 12
+  },
+  "hypotheses": {
+    "momentum_20_h10_neutralized": {
+      "days": 391,
+      "factor": "momentum_20",
+      "fdr_q": 0.0058323675835151335,
+      "horizon": 10,
+      "ic_series_digest": "sha256:2d85a4da0c451d363f64b7c95610a561e3b45fdc0c9d4b68329423c3a0534513",
+      "icir": -0.39488805324499787,
+      "mean_rank_ic": -0.05394916538113953,
+      "nw_t": -3.2984906237955536,
+      "p_value": 0.000972061263919189,
+      "positive_share": 0.340153452685422,
+      "std_rank_ic": 0.13661888461251623,
+      "variant": "neutralized"
+    },
+    "momentum_20_h10_raw": {
+      "days": 391,
+      "factor": "momentum_20",
+      "fdr_q": 0.04529896785121844,
+      "horizon": 10,
+      "ic_series_digest": "sha256:3fe7bf081dfe515885a7b337a61d5f094e5c1f310c700d5ce18010ccc2c07b84",
+      "icir": -0.2763971487938653,
+      "mean_rank_ic": -0.05528519278684796,
+      "nw_t": -2.219917064616746,
+      "p_value": 0.026424397913210756,
+      "positive_share": 0.4219948849104859,
+      "std_rank_ic": 0.20002085053373397,
+      "variant": "raw"
+    },
+    "momentum_20_h5_neutralized": {
+      "days": 396,
+      "factor": "momentum_20",
+      "fdr_q": 0.00012698245438979455,
+      "horizon": 5,
+      "ic_series_digest": "sha256:f803b9a2bf8cf73c6054dee7bf49e926ac922d78f0a916e6f5446ec70e7fec25",
+      "icir": -0.3789289142159655,
+      "mean_rank_ic": -0.05073533769998701,
+      "nw_t": -4.4049286281292925,
+      "p_value": 1.0581871199149545e-05,
+      "positive_share": 0.35353535353535354,
+      "std_rank_ic": 0.1338914392557309,
+      "variant": "neutralized"
+    },
+    "momentum_20_h5_raw": {
+      "days": 396,
+      "factor": "momentum_20",
+      "fdr_q": 0.0073850489480493135,
+      "horizon": 5,
+      "ic_series_digest": "sha256:2ea2cda194306b17b656f98f20fd0cdf92247caad9a0c9f9def5f8dfab6e4682",
+      "icir": -0.27863249699115533,
+      "mean_rank_ic": -0.05526548259912945,
+      "nw_t": -3.113909318845976,
+      "p_value": 0.0018462622370123282,
+      "positive_share": 0.4292929292929293,
+      "std_rank_ic": 0.19834543061530885,
+      "variant": "raw"
+    },
+    "turnover_20_h10_neutralized": {
+      "days": 392,
+      "factor": "turnover_20",
+      "fdr_q": 0.04529896785121844,
+      "horizon": 10,
+      "ic_series_digest": "sha256:edcab1c775020c1753a8f051ec15c67516943da51103fe4e39890470156ae86d",
+      "icir": -0.29371594149379854,
+      "mean_rank_ic": -0.04793957065322401,
+      "nw_t": -2.2211751385357084,
+      "p_value": 0.02633910139746372,
+      "positive_share": 0.41581632653061223,
+      "std_rank_ic": 0.163217462455085,
+      "variant": "neutralized"
+    },
+    "turnover_20_h10_raw": {
+      "days": 392,
+      "factor": "turnover_20",
+      "fdr_q": 0.5734915792811652,
+      "horizon": 10,
+      "ic_series_digest": "sha256:b7aa36ba112ef3ceb3e87e9345d86fe6ada5d0449b3786e358c457f416902f98",
+      "icir": -0.07379670839429824,
+      "mean_rank_ic": -0.020987014298136635,
+      "nw_t": -0.5629167419808776,
+      "p_value": 0.5734915792811652,
+      "positive_share": 0.5051020408163265,
+      "std_rank_ic": 0.28438957176792123,
+      "variant": "raw"
+    },
+    "turnover_20_h5_neutralized": {
+      "days": 397,
+      "factor": "turnover_20",
+      "fdr_q": 0.009736483769724719,
+      "horizon": 5,
+      "ic_series_digest": "sha256:90f1d6b350b7f4fa91f3c30b2d448ecbf02c50ba139d79e316b4d7aac046a18b",
+      "icir": -0.2689792952380977,
+      "mean_rank_ic": -0.042767368428412035,
+      "nw_t": -2.943475548971235,
+      "p_value": 0.0032454945899082393,
+      "positive_share": 0.4080604534005038,
+      "std_rank_ic": 0.1589987377673616,
+      "variant": "neutralized"
+    },
+    "turnover_20_h5_raw": {
+      "days": 397,
+      "factor": "turnover_20",
+      "fdr_q": 0.4376133345856394,
+      "horizon": 5,
+      "ic_series_digest": "sha256:84e0b4fdc0241a4badb3d6034d8ed4e3de1fb739a1ca785d449548b1f7591fd2",
+      "icir": -0.07738413933967501,
+      "mean_rank_ic": -0.021632026005903082,
+      "nw_t": -0.8413050883539513,
+      "p_value": 0.4001770407942867,
+      "positive_share": 0.4659949622166247,
+      "std_rank_ic": 0.27954082310006767,
+      "variant": "raw"
+    },
+    "volatility_20_h10_neutralized": {
+      "days": 391,
+      "factor": "volatility_20",
+      "fdr_q": 0.10191880649958024,
+      "horizon": 10,
+      "ic_series_digest": "sha256:d9acf9b440431bd9d3b58fbfdb8a79aa3b1e0dffa2389a7a5fda2384edcc708d",
+      "icir": -0.2368661488259462,
+      "mean_rank_ic": -0.0427082958608367,
+      "nw_t": -1.8253656386162955,
+      "p_value": 0.06794587099972016,
+      "positive_share": 0.46035805626598464,
+      "std_rank_ic": 0.18030561172428053,
+      "variant": "neutralized"
+    },
+    "volatility_20_h10_raw": {
+      "days": 391,
+      "factor": "volatility_20",
+      "fdr_q": 0.4376133345856394,
+      "horizon": 10,
+      "ic_series_digest": "sha256:21ed555599e1dadff54ae1aa06c8ebade849e2440e346b0e579a5a09ab6cefd9",
+      "icir": -0.11005639374224692,
+      "mean_rank_ic": -0.030904913845714203,
+      "nw_t": -0.8395770763345792,
+      "p_value": 0.40114555670350277,
+      "positive_share": 0.5012787723785166,
+      "std_rank_ic": 0.28080979936607586,
+      "variant": "raw"
+    },
+    "volatility_20_h5_neutralized": {
+      "days": 396,
+      "factor": "volatility_20",
+      "fdr_q": 0.028868498460851523,
+      "horizon": 5,
+      "ic_series_digest": "sha256:5d4374a29356a4b44ee4b0e2d7b6025ba2faf65cf3f17e61e251e122bc242fe6",
+      "icir": -0.22678437549987374,
+      "mean_rank_ic": -0.04061515942863153,
+      "nw_t": -2.511305911195788,
+      "p_value": 0.0120285410253548,
+      "positive_share": 0.4065656565656566,
+      "std_rank_ic": 0.17909152400428108,
+      "variant": "neutralized"
+    },
+    "volatility_20_h5_raw": {
+      "days": 396,
+      "factor": "volatility_20",
+      "fdr_q": 0.3415915223397606,
+      "horizon": 5,
+      "ic_series_digest": "sha256:0766079506cf4cc12c316349432dd0ab6bbf78d2cf4f3ca803ac3e2cb2bf4806",
+      "icir": -0.10477680630534247,
+      "mean_rank_ic": -0.029055502625654792,
+      "nw_t": -1.1354337109561274,
+      "p_value": 0.25619364175482046,
+      "positive_share": 0.4772727272727273,
+      "std_rank_ic": 0.2773085346863954,
+      "variant": "raw"
+    }
+  },
+  "industry": {
+    "clusters": 8,
+    "kind": "statistical_industry_trailing_returns",
+    "note": "clusters use past returns only; not a named industry classification",
+    "points": 15,
+    "recluster_step_days": 21,
+    "window": 120
+  },
+  "label": {
+    "basis": "adjusted close on snapshot calendar",
+    "horizons": [
+      5,
+      10
+    ],
+    "two_sided_tradability": true
+  },
+  "limitations": [
+    "free_community_unverified inputs; exploratory only, not alpha evidence",
+    "industry is a statistical proxy, not a PIT named classification",
+    "size uses derived float shares from turnover; corporate-action jumps remain",
+    "no risk-model (beta/风格) neutralisation beyond size and industry",
+    "one-word limit detection is approximate"
+  ],
+  "paths_recorded": false,
+  "quantile_spread_h5": {
+    "momentum_20_neutralized": {
+      "days": 396,
+      "mean_spread": -0.002180635935092828
+    },
+    "momentum_20_raw": {
+      "days": 396,
+      "mean_spread": -0.0008261852628322617
+    },
+    "turnover_20_neutralized": {
+      "days": 397,
+      "mean_spread": -0.0003753243447978635
+    },
+    "turnover_20_raw": {
+      "days": 397,
+      "mean_spread": 0.005107277969784351
+    },
+    "volatility_20_neutralized": {
+      "days": 396,
+      "mean_spread": 0.002027732741221641
+    },
+    "volatility_20_raw": {
+      "days": 396,
+      "mean_spread": 0.006077049798901355
+    }
+  },
+  "slice": "csi500_factor_research",
+  "snapshot_content_digest": "sha256:2d6f5367c1f20addf1fe260a9ef9a5d2dc964c09a0726bf3d80a6d721117966a",
+  "snapshot_id": "free_cn_20260924",
+  "universe": {
+    "name": "csi500",
+    "symbols": 500
+  },
+  "window": {
+    "end": "2026-09-24",
+    "start": "2025-01-02",
+    "trading_days": 421
+  }
+}

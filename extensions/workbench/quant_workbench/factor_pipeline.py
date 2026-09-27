@@ -60,6 +60,13 @@ def forward_return(closes: Sequence[float], horizon: int = DEFAULT_HORIZON) -> l
     return labels
 
 
+def label_tradability(flags: Sequence[bool], horizon: int = DEFAULT_HORIZON) -> list[bool]:
+    """Buy-side at t **and** sell-side at t+h must both be tradable."""
+    total = len(flags)
+    return [bool(flags[index] and index + horizon < total and flags[index + horizon])
+            for index in range(total)]
+
+
 def tradable(values: dict[str, Sequence[float]], dates: Sequence[date],
              enrichment: dict[str, dict], *, exclude_st: bool = True) -> list[bool]:
     """Suspended days and one-word limit boards are not tradable (T+1 approximation)."""
@@ -113,6 +120,148 @@ def mean_of(values: Sequence[float], window: int) -> list[float]:
         if len(chunk) == window:
             result[index] = sum(chunk) / window
     return result
+
+
+# -- size and industry exposures --------------------------------------------
+def float_shares_from_series(volumes: Sequence[float], factors: Sequence[float],
+                             turns: Sequence[float]) -> list[float]:
+    """Daily float shares; delegates to the verified free_sources formula."""
+    result = []
+    for volume, factor, turn in zip(volumes, factors, turns):
+        if not all(math.isfinite(item) for item in (volume, factor, turn)) or turn <= 0 or factor <= 0:
+            result.append(float("nan"))
+            continue
+        result.append(free_sources.float_shares_from_archive(volume, factor, turn))
+    return result
+
+
+def log_float_cap(closes: Sequence[float], factors: Sequence[float],
+                  volumes: Sequence[float], turns: Sequence[float]) -> list[float]:
+    """ln(raw close x float shares); raw close = adjusted close / factor."""
+    shares = float_shares_from_series(volumes, factors, turns)
+    result = []
+    for close, factor, share in zip(closes, factors, shares):
+        if not all(math.isfinite(item) for item in (close, factor, share)) or factor <= 0 or share <= 0:
+            result.append(float("nan"))
+            continue
+        result.append(math.log((close / factor) * share))
+    return result
+
+
+def rolling_industry(returns_by_symbol: dict[str, Sequence[float]], dates: Sequence[date],
+                     *, window: int = 120, n_clusters: int = 8, step: int = 21) -> dict[str, dict[str, int]]:
+    """Cluster trailing return windows on a fixed grid: labels use past data only (PIT)."""
+    from .free_sources import statistical_industry
+
+    result: dict[str, dict[str, int]] = {}
+    for index in range(len(dates)):
+        if index < window or index % step:
+            continue
+        trailing = {symbol: list(values[index - window + 1:index + 1])
+                    for symbol, values in returns_by_symbol.items()}
+        usable = {symbol: values for symbol, values in trailing.items()
+                  if len(values) == window and all(math.isfinite(value) for value in values)
+                  and len(set(values)) > 1}
+        if len(usable) < n_clusters * 2:
+            continue
+        result[dates[index].isoformat()] = statistical_industry(usable, n_clusters=n_clusters)
+    return result
+
+
+def neutralize(factor: dict[str, float], size: dict[str, float],
+               industry: dict[str, int] | None = None) -> dict[str, float]:
+    """Residualise the factor on size (log float cap) and industry dummies."""
+    try:
+        import numpy as np
+    except ImportError as error:  # pragma: no cover
+        raise DataDirectoryError("neutralize needs numpy (install the 'analysis' extra)") from error
+
+    symbols = [symbol for symbol in sorted(factor)
+               if math.isfinite(factor.get(symbol, float("nan")))
+               and math.isfinite(size.get(symbol, float("nan")))]
+    if len(symbols) < 20:
+        return {}
+    industry = industry or {}
+    columns = [np.ones(len(symbols)), np.array([size[symbol] for symbol in symbols], dtype=float)]
+    categories = sorted({industry[symbol] for symbol in symbols if symbol in industry})
+    for category in categories[1:]:
+        columns.append(np.array([1.0 if industry.get(symbol) == category else 0.0
+                                 for symbol in symbols]))
+    matrix = np.column_stack(columns)
+    target = np.array([factor[symbol] for symbol in symbols], dtype=float)
+    coefficients, *_ = np.linalg.lstsq(matrix, target, rcond=None)
+    residual = target - matrix @ coefficients
+    return {symbol: float(value) for symbol, value in zip(symbols, residual)}
+
+
+def rank_turnover(previous: dict[str, float], current: dict[str, float]) -> float | None:
+    """Mean absolute change of cross-sectional percentile rank between two days."""
+    before = cross_sectional_rank(previous)
+    after = cross_sectional_rank(current)
+    shared = sorted(before.keys() & after.keys())
+    if len(shared) < 3:
+        return None
+    return statistics.fmean(abs(after[symbol] - before[symbol]) for symbol in shared)
+
+
+def quantile_spread(factor: dict[str, float], label: dict[str, float],
+                    groups: int = 5) -> dict | None:
+    """Mean label per factor quantile plus the Q_top-Q_bottom spread."""
+    shared = sorted((symbol for symbol in factor.keys() & label.keys()
+                     if math.isfinite(factor[symbol]) and math.isfinite(label[symbol])),
+                    key=lambda symbol: factor[symbol])
+    if len(shared) < groups * 3:
+        return None
+    buckets: list[list[float]] = [[] for _ in range(groups)]
+    for position, symbol in enumerate(shared):
+        bucket = min(groups - 1, position * groups // len(shared))
+        buckets[bucket].append(label[symbol])
+    means = [statistics.fmean(bucket) if bucket else float("nan") for bucket in buckets]
+    if any(not math.isfinite(value) for value in means):
+        return None
+    return {"group_means": means, "spread_top_bottom": means[-1] - means[0],
+            "symbols": len(shared)}
+
+
+# -- inference ---------------------------------------------------------------
+def newey_west_t(values: Sequence[float], lags: int) -> float | None:
+    """NW(Bartlett) t-statistic of the mean; same convention as FACTOR_ANALYSIS §4.1."""
+    series = [value for value in values if math.isfinite(value)]
+    count = len(series)
+    if count < max(10, lags + 2):
+        return None
+    average = statistics.fmean(series)
+    centred = [value - average for value in series]
+    gamma0 = sum(value * value for value in centred) / count
+    omega = gamma0
+    for lag in range(1, lags + 1):
+        covariance = sum(centred[index] * centred[index - lag]
+                         for index in range(lag, count)) / count
+        omega += 2 * (1 - lag / (lags + 1)) * covariance
+    if omega <= 0:
+        return None
+    return average / math.sqrt(omega / count)
+
+
+def benjamini_hochberg(p_values: dict[str, float]) -> dict[str, float]:
+    """BH-FDR q-values over the tested hypotheses (family = the given mapping)."""
+    items = [(key, value) for key, value in p_values.items() if math.isfinite(value)]
+    total = len(items)
+    if not total:
+        return {}
+    ordered = sorted(items, key=lambda item: item[1])
+    q_values, running = {}, 1.0
+    for rank in range(total, 0, -1):
+        key, value = ordered[rank - 1]
+        running = min(running, value * total / rank)
+        q_values[key] = min(1.0, running)
+    return q_values
+
+
+def normal_two_sided_p(t_stat: float | None) -> float | None:
+    if t_stat is None or not math.isfinite(t_stat):
+        return None
+    return math.erfc(abs(t_stat) / math.sqrt(2))
 
 
 def cross_sectional_rank(values: dict[str, float]) -> dict[str, float]:
