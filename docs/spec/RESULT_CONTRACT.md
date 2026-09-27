@@ -104,7 +104,7 @@ comparison为中立证据对象，不固定要求cn_scenario。未知字段不�
 
 ### 首批定义卡、版本选择与验收样例
 
-风险、因子分析API/CLI已增加 `analysis_version=1|2`（CLI对应 `--analysis-version`）；验证分析的同名版本机制仍待T02实现，不能据此认为验证接口已支持版本2。风险/因子省略参数时保留版本1响应，工作台UI已在T01-U显式请求2。版本1保持原字段/数值及既有来源说明；CLI文本/界面呈现旧版时额外标注“旧定义，未满足当前纠正合同”，不能宣称符合纠正定义；版本2使用新的响应schema_version及定义卡，不改变结果包schema_version或 `/v1` 路径含义。版本1停用须另记录兼容决定，不能把默认值悄悄切换。
+风险、因子分析API/CLI已增加 `analysis_version=1|2`（CLI对应 `--analysis-version`）；验证分析的同名版本机制已在[验证口径](VALIDATION.md) §2A冻结定义与参考值、实现归T02-B，当前不能据此认为验证接口已支持版本2。风险/因子省略参数时保留版本1响应，工作台UI已在T01-U显式请求2。版本1保持原字段/数值及既有来源说明；CLI文本/界面呈现旧版时额外标注“旧定义，未满足当前纠正合同”，不能宣称符合纠正定义；版本2使用新的响应schema_version及定义卡，不改变结果包schema_version或 `/v1` 路径含义。版本1停用须另记录兼容决定，不能把默认值悄悄切换。
 
 版本2风险输出用 `sortino_target_downside` 替代旧 `sortino`；因子输出用新相关相似度/距离字段，旧 `redundancy` 不出现在版本2中。每个计算项附definition_id、formula、input_refs（确切结果revision/因子panel/数据snapshot身份）、input_basis（绝对/相对谁、成本前后）、parameters、availability/reason；同输入以新公式复算是新分析结果，不改旧ResultRevision。参数、输入引用与定义版本完整一致才可复算对照，持久化报告另存不可变报告身份。
 
