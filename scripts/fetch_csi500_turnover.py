@@ -24,7 +24,9 @@ import argparse
 import json
 import os
 import sys
+import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 
 _STATE: dict = {}
@@ -89,15 +91,27 @@ def main() -> int:
     parser.add_argument("--out", required=True)
     parser.add_argument("--start", default="2015-01-01")
     parser.add_argument("--end", default="2026-09-30")
-    parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("--workers", type=int, default=2,
+                        help="keep this low: heavy concurrency got this IP blacklisted once")
+    parser.add_argument("--sleep", type=float, default=0.0,
+                        help="seconds to sleep between submissions (be a considerate client)")
     parser.add_argument("--limit", type=int, default=0, help="0 means all")
     args = parser.parse_args()
 
     try:
-        import baostock  # noqa: F401
+        import baostock
     except ImportError:
         print("baostock is required: pip install baostock", file=sys.stderr)
         return 2
+
+    preflight = baostock.login()
+    if preflight.error_code != "0":
+        print(f"baostock refused the connection: {preflight.error_code} {preflight.error_msg}\n"
+              "the free source is unavailable (rate limiting or blacklisting); the cached "
+              "turnover files remain usable, retry later with lower --workers",
+              file=sys.stderr)
+        return 3
+    baostock.logout()
 
     universe = load_universe(Path(args.instruments).expanduser())
     if args.limit:
@@ -119,16 +133,25 @@ def main() -> int:
                     "symbols": unsupported}, ensure_ascii=False, indent=2) + "\n")
 
     done = errors = 0
-    with ProcessPoolExecutor(max_workers=max(1, args.workers), initializer=_init_worker) as pool:
-        futures = {pool.submit(_fetch_symbol, task): task[0] for task in tasks}
-        for future in as_completed(futures):
-            symbol, status = future.result()
-            done += 1
-            if not status.startswith(("ok", "skipped")):
-                errors += 1
-                print(f"[warn] {symbol}: {status}", file=sys.stderr)
-            if done % 25 == 0 or done == len(tasks):
-                print(f"[progress] {done}/{len(tasks)} symbols, errors={errors}", flush=True)
+    try:
+        with ProcessPoolExecutor(max_workers=max(1, args.workers), initializer=_init_worker) as pool:
+            futures = {}
+            for task in tasks:
+                futures[pool.submit(_fetch_symbol, task)] = task[0]
+                if args.sleep:
+                    time.sleep(args.sleep)
+            for future in as_completed(futures):
+                symbol, status = future.result()
+                done += 1
+                if not status.startswith(("ok", "skipped")):
+                    errors += 1
+                    print(f"[warn] {symbol}: {status}", file=sys.stderr)
+                if done % 25 == 0 or done == len(tasks):
+                    print(f"[progress] {done}/{len(tasks)} symbols, errors={errors}", flush=True)
+    except BrokenProcessPool:
+        print(f"worker pool died after {done} symbols (likely a refused login); "
+              "already-written files are kept, rerun later", file=sys.stderr)
+        return 3
 
     print(json.dumps({"symbols": len(universe), "fetched_or_skipped": done,
                       "errors": errors, "unsupported": len(unsupported),

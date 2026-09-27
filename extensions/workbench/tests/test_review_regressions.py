@@ -63,7 +63,7 @@ class QueryRegressionTests(unittest.TestCase):
         with self.assertRaises(ContractError): validate_package(p)
         # Simulate legacy stored offset text without modifying immutable objects.
         a=self.publish(package(),'a');b=self.publish(package(),'b')
-        with self.repo._connect() as conn:
+        with self.repo._connection() as conn:
             conn.execute('UPDATE runs SET created_at=? WHERE run_id=?',('2026-01-01T01:00:00+01:00',a))
             conn.execute('UPDATE runs SET created_at=? WHERE run_id=?',('2026-01-01T00:30:00Z',b))
         first=self.s.list_runs(1);self.assertEqual(first['items'][0]['run_id'],b)

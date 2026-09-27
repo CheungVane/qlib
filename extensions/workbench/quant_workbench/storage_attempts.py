@@ -31,7 +31,7 @@ class AttemptsMixin:
             record.get("ended_at"), record.get("heartbeat_at"), record.get("cancel_requested_at"),
             record["created_at"],
         )
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             try:
                 conn.execute(
@@ -51,12 +51,12 @@ class AttemptsMixin:
         return self._attempt_row(row), True
 
     def get_attempt(self, attempt_id: str) -> dict[str, Any] | None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute("SELECT * FROM attempts WHERE attempt_id=?", (attempt_id,)).fetchone()
         return self._attempt_row(row) if row else None
 
     def find_attempt_by_key(self, idempotency_key: str) -> dict[str, Any] | None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute("SELECT * FROM attempts WHERE idempotency_key=?", (idempotency_key,)).fetchone()
         return self._attempt_row(row) if row else None
 
@@ -75,7 +75,7 @@ class AttemptsMixin:
             values.append(value)
         columns.append("updated_at=?")
         values.extend((datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"), attempt_id))
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             cursor = conn.execute(f"UPDATE attempts SET {','.join(columns)} WHERE attempt_id=?", values)
             if cursor.rowcount == 0:
@@ -91,7 +91,7 @@ class AttemptsMixin:
         query = "SELECT * FROM attempts"
         params: list[Any] = []
         if cursor:
-            with self._connect() as conn:
+            with self._connection() as conn:
                 anchor = conn.execute("SELECT created_at,attempt_id FROM attempts WHERE attempt_id=?", (cursor,)).fetchone()
             if anchor is None:
                 raise ValueError("unknown cursor")
@@ -100,7 +100,7 @@ class AttemptsMixin:
             params.extend((anchor["created_at"], anchor["created_at"], anchor["attempt_id"]))
         query += " ORDER BY instant_order(created_at) DESC, attempt_id DESC LIMIT ?"
         params.append(limit + 1)
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(query, params).fetchall()
         more = len(rows) > limit
         items = [self._attempt_row(row) for row in rows[:limit]]
@@ -110,7 +110,7 @@ class AttemptsMixin:
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 500:
             raise ValueError("limit must be between 1 and 500")
         placeholders = ",".join("?" for _ in ATTEMPT_OPEN_STATUSES)
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(
                 f"SELECT * FROM attempts WHERE status IN ({placeholders}) "
                 "ORDER BY instant_order(created_at) ASC LIMIT ?", (*ATTEMPT_OPEN_STATUSES, limit)).fetchall()
@@ -133,7 +133,7 @@ class AttemptsMixin:
                 "receipt_id, source_instance_id, external_id, adapter_version, status and imported_at are required")
         if record["status"] not in IMPORT_STATUSES:
             raise ValueError(f"unknown import status: {record['status']}")
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             conn.execute(
                 """INSERT INTO imports(receipt_id,attempt_id,run_id,revision_id,source_instance_id,external_id,
@@ -147,7 +147,7 @@ class AttemptsMixin:
         return dict(row)
 
     def latest_import(self, attempt_id: str) -> dict[str, Any] | None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute(
                 "SELECT * FROM imports WHERE attempt_id=? ORDER BY instant_order(imported_at) DESC LIMIT 1",
                 (attempt_id,)).fetchone()
@@ -162,7 +162,7 @@ class AttemptsMixin:
             params.append(attempt_id)
         query += " ORDER BY instant_order(imported_at) DESC LIMIT ?"
         params.append(limit)
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(query, params).fetchall()
         return [dict(row) for row in rows]
 
@@ -172,7 +172,7 @@ class AttemptsMixin:
             raise ValueError("window_seconds must be between 60 and 2592000")
         now = datetime.now(timezone.utc)
         cutoff = (now - timedelta(seconds=window_seconds)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(
                 """SELECT kind, status, started_at, ended_at FROM attempts
                    WHERE instant_order(created_at) >= instant_order(?)""", (cutoff,)).fetchall()

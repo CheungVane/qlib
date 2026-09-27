@@ -20,7 +20,7 @@ class ResultsMixin:
         run_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"quant-workbench:{identity}"))
         if self.before_commit:
             self.before_commit()
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             previous = conn.execute(
                 "SELECT run_id FROM runs WHERE source_instance_id=? AND external_id=?",
@@ -56,7 +56,7 @@ class ResultsMixin:
                    JOIN revisions v ON v.revision_id=r.latest_revision_id"""
         params: list[Any] = []
         if cursor:
-            with self._connect() as conn:
+            with self._connection() as conn:
                 anchor = conn.execute("SELECT created_at,run_id FROM runs WHERE run_id=?", (cursor,)).fetchone()
             if anchor is None:
                 raise ValueError("unknown cursor")
@@ -64,21 +64,21 @@ class ResultsMixin:
             params.extend((anchor["created_at"], anchor["created_at"], anchor["run_id"]))
         query += " ORDER BY instant_order(r.created_at) DESC,r.run_id DESC LIMIT ?"
         params.append(limit + 1)
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(query, params).fetchall()
         more = len(rows) > limit
         items = [self._summary(row) for row in rows[:limit]]
         return {"items": items, "next_cursor": items[-1]["run_id"] if more else None}
 
     def get_run(self, run_id: str) -> dict[str, Any] | None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute("""SELECT r.*,v.revision_id,v.object_key,v.published_at FROM runs r
                                   JOIN revisions v ON v.revision_id=r.latest_revision_id WHERE r.run_id=?""",
                                (run_id,)).fetchone()
         return self._summary(row) if row else None
 
     def list_revisions(self, run_id: str) -> list[dict[str, Any]]:
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute("SELECT revision_id,content_hash,adapter_version,published_at FROM revisions WHERE run_id=? ORDER BY published_at,revision_id",
                                 (run_id,)).fetchall()
         return [dict(row) for row in rows]
@@ -92,7 +92,7 @@ class ResultsMixin:
         query = ("SELECT revision_id,content_hash,adapter_version,published_at FROM revisions WHERE run_id=?")
         params: list[Any] = [run_id]
         if cursor:
-            with self._connect() as conn:
+            with self._connection() as conn:
                 anchor = conn.execute(
                     "SELECT published_at FROM revisions WHERE run_id=? AND revision_id=?",
                     (run_id, cursor)).fetchone()
@@ -103,14 +103,14 @@ class ResultsMixin:
             params.extend((anchor["published_at"], anchor["published_at"], cursor))
         query += " ORDER BY instant_order(published_at) DESC, revision_id DESC LIMIT ?"
         params.append(limit + 1)
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(query, params).fetchall()
         more = len(rows) > limit
         items = [dict(row) for row in rows[:limit]]
         return {"items": items, "next_cursor": items[-1]["revision_id"] if more else None}
 
     def get_revision(self, run_id: str, revision_id: str | None = None) -> dict[str, Any] | None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute("""SELECT v.* FROM revisions v JOIN runs r ON r.run_id=v.run_id
                                   WHERE v.run_id=? AND v.revision_id=COALESCE(?,r.latest_revision_id)""",
                                (run_id, revision_id)).fetchone()

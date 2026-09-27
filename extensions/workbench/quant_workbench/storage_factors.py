@@ -19,7 +19,7 @@ class FactorsMixin:
         dataset_version = (identity.get("dataset") or {}).get("version")
         created_at = identity.get("created_at") or datetime.now(timezone.utc).isoformat(
             timespec="milliseconds").replace("+00:00", "Z")
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
                 """SELECT factor_id FROM factors WHERE source_instance_id=? AND external_id=?
@@ -68,19 +68,19 @@ class FactorsMixin:
         return record
 
     def list_factors(self) -> list[dict[str, Any]]:
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(
                 """SELECT f.*, (SELECT COUNT(*) FROM factor_panels p WHERE p.factor_id=f.factor_id) AS panel_count
                    FROM factors f ORDER BY instant_order(f.created_at) DESC, f.factor_id DESC""").fetchall()
         return [self._factor_row(row) for row in rows]
 
     def get_factor(self, factor_id: str) -> dict[str, Any] | None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute("SELECT * FROM factors WHERE factor_id=?", (factor_id,)).fetchone()
         return self._factor_row(row) if row else None
 
     def list_factor_panels(self, factor_id: str) -> list[dict[str, Any]]:
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(
                 """SELECT panel_id,factor_id,content_hash,object_key,date_count,instrument_count,cell_count,
                    valid_count,start_date,end_date,published_at FROM factor_panels WHERE factor_id=?

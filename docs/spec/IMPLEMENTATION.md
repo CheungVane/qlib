@@ -6,7 +6,7 @@
 
 - **主线（原定顺序）**：T01-R/F/U与T02-D已完成，**下一步是T02-B**（按VALIDATION §2A实现验证v2）。T02-B尚未开始。
 - **数据源轨道（用户2026-09-27明确要求）**：来源调研→下载→csi500落地→因子研究切片，记为下表 **T05-S / T08-P**。T05-S 是T05的前置材料，**不是T05里程碑完成**；T08-P 是因子研究试点，**不是T08完成**。
-- **依赖声明**：因子研究运行依赖 `extensions/workbench` 的 `analysis` extra（numpy）；数据采集脚本依赖新增的 `data-fetch` extra（`baostock>=0.9.4,<1`）。本 worktree 两个 extra 都未安装（无`.venv`），实测用系统 python3 完成。
+- **依赖与环境（2026-09-27补齐）**：`extensions/workbench/.venv` 已按 `analysis`+`api`+`test`+`data-fetch`+`qlib-import` 五组 extra 安装（Python 3.14.7，`uv.lock`同步更新）；全量门禁 `scripts/workbench_gate.sh` **通过：Python 196项（2跳过）+ JS 21项**。安装过程中暴露并修复了既有的 sqlite 连接泄漏（见CHANGELOG）。
 - 因此本阶段不是"跳过T02"：用户指定了数据优先，两条轨道并行；主线顺序未变更。
 
 事实核对：代码基线58fdeeb3（数据源切片另含新增模块与脚本，见T05-S行）；文档批次6d59bc97（可执行性复审）、T02-D定义冻结与[免费数据源登记](DATA_SOURCES.md)。

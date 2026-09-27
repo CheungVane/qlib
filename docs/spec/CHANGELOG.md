@@ -2,6 +2,16 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — 依赖落地为运行环境、全量门禁转绿与连接泄漏修复
+
+- 来源：用户指出上一批只声明依赖未真正安装，要求把因子研究依赖补齐。
+- 环境：`extensions/workbench/.venv` 用 `uv sync` 安装 `analysis`+`api`+`test`+`data-fetch`+`qlib-import`（Python 3.14.7）；`uv.lock` 同步更新（+95行，含baostock及其依赖）。验证导入：numpy 2.5.3 / baostock 0.9.4 / fastapi 0.141.1 / httpx 0.28.1 / pandas 2.3.3。
+- 门禁：`scripts/workbench_gate.sh` **通过**——Python 196项（2跳过）+ JS 21项，退出码0；`[gate] ok`。此前"未跑全量门禁/无.venv"的限制解除。
+- 缺陷1（真实实现错误，门禁暴露）：`storage_base._connect()` 每次新建 sqlite 连接，而 `with conn:` 只提交事务**不关闭**连接；Python 3.14 对未关闭连接发 ResourceWarning，恰好落进 `test_risk_v2` 的 stderr 断言导致偶发失败。修复：新增 `_connection()` 托管上下文（保留事务语义并 `finally: close()`），替换 25 处调用与 3 处测试调用；全新字节码缓存下196项稳定通过。
+- 缺陷2（可用性事件）：BaoStock 在全量抓取（1,802只×6进程）后返回 `10001011 黑名单用户`，此后登录失败。已抓缓存（1,791只/4,601,971行）完整保留，因子研究不依赖源端在线；`fetch_csi500_turnover.py` 改为父进程预检+明确失败（退出码3）、默认并发降到2、新增 `--sleep`。已登记到 DATA_SOURCES 且不隐藏。
+- 确定性：用项目 venv 复跑 `run_factor_research.py`，输出与提交的[因子研究证据](evidence/20260927-factor-research.json)**逐字节一致**（跨解释器）。
+- 验证：全量门禁通过；两个采集/研究脚本在项目 venv 下运行；文档链接与表格检查。仍不宣称因子有效（A30/A33/A37未关闭）。
+
 ## 2026-09-27 — 因子研究依赖补齐与全链路切片（T08-P）
 
 - 来源：用户"继续，把因子研究的所需依赖一次都做完，然后刷新spec文档"。

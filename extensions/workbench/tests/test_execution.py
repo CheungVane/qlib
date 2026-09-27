@@ -485,7 +485,7 @@ class ExecutionTests(unittest.TestCase):
         migrated = LocalResultRepository(legacy)
         self.assertEqual(migrated.health()["schema_version"], SCHEMA_VERSION)
         self.assertEqual(migrated.get_attempt("old")["status"], "succeeded")
-        with migrated._connect() as conn:
+        with migrated._connection() as conn:
             self.assertIsNotNone(conn.execute("SELECT name FROM sqlite_master WHERE name='imports'").fetchone())
             self.assertIsNotNone(conn.execute("SELECT name FROM sqlite_master WHERE name='factors'").fetchone())
             self.assertIsNotNone(conn.execute("SELECT name FROM sqlite_master WHERE name='factor_panels'").fetchone())
@@ -510,7 +510,7 @@ class ExecutionTests(unittest.TestCase):
             """)
         migrated = LocalResultRepository(legacy)
         self.assertEqual(migrated.health()["schema_version"], SCHEMA_VERSION)
-        with migrated._connect() as conn:
+        with migrated._connection() as conn:
             self.assertEqual(conn.execute("SELECT external_id FROM runs").fetchone()[0], "old")
             self.assertIsNotNone(conn.execute("SELECT name FROM sqlite_master WHERE name='attempts'").fetchone())
 

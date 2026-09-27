@@ -9,6 +9,7 @@ import os
 import sqlite3
 import tempfile
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable
 
@@ -201,12 +202,26 @@ class SqliteStore:
         conn.execute("PRAGMA busy_timeout=30000")
         return conn
 
+    @contextmanager
+    def _connection(self):
+        """Managed connection: keeps `with conn` transaction semantics and always closes.
+
+        `with sqlite3.connect(...)` only commits or rolls back; it does not close, which
+        leaks a connection per call (Python 3.14 reports it as ResourceWarning).
+        """
+        conn = self._connect()
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
+
     def _init_db(self) -> None:
         """Create or migrate the platform database one version at a time.
 
         Migrations only add platform tables; result revisions and runs are never rewritten.
         """
-        with self._connect() as conn:
+        with self._connection() as conn:
             version = conn.execute("PRAGMA user_version").fetchone()[0]
             if version not in (0, 1, 2, 3, SCHEMA_VERSION):
                 raise SchemaVersionError(
@@ -229,7 +244,7 @@ class SqliteStore:
             conn.execute("PRAGMA journal_mode=WAL")
 
     def health(self) -> dict[str, Any]:
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute("SELECT 1").fetchone()
         return {"status": "ok", "schema_version": SCHEMA_VERSION}
 
