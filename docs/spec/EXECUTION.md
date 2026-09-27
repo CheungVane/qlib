@@ -1,6 +1,6 @@
 # 执行层：Attempt、执行器与取消语义
 
-状态：生效。版本：2.1（执行交接复审，新增合同待实现）。修订日期：2026-09-27（初始生效2026-09-26）。
+状态：生效。版本：2.1（执行合同部分实现；监督复审重新打开A41）。修订日期：2026-09-27（初始生效2026-09-26）。
 关联需求：U03、U04、U09、U11、U12、U13、U23；上游要求 ID：ARC02、ARC04、ARC05、RUN01—RUN03、API02、AGENT04、OPS01、OBS01—OBS02。验收：IMPLEMENTATION阶段M3的A18/A19/A24/A25及新增A41（政策与预算）；Run关联及重试身份另验A35。
 
 本文是"工作台从只读看板变成研究平台"的执行合同。它不改变结果语义专题（[RESULT_CONTRACT.md](RESULT_CONTRACT.md)）与来源专题（[PROVENANCE_AUDIT.md](PROVENANCE_AUDIT.md)）；执行成功不等于研究有效，Attempt 成功也不自动等于结果已可信入库。
@@ -17,7 +17,7 @@
 
 范围内：执行入口与 Attempt 生命周期，以及**由执行结果触发的自动入库**（EXEC12）：执行器声明导入候选、平台按导入适配器发布结果并记录 ImportReceipt。
 
-当前实现未覆盖：任务队列与调度、远程或云执行器、日志流式推送。并发上限、超时终止、Agent试验/调用预算与内存/CPU硬上限已按 EXEC13 落地（两条入口都走容器，见 §4 与 [IMPLEMENTATION](IMPLEMENTATION.md) 的 A41）；资源下限检查仍然不构成上限验收——本机可强制不等于其它环境可强制，缺 Docker 的环境按设计拒绝准入。券商下单属于独立交易领域（见TRADING_BOUNDARY），不复用研究Attempt状态机。以上缺口必须保持可见，不能以按钮存在代替能力。
+当前实现未覆盖：任务队列与调度、远程或云执行器、日志流式推送。两条入口的容器路由、内存/CPU上限与调用钩子已有证据；超时独立监督、失联槽位/取消核对、试验预算原子性未满足EXEC13（SR01—03，见 §4 与 [IMPLEMENTATION](IMPLEMENTATION.md) 的 A41）；资源下限检查仍然不构成上限验收——本机可强制不等于其它环境可强制，缺 Docker 的环境按设计拒绝准入。券商下单属于独立交易领域（见TRADING_BOUNDARY），不复用研究Attempt状态机。以上缺口必须保持可见，不能以按钮存在代替能力。
 
 执行产生的原始产物（MLflow 目录、RD-Agent 会话目录、费用台账、质量 JSON）保留在其工作目录；自动入库只发布执行器产出且通过校验的产物，无法导入时保留 `manual_import_required` 或 `failed` 并给出原因，且两者都继续遵循来源标记与手写样本规则。
 
@@ -133,7 +133,7 @@ EXEC12（执行结果自动入库，U15）：自动入库是执行链路的一�
 - 提供显式重试入口（CLI 与 HTTP 写接口，走同一服务）：仅对没有 `imported/reused` 回执的 Attempt 执行；重试失败保留最后一次原因。
 - 执行成功、结果入库与结果可信是三件事：`succeeded` 不保证 `imported`，`imported` 也不等于研究有效。
 
-EXEC13（执行政策与预算，LIFE06/AGENT04；**已实现，2026-09-27**）：
+EXEC13（执行政策与预算，LIFE06/AGENT04；**部分实现；2026-09-27监督复审重新打开A41**）：
 
 - 提交前冻结execution_policy_revision：max_concurrent、timeout_seconds、terminate_grace_seconds、CPU/内存硬上限，以及Agent入口的max_trials/max_calls和各自计数范围。数值为显式配置的正数，不在spec中伪造账户/机器参数；缺失、无效或执行器不能强制实施必须项则拒绝。
 - **预算作用域是 `policy_revision`**：账本按 (policy_revision, scope, kind) 记账，因此**修改政策数值即产生新作用域、额度从 0 重新计**（新政策视为一份新合同，这是有意的）。界面与接口必须同时给出 scope，避免把"额度重置"误读成"已用清零"。同作用域内取消/重启不清空。
@@ -143,16 +143,18 @@ EXEC13（执行政策与预算，LIFE06/AGENT04；**已实现，2026-09-27**）�
 - CPU/内存硬上限必须有执行器可核验机制，资源下限检查不构成上限。被上限终止记录failed/resource_limit及证据。若某环境尚不支持，上限能力与A41保持未完成，该环境不得通过完整EXEC06准入；本条不表示现有按钮已按此拒绝。
 - **本机落地路径（2026-09-27）**：Qlib 入口在容器内运行（镜像 `qwb-qlib-cpu:local`，colima `rdagent` 池），内存用 `--memory/--memory-swap`（cgroup 硬上限，交换同时禁用）、CPU 用 `--ulimit cpu=`；被上限终止记 `failed/resource_limit`（退出码 137/152）。容器的挂载路径固定为 `/qwb/run`（工作目录）、`/qwb/data`（行情快照，只读）、`/qwb/src`（平台代码，只读），编译产物在进入容器前改写为这些路径，**残留任何宿主绝对路径即拒绝执行**；Attempt 自身跟踪库中记录的挂载路径在导入前归一化回宿主工作目录（只改路径字符串，不改指标、参数与产物字节）。
 - **RD-Agent 入口容器化（2026-09-27）**：整个 Attempt（驱动与因子代码）在**同一个**容器内运行（镜像 `qwb-rdagent-cpu:local`，由 `scripts/build_rdagent_runner_image.sh` 从上游 `requirements.txt` 构建；RD-Agent 检出只挂载、不打包，上游代码变化无需重建镜像）。平台只注入挂载与执行开关：`/qwb/agent`(rw，检出与 `git_ignore_folder`)、`/qwb/repo`(ro)、`/qwb/hooks`(ro)、`/qwb/platform`(rw，研究快照与调用账本)、`~/.qlib`→`/root/.qlib`(ro)。探针在容器内把 `QTDockerEnv` 换成同容器的 `LocalEnv`（否则会去连嵌套 Docker：本机 `.env` 设了 `MODEL_COSTEER_ENV_TYPE=docker`），embedding 的 Ollama 地址由平台改写为宿主可达地址。**上游源码仍不改动**：替换只发生在平台自己的探针脚本里。
-- **Agent 调用计数（2026-09-27 落地）**：计数单位是**一次 `litellm.completion` 调用**（RD-Agent 的 chat 生成请求；库内部自动重试不再细分），每次调用前在共享账本中原子预留；重试与重放各计一次，取消或重启不清空同一范围的账目；到限时该次调用被拒绝（不发出请求），Attempt 保留已有产物，并在 outcome 记 `agent_budget.calls.status=budget_exhausted` 与 used/limit，**不由此推断研究成功**。实现与上游解耦：**不修改 RD-Agent 源码**——执行器把仓库内 `hooks/agent_budget/` 前置到 `PYTHONPATH`，由 Python 标准启动钩子 `sitecustomize` 包装 `litellm` 入口；执行期计数写平台根下的文件账本（`flock` 原子），Attempt 终态由平台把用量核对进 V5 账本（DB 是持久事实，文件是执行期计数），`/v1/executions/catalog` 据此报 `calls_enforced`。embedding 调用不计入（不是生成式试验，避免同一语义出现两套口径）。
+- **Agent 调用计数（2026-09-27 落地）**：计数单位是**一次 `litellm.completion` 调用**（RD-Agent 的 chat 生成请求；库内部自动重试不再细分），每次调用前在共享账本中原子预留；重试与重放各计一次，取消或重启不清空同一范围的账目；到限时该次调用被拒绝（不发出请求），Attempt 保留已有产物，并在 outcome 记 `agent_budget.calls.status=budget_exhausted` 与 used/limit，**不由此推断研究成功**。实现与上游解耦：**不修改 RD-Agent 源码**——执行器把包内 `quant_workbench/hooks/agent_budget/` 前置到 `PYTHONPATH`，由 Python 标准启动钩子 `sitecustomize` 包装 `litellm` 入口；执行期计数写平台根下的文件账本（`flock` 原子），Attempt 终态由平台把用量核对进 V5 账本（DB 是持久事实，文件是执行期计数），`/v1/executions/catalog` 据此报 `calls_enforced`。embedding 调用不计入（不是生成式试验，避免同一语义出现两套口径）。
 - **钩子失效即拒绝运行**：探针在导入 RD-Agent 后端后校验其 `completion` 已带包装标记；若上游改用别的客户端（或钩子未生效），配置了预算的 Attempt 直接报错退出，而不是"账本 0 次调用却在界面显示已强制"。钩子文件随包分发（`quant_workbench/hooks/agent_budget/`）。
 
 EXEC11（演进，GOV-UPSTREAM）：Qlib 与 RD-Agent 保持外部引擎边界；执行器是适配层，不修改上游源码，不把 RD-Agent 代码复制进 Qlib。RD-Agent 探针脚本位于本仓库 `scripts/`，RD-Agent checkout 只写其被 Git 忽略的目录。上游更新后重验执行器命令、前置条件检查与适配器契约。
 
 ## 4. 已知限制（保持可见）
 
+- **SR01—03未修复**：当前超时只在状态读取时监督；interrupted不再计入槽位；宿主pid消失会提前确认取消；DB试验预算并发可超支。以上违反EXEC13，必须修复，不能视为允许的降级。反例和修复出口见[监督审查](review-20260927-supervision.md)。
+
 - 自动入库当前只覆盖声明了导入器的入口（Qlib CN 合成行情回测）。RD-Agent 入口仍为 `manual_import_required`：其结果需经可信离线导出后再进入结果库，平台不把研究会话快照当成回测结果。
 - RD-Agent 内部工作目录由其自身分配（版本化模板目录按指纹隔离）；平台保证日志、退出证据与配置指纹隔离，不修改上游的目录分配逻辑。
-- 无调度器与排队：并发上限是有界准入（槽满返回 409 且不创建 Attempt，槽位在写入事务内预留），失联但未确认结束的任务继续占槽并提示核对；界面不承诺排队。
+- 无调度器与排队：并发上限是有界准入（槽满返回 409 且不创建 Attempt，槽位在写入事务内预留），按合同失联但未确认结束必须继续占槽；当前实现不满足，见SR02。界面不承诺排队。
 - 日志查看为有界尾部读取，不是实时流；日志内容经脱敏后可能替换路径与密钥。
 - 执行仅覆盖合成行情与已知情景；真实数据与远程执行器属于后续阶段。Qlib 与 RD-Agent 两条入口都已在容器内运行并受内存/CPU 硬上限约束。
 - RD-Agent 的驱动与因子代码同容器运行，内存/CPU 上限对整个 Attempt 生效；调用计数见上条。容器未加 `--network` 限制（因子代码与 embedding 需要出网与宿主服务），这一点按当前用途保留。
@@ -177,8 +179,8 @@ QWB_RDAGENT_ROOT=../RD-Agent scripts/build_rdagent_runner_image.sh   # -> qwb-rd
 docker ps --format '{{.Names}}' | grep qwb
 docker inspect -f 'Memory={{.HostConfig.Memory}} Swap={{.HostConfig.MemorySwap}} Ulimits={{.HostConfig.Ulimits}}' <name>
 # 强制与归类：门禁默认跑离线用例；带容器用例需显式开启
-QWB_CONTAINER_TESTS=1 extensions/workbench/.venv/bin/python -m unittest \
-  tests.test_container_route tests.test_agent_call_budget     # 在 extensions/workbench 下执行
+(cd extensions/workbench && QWB_CONTAINER_TESTS=1 .venv/bin/python -m unittest \
+  tests.test_container_route tests.test_agent_call_budget)    # 从仓库根执行
 ```
 
 入口前提由 `execution-catalog` 逐项给出（`cn.container`、`rdagent.limits`、`rdagent.call_budget`）；缺 Docker、缺镜像或池内存不足都会**拒绝准入**而不是无上限运行。RD-Agent 宿主 `.venv` 与 `agent_call_enforcement` 的钩子目录只影响本地调试与计数注入，不再作为执行前提。

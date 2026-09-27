@@ -1,0 +1,43 @@
+{
+  "mixed_validation": {
+    "dsr": [
+      "available",
+      "available"
+    ],
+    "pbo": "available",
+    "excluded": [],
+    "missing_contract_fields": [
+      "return_basis"
+    ]
+  },
+  "pipeline_nw": {
+    "constant_t": null,
+    "gap_t": 9.14640442562508
+  },
+  "snapshot_mutation": {
+    "identity_unchanged": true,
+    "validation_ok": true,
+    "read_start": "2021-01-01"
+  },
+  "concurrent_trial_budget": {
+    "allowed": 2,
+    "limit": 1,
+    "durable_used": 1
+  },
+  "timeout_without_reads": {
+    "past_deadline": true,
+    "child_still_running": true,
+    "recorded_status": "running"
+  },
+  "interrupted_slot": {
+    "child_still_running": true,
+    "open_slots_count": 0
+  },
+  "dead_wrapper_cancel": {
+    "confirmed": true,
+    "container_cleanup_calls": 0,
+    "evidence": {
+      "observed": "pid_not_alive"
+    }
+  }
+}

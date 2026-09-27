@@ -1,6 +1,6 @@
 # 个人研究工作流：实验、模型与策略生命周期
 
-状态：生效设计合同，版本1.1，2026-09-27修订（初始生效2026-09-26）。关联 U23/U26、RUN01—03、DATA01—06、ARC10—12。本文新增能力尚未实现；本次只刷新spec，不修改代码、接口或数据。实际缺口见 [IMPLEMENTATION](IMPLEMENTATION.md)。
+状态：生效设计合同，版本1.1，2026-09-27修订（初始生效2026-09-26）。关联 U23/U26、RUN01—03、DATA01—06、ARC10—12。已有research_lifecycle.py纯对象与接口草案，持久化仓储/API和完整研究闭环未实现；执行保护已有部分实现，A41因SR01—03重新打开。实际缺口见 [IMPLEMENTATION](IMPLEMENTATION.md)。
 
 ## 1. 产品目标与范围
 
@@ -44,7 +44,7 @@
 - LIFE03：在运行前冻结验证方案并记录实际执行证据，详见 [VALIDATION](VALIDATION.md)。事后诊断、训练实际遵守验证方案、前瞻跟踪三者分别标记。
 - LIFE04：候选策略的采用、淘汰、进入前瞻模拟均记录用户决定、理由与关联证据。单个最优指标、Agent接受意见或检查通过不自动触发部署。修改已保存策略的任何有效规则产生新版本；标签和备注可单独修订，不覆盖策略内容。
 - LIFE05：前瞻模拟从策略版本冻结之后开始，记录当时可用的数据、预测、目标持仓、模拟订单/成交及账户演进；事后历史回放不称为前瞻。新版本建立新跟踪区间，不拼接成旧版本连续业绩。
-- LIFE06：最大并发、任务超时、Agent预算与资源上限的唯一行为合同见 [EXECUTION](EXECUTION.md) EXEC13。必须区分达到调用预算、已运行任务超时与硬资源限制；仅阻止新任务不能满足超时验收。**已实现（2026-09-27，T04）**：Qlib 与 RD-Agent 两条入口都在容器内运行，内存=`cgroup` 硬上限、CPU=`--ulimit cpu=`、Agent 试验/调用预算在执行前原子预留；被上限终止记 `failed/resource_limit`。证据见 [IMPLEMENTATION](IMPLEMENTATION.md) 的 A41 与 [EXECUTION §5.1](EXECUTION.md) 的容器路线运行手册。
+- LIFE06：最大并发、任务超时、Agent预算与资源上限的唯一行为合同见 [EXECUTION](EXECUTION.md) EXEC13。必须区分达到调用预算、已运行任务超时与硬资源限制；仅阻止新任务不能满足超时验收。**部分实现（T04；A41因SR01—03重新打开）**：Qlib 与 RD-Agent 两条入口都在容器内运行，内存=`cgroup` 硬上限、CPU=`--ulimit cpu=`、调用预算已有文件原子预留证据，但DB试验预算原子性被SR03反例推翻；超时与失联恢复见SR01/02。被上限终止记 `failed/resource_limit`。证据见 [IMPLEMENTATION](IMPLEMENTATION.md) 的 A41 与 [EXECUTION §5.1](EXECUTION.md) 的容器路线运行手册。
 
 ## 4. 交互合同（LIFE07）
 
