@@ -1,6 +1,6 @@
 # 验证口径：purged 交叉验证、样本权重、deflated Sharpe 与过拟合概率
 
-状态：生效。版本：2.2（2026-09-27 T02-D 定义冻结；实现与证据协议待 T02-B）。修订日期：2026-09-27（初始生效2026-09-26）。
+状态：生效。版本：2.3（2026-09-27 T02-D 定义冻结，T02-B 后端/API/CLI 已实现；UI 与完整证据协议待 T02-U/T06/T07）。修订日期：2026-09-27（初始生效2026-09-26）。
 关联需求：U20（验证口径）、U23（研究生命周期）；上游要求 ID：METRIC01—06、GOV-DERIVED、GOV-CLAIMS、COMPARE01、FACTOR_ANALYSIS §4。
 验收：IMPLEMENTATION 阶段 M2 的 A31（算法）、A32（事后统计），以及A36（实际训练与试验范围；诊断子项归T02，其余归T06/T07）。§2A 已冻结 v2 的口径、DTO 与独立参考值，实现由 T02-B 完成；本文不改变结果语义专题（[结果合同](RESULT_CONTRACT.md)）与来源专题（[来源审计](PROVENANCE_AUDIT.md)）。
 
@@ -226,7 +226,7 @@ T02-B 按本节实现后端/API/CLI，并登记 A31/A32 与 A36 诊断子项证�
 
 ## 3. 平台接入
 
-**当前实现边界（58fdeeb3）**：验证API只接受run_id、horizon、splits、embargo、trials、blocks；CLI对应`validate`。尚未提供analysis_version或显式revision输入，不能把HTTP 200视为这些参数生效。现有DSR将调用方trials写入declared_trials，但公式仍按可用SR数量计算；这是2A.7逐项登记的待修缺陷。下列版本2、状态与版本锁定要求的具体口径、DTO 与参考值已由 §2A 冻结，实现归 T02-B；风险/因子已经支持v2不意味着验证也支持。
+**当前实现边界（2026-09-27 T02-B 后）**：`/v1/validation` 与 CLI `validate` 增加 `analysis_version=1|2` 与可重复的成对 `revision_id`；**默认 v1 行为与字段不变**，v2 按 §2A 输出 `schema_version=2`。§2A.7 登记的缺陷在 v2 中已修正（声明N进入公式、CSCV秩ω=r/(K+1)、等长分块与余数披露、重复配置折叠、零离散度/非有限值fail-closed），v1 保留原算法与其历史数值。收益口径复用风险 v2 的登记映射，主来源不可用时不再回退。**界面尚未切换（T02-U）**，遇到 v1 响应仍须标注旧定义；TrialLedger 与训练证据仍归 T06/T07。
 
 - `GET /v1/validation?run_id=...&horizon=h&embargo=e&splits=k`（读取接口，不启动训练）：对一个或多个运行给出事后 DSR、PBO、假设性purged折与唯一性权重摘要；不得凭此接口声明实际训练采用了交叉验证；配置少于 2 个时 PBO 返回 `not_available`。
 - CLI `qwb validate <run_id>...` 与 HTTP 共用同一服务与口径；分析版本选择遵循RESULT_CONTRACT，版本2补本轮状态、范围与参数语义，版本1保留历史兼容。

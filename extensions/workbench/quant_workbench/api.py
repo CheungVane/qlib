@@ -163,9 +163,13 @@ def create_app(service: WorkbenchService):
     @app.get("/v1/validation")
     def validation(run_id: list[str] = Query(...), horizon: int = Query(1, ge=1, le=60),
                    splits: int = Query(5, ge=2, le=20), embargo: int | None = Query(None, ge=0, le=60),
-                   trials: int | None = Query(None, ge=2, le=1000), blocks: int = Query(8, ge=4, le=12)):
+                   trials: int | None = Query(None, ge=2, le=1000), blocks: int = Query(8, ge=4, le=12),
+                   analysis_version: int = Query(1, ge=1, le=2),
+                   revision_id: list[str] | None = Query(None)):
         """VALIDATION U20: PSR/DSR per run, PBO across runs and the leakage summary."""
-        return service.strategy_validation(run_id, horizon, splits, embargo, trials, blocks)
+        return service.strategy_validation(run_id, horizon, splits, embargo, trials, blocks,
+                                           analysis_version=analysis_version,
+                                           revision_ids=revision_id)
 
     @app.get("/v1/risk")
     def risk(run_id: list[str] = Query(...), periods_per_year: int | None = Query(None, ge=1, le=1000),

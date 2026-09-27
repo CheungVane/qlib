@@ -107,6 +107,8 @@ def parser() -> argparse.ArgumentParser:
     a.add_argument("--embargo", type=int)
     a.add_argument("--trials", type=int)
     a.add_argument("--blocks", type=int, default=8)
+    a.add_argument("--analysis-version", type=int, choices=[1, 2], default=1)
+    a.add_argument("--revision-id", action="append", dest="revision_ids")
     a = sub.add_parser('review')
     a.add_argument('run_id')
     a.add_argument("--revision-id")
@@ -204,7 +206,9 @@ def main(argv: list[str] | None = None) -> int:
                 print("旧定义，未满足当前纠正合同；可使用 --analysis-version 2", file=sys.stderr)
         elif args.command == 'validate':
             result = service.strategy_validation(args.run_ids, args.horizon, args.splits,
-                                                 args.embargo, args.trials, args.blocks)
+                                                 args.embargo, args.trials, args.blocks,
+                                                 analysis_version=args.analysis_version,
+                                                 revision_ids=args.revision_ids)
         elif args.command == 'review':
             result = service.review(args.run_id, args.revision_id)
         elif args.command == 'execution-catalog':

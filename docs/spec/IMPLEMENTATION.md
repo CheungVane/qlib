@@ -4,7 +4,7 @@
 
 持续实施授权：按T01—T10逐步实施，每完成一个小里程碑回写spec，并按GOV02提交推送。**当前有两条轨道，不要混读**：
 
-- **主线（原定顺序）**：T01-R/F/U与T02-D已完成，**下一步是T02-B**（按VALIDATION §2A实现验证v2）。T02-B尚未开始。
+- **主线（原定顺序）**：T01-R/F/U、T02-D与**T02-B（验证v2实现）已完成**，**下一步是T02-U**（界面显式请求v2并做浏览器验收）。
 - **数据源轨道（用户2026-09-27明确要求）**：来源调研→下载→csi500落地→因子研究切片，记为下表 **T05-S / T08-P**。T05-S 是T05的前置材料，**不是T05里程碑完成**；T08-P 是因子研究试点，**不是T08完成**。
 - **依赖与环境（2026-09-27补齐）**：`extensions/workbench/.venv` 已按 `analysis`+`api`+`test`+`data-fetch`+`qlib-import` 五组 extra 安装（Python 3.14.7，`uv.lock`同步更新）；全量门禁 `scripts/workbench_gate.sh` **通过：Python 196项（2跳过）+ JS 21项**。安装过程中暴露并修复了既有的 sqlite 连接泄漏（见CHANGELOG）。
 - 因此本阶段不是"跳过T02"：用户指定了数据优先，两条轨道并行；主线顺序未变更。
@@ -17,6 +17,7 @@
 | T01-F 因子与NW后端纠正 | 完成，提交50f9f366（基线3a8f52b8） | 新相关相似度/距离、有符号相关与有效天数；NW用N分母且无方差地板；按快照日历补回缺失日期轴，缺IC不作显著性；定义卡锁定panel/hash/dataset；API/CLI兼容。22项因子专项通过；全门禁141项Python（140通过、1跳过），17项JS通过 | 该批UI仍v1，后续T01-U已切换；真实因子新口径复验、其他估计量缺陷和价格语义尚待修验，完整A30开放 |
 | T01-U UI切换 | 完成，提交58fdeeb3（基线8dd1cf9e） | 风险/因子显式v2；输入、来源、公式与不可用原因；revision不符拒绝混显；21项JS通过及浏览器夹具验收，见[证据](evidence/20260927-t01-u.md) | T01/A34限定纠正范围通过；A30其余缺陷、真实研究及完整响应式验收仍开放 |
 | T02-D 验证v2定义冻结 | 完成（2026-09-27文档批次，无代码变更） | 冻结PSR/DSR/PBO公式与估计量约定、收益与rf口径、M/C/N与相关性假设、PBO分块/余数/秩/重复配置规则、v2 DTO与错误样例；独立参考值见[复算脚本](evidence/20260927-t02d-reference.py)与[VALIDATION §2A](VALIDATION.md) | 只通过设计门；A31/A32与A36诊断子项待T02-B实现和验收。提交哈希由下次索引刷新补齐，文档不引用自身哈希 |
+| T02-B 验证v2实现（后端/API/CLI） | 完成（2026-09-27） | 新增`validation_v2.py`：PSR/DSR/PBO按§2A实现，**声明N进入Φ⁻¹**、CSCV秩用ω=r/(K+1)且排除自身、等长分块并披露丢弃余数、重复配置折叠、零离散度与非有限值fail-closed；收益口径复用风险v2的登记映射（禁止静默回退）；新增`leakage.uniqueness.weight_sum`（不再叫effective_samples）；service/API/CLI增加`analysis_version=1|2`与成对`revision_id`，默认v1不变；22项测试复现§2A.9全部参考值（PSR 0.6645/0.8024/0.8990/0.9557；DSR N=4/10/20=0.6075/0.4944/0.4235；PBO夹具0与1/3） | **T02-U未做**：UI仍请求v1、无浏览器验收；真实TrialLedger与训练协议归T06/T07；A36不关闭 |
 | T05-S 数据源切片（用户指定，非T05完成） | 完成：快照与缓存落盘，目录端口、质量门禁、物化、旧路径与迁移恢复均已实现并实测 | FINV release 2026-09-27下载校验（SHA-256一致、发布方validate `ok:true`、日历末日2026-09-24、退市股在库、北交所缺口已登记）；定池中证500、区间2015-01-05→2026-09-24；BaoStock换手率1,791/1,802只、4,601,971行（源端随后拉黑本机，缓存保全）；新增`free_sources.py`、`data_directory.py`（登记/不可变/组件清单/as-of/FreeSnapshotReader/物化/bar门禁/legacy/迁移恢复）、`fetch_csi500_turnover.py`、`verify_free_snapshot.py`、`register_free_snapshot.py`与55项相关测试；全量门禁绿（Python全量+JS21）；操作手册与资产清单见[DATA_SOURCES §7](DATA_SOURCES.md)；证据见[record](evidence/20260927-free-snapshot-record.json)、[登记](evidence/20260927-free-snapshot.json)、[t05-directory](evidence/20260927-t05-directory.json) | T05本体剩余：真实财务修订源、真实bar覆盖/范围门禁、A40数据访问子项，以及**把data_directory接入应用层**（`application.py`仍走`configs/cn/profile.json`，ARC11未在应用层落地）；A16/A17仅部分证据；非csi500扩展未做 |
 | T08-P 因子研究管线（试点，非T08完成） | 完成：标签/两端可交易/暴露/中性化/评价/稳定性/成本门槛/样本外walk-forward全链路 | `factor_pipeline.py`＋`run_factor_research.py`：421交易日、500只、12假设，7个过FDR、6个过成本门槛、仅`volatility_20_h5_neutralized`同时通过（样本内）。`run_factor_walkforward.py`：扩张窗口4折，选择只用训练窗口（FDR+成本双门槛），**仅1折选出4个假设，训练均值IC−0.0376→测试块+0.0066、符号不保持**。证据见[research](evidence/20260927-factor-research.json)与[walkforward](evidence/20260927-factor-walkforward.json) | **样本内结论未在样本外复现**（样本极小，不能反证全部因子无效）；仍缺purged/embargo协议、组合层验证、冲击成本；行业为统计代理、size是推导值；A30/A33/A37不关闭；T06/T07账本与训练证据仍缺 |
 
@@ -89,7 +90,7 @@ T01-F证据：`extensions/workbench/.venv/bin/python -m unittest discover -s ext
 | T09 上下文交互 | T06；证据入口依赖T07，可先做标注mock原型 | 保存/复制实验、模型复用、版本链接与专业页面跳转；前端拆分保持行为。出口A42及A40前端/CLI/API子项；完整A40还需声明部署方式的启动恢复验收 |
 | T10 前瞻与交易 | 前瞻依赖T08；实盘另需DEC02 | 先完成TRADING_BOUNDARY设计门，再分别验A39-F前瞻、A39-R模拟订单恢复、A39-L真实券商；模拟通过不触发真实下单 |
 
-**下一步T02-B**：按[VALIDATION §2A](VALIDATION.md)实现验证v2后端/API/CLI（N进入公式、登记收益映射、fail-closed缺测与PBO秩纠正），再做T02-U界面与浏览器验收；对A30其余估计量缺陷另逐项修验；每批更新证据并按GOV02提交推送。T03/T04/T05前置为空，可独立推进；此处不要求并行代理，也不要求一次实现全部任务。
+**下一步T02-U**：把界面切到`analysis_version=2`（风险/因子已切、验证待切），展示选择范围、N依据、权重和与逐项不可用原因，并做浏览器验收；对A30其余估计量缺陷另逐项修验；每批更新证据并按GOV02提交推送。T03/T04/T05前置为空，可独立推进；此处不要求并行代理，也不要求一次实现全部任务。
 
 ### T02执行交接：先设计冻结，再分片实现
 
@@ -98,7 +99,7 @@ T01-F证据：`extensions/workbench/.venv/bin/python -m unittest discover -s ext
 | 子项 | 输入与动作 | 可验收出口 |
 | --- | --- | --- |
 | T02-D 定义冻结 | **已完成**（2026-09-27，仅文档）：口径、DTO、错误样例与参考值见[VALIDATION §2A](VALIDATION.md)，并逐项登记当前实现缺陷 | 设计门通过；A31/A32与A36诊断子项仍未关闭，不能把本节当功能验收 |
-| T02-B 后端/API/CLI（下一步） | 按T02-D冻结合同实现；保留默认旧版本及旧数值，新口径显式v2。一次解析最新revision并返回确切输入；明确选择范围不完整、权重和与独立证据状态 | 独立数值/边界测试、版本兼容、API/CLI一致、N影响计算及输入不漂移通过；记录A31/A32及A36诊断子项证据 |
+| T02-B 后端/API/CLI | **已完成**（2026-09-27）：v2数值、登记收益映射、revision成对解析、API/CLI参数与22项测试（复现§2A.9参考值） | 已记录A31/A32诊断子项证据；A36父项仍待T06/T07 |
 | T02-U 展示与交付 | UI显式选新版本，删除“独立有效样本数/证明无泄漏”等超范围表述；展示选择范围、参数依据、版本与逐项不可用原因 | JS与真实浏览器检查正常/不可用/退化/未知范围；回写证据、限制并commit/push。训练协议/TrialLedger完整验收仍归T06/T07，A36父项不关闭 |
 
 工程字段命名由T02-D冻结，无需为普通可逆设计选择再次请求用户许可。当前缺少TrialLedger时只登记调用方声明及本次选择快照，不补造全范围账本；M未知保持unknown。上述样例是验收场景，具体数值必须在实现前写入专题，不把本表当完整算法或DTO。
@@ -195,6 +196,7 @@ M1的完成证据：环境锁、导入命令、成功/失败样本、自动化�
 | A31证据 | `validation.purged_folds()` 返回每折训练/测试索引与 purged 占比；回归用 20 样本 / h=2 / 4 折夹具断言训练样本标签不与测试窗口重叠且其后 embargo 样本被剔除；`uniqueness_weights()` 用并发度给出每个样本权重与有效样本数（重叠标签使有效样本小于观测数） | VALIDATION.md §4 |
 | A32 | PSR/DSR/PBO按各自冻结定义计算；不足各自样本门槛返回不可用。单配置可计算PSR；DSR缺候选SR离散度或N≤1不可用，PBO少于2配置不可用；披露公式、试验次数与限制 | VALIDATION.md §4 |
 | A32证据 | PSR 与闭式公式一致到 10 位小数、DSR 严格比 PSR 保守、PBO 在"主导配置 / 纯噪声 / 样本内最优而样本外反向"三种构造下分别给出 ≤0.2 / 0.2—0.8 / >0.4 的概率，完全相同配置标记 `degenerate` 并提示不可区分；`/v1/validation` 与 CLI `validate` 共用同一服务。真实两次 Qlib 运行：Sharpe 0.056、PSR/DSR 0.731、123 观测、purge 1.3%、有效样本 61.8/123，界面提示"同情景重复运行 PBO 不具区分意义" | VALIDATION.md §4 |
+| A32证据（v2，T02-B） | `validation_v2.py` 复现[VALIDATION §2A.9](VALIDATION.md)全部独立参考值：PSR 0.6645/0.8024/0.8990/0.9557（手算夹具）；DSR 在声明N=4/10/20 为 0.6075/0.4944/0.4235且随N单调下降；PBO主导夹具=0、中间值夹具=1/3、重复配置=`degenerate_configurations`。修复并验证v1缺陷：声明N进入Φ⁻¹、CSCV秩ω=r/(K+1)、等长分块并披露丢弃余数、零离散度fail-closed；单配置=PSR可用/DSR与PBO不可用；混用`revision_id`数量不等返回400。测试`test_validation_v2.py`共22项（含API/CLI端到端） | VALIDATION.md §2A / T02-B |
 
 页面视觉验收必须使用浏览器实际检查；API通过不代表UI通过。不以空面板截图声称实时或可靠性功能完成。
 

@@ -2,6 +2,15 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-27 — T02-B 验证v2实现（后端/API/CLI）
+
+- 来源：用户"按照spec，继续往下做"，执行 spec 声明的下一步 T02-B。
+- 实现：新增 `quant_workbench/validation_v2.py`，按 [VALIDATION §2A](VALIDATION.md) 实现 PSR/DSR/PBO——声明N真实进入Φ⁻¹、CSCV秩ω=r/(K+1)且排除候选自身、等长分块并披露丢弃的最早余数、重复配置按1e-12折叠、零离散度与非有限值fail-closed；新增 `leakage.uniqueness.weight_sum`（不再叫effective_samples，并注明不是独立样本量）。service/API/CLI 增加 `analysis_version=1|2` 与成对 `revision_id`；**默认v1行为与字段不变**；收益口径复用风险v2的登记映射（主来源不可用时不回退）。
+- 验收：`tests/test_validation_v2.py` 共22项，**复现§2A.9全部独立参考值**——PSR 0.6645/0.8024/0.8990/0.9557；DSR在声明N=4/10/20为0.6075/0.4944/0.4235且随N单调下降、不饱和；PBO主导夹具=0、中间值夹具=1/3、重复配置=`degenerate_configurations`；另覆盖单配置（PSR可用、DSR/PBO不可用）、N<可用配置数、缺测排除、horizon不影响PSR/DSR/PBO但影响leakage、revision成对校验400、API/CLI端到端。
+- 修正记录：实现时曾把DSR判定顺序写反（单配置回报`declared_trials_below_two`），按§2A.8要求改为先判可用试验数并回报`deflated_sharpe_needs_at_least_two_trials`；测试同时暴露我漏实现§2A.8要求的`leakage.uniqueness.weight_sum`，已补齐。
+- 影响：A31/A32诊断子项记录v2证据；**A36父项不关闭**（TrialLedger与训练协议归T06/T07）；下一步为T02-U（界面切v2+浏览器验收）。
+- 验证：全量门禁 `[gate] ok`（Python全量含新增22项 + JS 21项）；文档链接与表格检查。
+
 ## 2026-09-27 — 数据管线spec审计：补操作手册并修正过期状态
 
 - 来源：用户问"当前做的那些数据处理的，刷新spec了嘛"。
