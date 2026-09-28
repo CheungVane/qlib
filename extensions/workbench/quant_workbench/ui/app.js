@@ -1,8 +1,8 @@
-const initialQuery = new URLSearchParams(location.search);
-const hasCompareQuery = initialQuery.has('compare');
+import {createState} from './state.js';
+import {createTransport} from './transport.js';
+const {state, hasCompareQuery} = createState(location);
+const {api, request} = createTransport((...args) => fetch(...args), () => state.renderGeneration);
 const HISTORY_PREVIEW = 8;
-const historyTabParam = initialQuery.get('history');
-const state = {renderGeneration:0, revision: initialQuery.get("revision"), seriesOffsets:{}, runs: [], selected: initialQuery.get('run'), compareIds: (initialQuery.get('compare') || '').split(',').filter(Boolean), researchId: initialQuery.get('research'), researchOffset:0, researchQuery:'', search: '', executionKey:null, executionKind:null, helpTrigger:null, helpBound:false, historyTab: historyTabParam==='research'?'research':'attempts', historyExpanded:false, historyScrollTop:0, attemptCursor:null, attemptCursors:[], runsExpanded:false, overviewExpanded:false, factorGroup:null, paletteIndex:null, paletteFetchedAt:0, paletteSelection:0, paletteResults:[], paletteScope:'', paletteBound:false, view: location.hash.slice(1) || 'overview'};
 const titles = {overview:['总览','研究运行、数据状态与系统观察'],backtest:['回测','权益、回撤、费用与来源证据'],training:['训练','指标曲线、阶段状态与来源证据'],compare:['比较','并列查看运行，先核对数据与指标口径'],agent:['研究中心','研究结果、因子内容、过程追踪与下一步'],factors:['因子','单因子统计、重叠性与增量贡献'],live:['实时','行情连接与数据新鲜度'],data:['数据','数据集来源、覆盖与质量'],system:['系统','任务状态、请求与错误观察']};
 const HELP = {
  'page.overview':{title:'总览怎么读',summary:'先看来源与能力边界，再看最近研究与已采集的观察指标。',ref:'UI01 / ARC08',
@@ -165,17 +165,6 @@ function provenancePanel(detail){
 async function capabilityPanel(){
  const data=await api('/v1/provenance/capabilities');
  return card('能力边界与来源审计',`<p class="panel-note">这里描述当前工作台接入程度，不代表上游框架的全部能力。标记不以有数字或绿灯代替验收。</p><div class="table-scroll"><table class="table"><thead><tr><th>功能 / 信息</th><th>标记</th><th>依据与限制</th></tr></thead><tbody>${data.items.map(x=>`<tr><td>${esc(x.name)}</td><td>${originBadge(x)}</td><td>${esc(x.source)}<br>${esc(x.limitations.join('；'))}</td></tr>`).join('')}</tbody></table></div>`);
-}
-async function api(path) {
-  const generation=state.renderGeneration;
-  const response=await fetch(path,{headers:{'Accept':'application/json'}});
-  const body=await response.json().catch(error=>{if(response.ok)throw error;return {};});
-  if(generation!==state.renderGeneration){const error=new Error('页面已切换');error.name='StaleRender';throw error;}
-  if(!response.ok){
-    const error=new Error(`${body.message||'请求失败 '+response.status}${body.request_id?' · request_id: '+body.request_id:''}`);
-    error.status=response.status;error.code=body.code;throw error;
-  }
-  return body;
 }
 function empty(message){return `<div class="empty">${esc(message)}</div>`;}
 function foldRows(items,expanded,preview){return expanded?items:items.slice(0,preview);}
@@ -562,7 +551,7 @@ function bindExecution(catalog){
   state.executionKind=kind;
   button.disabled=true;
   try{
-   const response=await fetch('/v1/executions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,params:note?{note}:{},idempotency_key:state.executionKey})});
+   const response=await request('/v1/executions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,params:note?{note}:{},idempotency_key:state.executionKey})});
    const body=await response.json().catch(()=>({}));
    if(!response.ok){
     const detail=(body.details?.reasons||[]).map(reasonLabel).join('；');
@@ -585,7 +574,7 @@ function bindExecution(catalog){
   if(!window.confirm('取消需要执行器确认进程结束后才落终态；确认请求取消？'))return;
   button.disabled=true;
   try{
-   const response=await fetch(`/v1/executions/${encodeURIComponent(button.dataset.attemptCancel)}/cancel`,{method:'POST'});
+   const response=await request(`/v1/executions/${encodeURIComponent(button.dataset.attemptCancel)}/cancel`,{method:'POST'});
    const body=await response.json().catch(()=>({}));
    if(!response.ok)throw new Error(body.message||'取消失败');
    setNotice(body.cancel_confirmed?`已确认进程结束，终态 ${body.attempt.status}`:`未确认取消（${body.reason||'未知'}），当前状态 ${body.attempt.status}`);
@@ -596,7 +585,7 @@ function bindExecution(catalog){
   const target=document.getElementById('attempt-log');
   target.innerHTML='正在读取日志尾部…';
   try{
-   const response=await fetch(`/v1/executions/${encodeURIComponent(button.dataset.attemptLog)}/log?tail=80`);
+   const response=await request(`/v1/executions/${encodeURIComponent(button.dataset.attemptLog)}/log?tail=80`);
    const body=await response.json().catch(()=>({}));
    if(!response.ok)throw new Error(body.message||'日志读取失败');
    target.innerHTML=`<details open><summary>日志尾部 ${help('exec.log')}（脱敏；最多80行，${body.truncated?'已截断':'未截断'}）</summary><pre>${esc((body.lines||[]).join('\n'))}</pre></details>`;
@@ -605,7 +594,7 @@ function bindExecution(catalog){
  document.querySelectorAll('[data-attempt-import]').forEach(button=>button.onclick=async()=>{
   button.disabled=true;
   try{
-   const response=await fetch(`/v1/executions/${encodeURIComponent(button.dataset.attemptImport)}/import`,{method:'POST'});
+   const response=await request(`/v1/executions/${encodeURIComponent(button.dataset.attemptImport)}/import`,{method:'POST'});
    const body=await response.json().catch(()=>({}));
    if(!response.ok)throw new Error(body.message||'入库失败');
    setNotice(body.imported?`已入库，运行 ${String((body.receipt&&body.receipt.run_id)||'').slice(0,8)}`:`未入库（${body.reason||'原因未记录'}）`);

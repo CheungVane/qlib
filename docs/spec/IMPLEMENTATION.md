@@ -1,6 +1,6 @@
 # 实施计划与验收矩阵
 
-## 当前执行里程碑（2026-09-27）
+## 当前执行里程碑（2026-09-28）
 
 持续实施授权：按T01—T10逐步实施，每完成一个小里程碑回写spec，并按GOV02提交推送。**当前有两条轨道，不要混读**：
 
@@ -10,7 +10,13 @@
 - **测试沙箱硬边界（2026-09-27）**：任何把 checkout 路径交给执行器的用例必须使用 `extensions/workbench/tests/sandbox.py::isolated_repo_root()`（打标记并断言解析回自身）；`discover_project_root(explicit)` 现在对不像 checkout 的显式根抛 `ProjectRootNotFound`，不再静默回退到真实仓库。仓库根 `runs/` 残留已删除并加入 `.gitignore`，见CHANGELOG。
 - 因此本阶段不是"跳过T02"：用户指定了数据优先，两条轨道并行；主线顺序未变更。
 
-事实核对：当前监督审查代码基线`668506ed`，覆盖`6d59bc97..668506ed`的48个提交。本批只修spec与记录隔离反例，不修业务代码。以下为当前状态；历史交付和历史数值保留，不等于当前验收通过。
+事实核对：当前监督审查代码基线`668506ed`，覆盖`6d59bc97..668506ed`的48个提交。该监督批次只修spec与记录隔离反例；2026-09-28另进行U28结构落地，见下节。以下为当前状态；历史交付和历史数值保留，不等于当前验收通过。
+
+### U28 / A40结构子项（2026-09-28）
+
+按用户最新要求先固化框架，本批不执行SR业务修复。合同见[ARCHITECTURE](ARCHITECTURE.md)：8个专职服务承接真实门面调用，存储移入适配层；仓储/执行/观察/配置端口、组合根与显式目录设置；生命周期纯规则和三种固定流程计划；前端状态/请求模块。旧导入/API/CLI保留；无schema或数据迁移。自动依赖检查、端口覆盖和违法依赖反例纳入现有workbench_gate。
+
+已验收此批结构范围：`bash scripts/workbench_gate.sh`退出0，Python 298项（293通过、5跳过），JS 26项通过；6项架构检查最终复跑通过，独立wheel构建及临时目录包/API/ES模块资源检查通过。证据见[结构验收摘要](evidence/20260928-architecture-framework.json)。仅验A40结构子项；部署恢复、ARC11分析解析、专业页面拆分、研究持久化与真实训练仍未完成。SR01—06全部开放；T06仍需冻结schema与命令/产物DTO，T07需真实分折执行与证据。
 
 ### 监督审查后必须处理的缺口
 
@@ -88,7 +94,7 @@ T01-F证据：`extensions/workbench/.venv/bin/python -m unittest discover -s ext
 | A39-R | 模拟器中覆盖订单超时核对、重复回报、部分成交/撤单竞争、重启对账、陈旧数据与紧急停止；核对账户守恒。仅证明模拟执行协议 | TRADE01—05 |
 | A39-L | 选定券商/账户/环境并获相应授权后，在真实接口验证订单及恢复对账，证据去敏；先完成交易详细设计与A39-F/R，未选择券商时本项保持阻塞 | TRADE06 |
 | A40 | 分析通过数据目录端口按历史snapshot定位；改变当前profile或数据根不改变历史数据身份；服务所需端口完整，CLI/API语义一致；声明的部署方式可启动/恢复，前端拆分保持URL/选择/刷新行为 | ARC10—12 |
-| A40证据（部分，适配器+入口+展示层） | `adapters/local_data_directory.py` 按快照ID解析（列表/加载/摘要/校验，不回传绝对路径，不可读给`unreadable_reason`）；`WorkbenchService.data_snapshots()/data_snapshot()` + API `GET /v1/data-snapshots[/{id}]` + CLI `qwb data-snapshots|data-snapshot`（未知快照404、未配置目录给原因）；数据页显示快照ID/内容摘要/日历覆盖/组件/可复现性（6项Python + 1项JS测试）。**未做**：**分析路径仍读当前CN配置**，未按snapshot解析；部署启动/恢复与前端拆分未验，故A40与ARC11不通过 | ARC10—12 / T05 |
+| A40证据（部分，适配器+入口+展示层） | `adapters/local_data_directory.py` 按快照ID解析（列表/加载/摘要/校验，不回传绝对路径，不可读给`unreadable_reason`）；`WorkbenchService.data_snapshots()/data_snapshot()` + API `GET /v1/data-snapshots[/{id}]` + CLI `qwb data-snapshots|data-snapshot`（未知快照404、未配置目录给原因）；数据页显示快照ID/内容摘要/日历覆盖/组件/可复现性（6项Python + 1项JS测试）。**未做**：**分析路径仍读当前CN配置**，未按snapshot解析；部署启动/恢复与完整专业页面拆分未验；2026-09-28状态/请求拆分及服务/存储框架证据见顶部，A40与ARC11仍不通过 | ARC10—12 / T05 |
 | A41 | 并发满拒绝新准入；超时终止运行进程并保留证据；Agent到限阻止下一调用；CPU/内存硬限制实测生效，未支持则该环境验收不通过；启动失败/queued取消/迟到退出纠正可追溯；重启/取消不清空同范围预算事实 | LIFE06、EXEC06、AGENT04 |
 | A41（T04第1—12片） | **部分；整体通过声明撤回（监督基线668506ed）**。SR01—03重新打开超时、恢复/槽位、试验预算子项；下述为此前已观察到的限定证据，不能外推完整A41。政策：缺字段/非法值拒绝、内容哈希revision、`/v1/executions/catalog`暴露政策与用量。内存+CPU：**两条入口都在容器内运行**——Qlib用`--memory=2GiB/--memory-swap=2GiB`+`--ulimit cpu=3600`（实测128MiB上限分配400MB→`failed/resource_limit`(137)），RD-Agent整Attempt同容器（运行中实测容器`Memory=MemorySwap=2147483648`、`Ulimits=cpu=3600:3600`；平台Attempt `231ed548`baseline退出0、quality`passed_checks`、19项指标）。**Agent调用**：`sitecustomize`包装`litellm.completion`（真实RD-Agent导入路径`wrapped=True`，未改上游源码），调用前原子预留、到限拒绝；容器内真实loop在limit=3时发3次即被拦（10次内部重试全部被拒、`used=3`无超支）；平台级loop在limit=4时以`outcome.agent_budget.calls.status=budget_exhausted`（`used=4/attempt_used=4/blocked_by_this_attempt=true`）收尾；4进程并发抢占只放出恰好limit个名额；终态用量单调核对进V5账本，`calls_enforced=true`。并发：槽满`capacity_exceeded`(409)、**事务内预留**、幂等重放不占槽、取消释放。超时：**deadline在V6落盘并在启动时冻结**，确认结束才落`failed/timeout`、未确认留`interrupted`+`timeout_unconfirmed`。预算：V5账本有串行到限拒绝证据，但试验预留并发原子性被SR03推翻。**本机之外未验**：其它Docker/Podman后端、无Docker的环境按设计拒绝准入；多任务调度与远程执行器不在本项内 | LIFE06、EXEC06、AGENT04 / T04 |
 | A42 | 保存/复制实验、比较配置差异、复用模型、保存候选策略，跨专业页面保留同一实验及确切版本；统一发现入口可跳转，来源与关键限制始终可见 | LIFE07、U21/U26 |
@@ -104,7 +110,7 @@ T01-F证据：`extensions/workbench/.venv/bin/python -m unittest discover -s ext
 | T03 比较合同 | **已完成**（2026-09-27） | 首批回测指标字段适用表（`field_applicability`），equity/metric均验证身份缺失/差异与不同初始资金反例；服务端判方向和可比性。出口A13/A27/A28 |
 | T04 执行政策 | 已部分交付；先修SR01—03 | 持久化并发槽、截止时间、政策修订与Agent计数；启动前检查、超时终止/恢复。出口A41；上限未支持的环境不通过 |
 | T05 数据目录边界 | 部分：目录浏览已接入；SR05、分析路径按快照解析、真实财务修订源与完整A40待验 | 按[数据源清单](DATA_SOURCES.md)实现适配器与快照身份（FINV主 + BAO校验 + EM补充）；snapshot身份→组件清单→物化引用；旧路径显式登记，未知不补造；设计并验证迁移/恢复。覆盖门禁`coverage_report()`比较区间声明与实际末日（标记而非结论，不替代过期vs退市判定），实测见[证据](evidence/20260927-coverage-gate.json)。出口A16/A17和A40数据访问子项。A38分块可独立开展，超旧上限的真实研究须先通过A38 |
-| T06 实验/模型/策略对象 | **接口草案已冻结（2026-09-27）**；物理实现待T04/T05 | `research_lifecycle.py` 冻结对象必填身份字段、内容摘要（不含名称/标签）、模型复用需特征/预处理/标签契约全匹配、规则策略可无模型、重试/新Run/新定义判定、interrupted重试须确认旧进程结束、TrialLedger保留失败与同配置多Attempt并记录测试集访问。**未做**：物理schema、仓储、命令样例与API、账本持久化；不得当作T06完成，出口A35仍待实现 |
+| T06 实验/模型/策略对象 | **接口草案已冻结（2026-09-27）**；物理实现待T04/T05 | `domain/research.py`（旧`research_lifecycle.py`兼容导出）冻结对象必填身份字段、内容摘要（不含名称/标签）、模型复用需特征/预处理/标签契约全匹配、规则策略可无模型、重试/新Run/新定义判定、interrupted重试须确认旧进程结束、TrialLedger保留失败与同配置多Attempt并记录测试集访问。**未做**：物理schema、仓储、命令样例与API、账本持久化；不得当作T06完成，出口A35仍待实现 |
 | T07 实际验证证据 | T02、T06 | 分折训练、折内预处理、预测/标签、测试集访问与账本快照；失败保持unverified/invalidated。出口A36其余子项，与T02合并后才可标A36通过 |
 | T08 限定真实研究 | T01、T03、T05—T07、DEC01 | 明确来源/股票池/区间的真实链路，必要历史组件通过质量与时间语义验收。出口A37；来源待选只阻塞本任务 |
 | T09 上下文交互 | T06；证据入口依赖T07，可先做标注mock原型 | 保存/复制实验、模型复用、版本链接与专业页面跳转；前端拆分保持行为。出口A42及A40前端/CLI/API子项；完整A40还需声明部署方式的启动恢复验收 |
@@ -307,8 +313,8 @@ M2正式验收以M1完成为前提；允许为验证用户流程提前建设明�
 | U21 任务中心 | 待处理胶囊/卡片与 ⌘K 面板（索引有界并披露） | 统一对象表与保存视图（UI07 其余部分） |
 | U22 风险绩效 | T01-R后端v2已实现目标Sortino、rf/目标显式化与定义卡（3a8f52b8）；UI已显式v2 | 日历覆盖与其他估计量复验；分红再投资与真实成本细分 |
 | U23—U26 设计刷新 | 已有生命周期对象草案、目录浏览与部分执行保护；完整生命周期、规模、交易及上下文交互尚未通过验收 | A35—A42待实施/验证；A34限定纠正项已通过，证据见T01-R/F/U，不混同生命周期完成度 |
-| 第三轮审查修复 | C1 撤回（误报）、C5 年化 fail-closed、C6 契约覆盖新接口、C8 死代码清理 | C2 剩余编排、C7、C10 |
-| 第三轮重构 | C3/C9 共享 `numeric`/`dto`；C2 抽 `series_view`；C4 存储拆分 + 对象存储可注入（`LocalResultRepository` 公开面不变） | 前端拆分（C7）、测试分层（C10） |
+| 第三轮审查修复 | C1 撤回（误报）、C5 年化 fail-closed、C6 契约覆盖新接口、C8 死代码清理 | C2剩余编排已由U28结构批次处理；C7专业页面、C10仍待做 |
+| 第三轮重构 | C3/C9 共享 `numeric`/`dto`；C2 抽 `series_view`；C4 存储拆分 + 对象存储可注入（`LocalResultRepository` 公开面不变） | U28已拆状态/请求；C7专业页面与注册表、C10快慢测试分层仍待做 |
 
 本机演示数据集（2026-09-26 按“可演示最小集合”裁剪）：平台库 runs 21→5、revisions 27→7、attempts 13→6、imports 5→2，因子与面板 10/10 全保留；`.data/cn_runs` 16→4 个目录、RD-Agent 会话工作区 78→6 个、阶段日志 31→1 个，并删除可再生的构建目录与审计期 MLflow 副本；裁剪前备份为 `.data/workbench/workbench.sqlite3.bak-prune-20260926T230919`。保留集合覆盖：跨引擎可比对（Qlib vs RD-Agent 同情景 4/9 行可排名）、不可比对反例（旧内容摘要/旧日历）、手写样本、因子重叠演示、风险与验证卡、待处理事项（1 高 2 低）。再生方式：`scripts/run_cn_demo.sh`、`scripts/make_cn_current_data.py` 与 RD-Agent 研究导出脚本；数据集内容摘要变化后需重新物化快照。
 

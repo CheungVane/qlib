@@ -127,7 +127,12 @@ class WorkbenchTests(unittest.TestCase):
         self.assertEqual(invalid.json()["request_id"], invalid.headers["X-Request-ID"])
         self.assertEqual(api.get("/").status_code, 200)
         self.assertIn("Quant Workbench", api.get("/").text)
-        self.assertEqual(api.get("/ui/app.js").status_code, 200)
+        self.assertIn('type="module"', api.get("/").text)
+        for asset in ("app.js", "state.js", "transport.js"):
+            response = api.get("/ui/" + asset)
+            self.assertEqual(response.status_code, 200, asset)
+            self.assertIn("javascript", response.headers["content-type"])
+        self.assertEqual(api.get("/ui/not-packaged.js").status_code, 404)
         self.assertEqual(api.get("/v1/dashboards/overview").json()["dashboard_id"], "overview")
         stats = api.get("/v1/widgets/api.error_rate.5m").json()
         self.assertEqual(stats["availability"], "available")

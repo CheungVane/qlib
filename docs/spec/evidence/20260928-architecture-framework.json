@@ -1,0 +1,41 @@
+{
+  "date": "2026-09-28",
+  "requirement_ids": [
+    "U28",
+    "ARC10",
+    "ARC12"
+  ],
+  "acceptance_scope": "A40 structure subset only",
+  "baseline": "66d4cc77",
+  "gate": {
+    "command": "bash scripts/workbench_gate.sh",
+    "exit_code": 0,
+    "python": {
+      "total": 298,
+      "passed": 293,
+      "skipped": 5
+    },
+    "javascript": {
+      "total": 26,
+      "passed": 26
+    }
+  },
+  "additional_checks": [
+    "6 architecture tests passed after final static-rule tightening: dependency violations, negative examples, repository port coverage/signatures, alias identity, fixed plans, isolated composition",
+    "Public WorkbenchService methods preserved; constructor adds only optional keyword analysis_configuration and type annotations",
+    "Storage class/function AST bodies unchanged except StorageCapacityExceeded moved to domain/errors",
+    "uv build --wheel succeeded; extracted wheel in temporary directory served empty-store API and app/state/transport JavaScript resources with correct MIME",
+    "Native ESM import tests preserve URL selection, isolate state and reject stale reads",
+    "All relative spec file links resolved; git diff --check passed"
+  ],
+  "test_adjustment": "Comparison read-once regression now observes repository.get_revision instead of facade.get_revision; same exact-one-read assertion retained.",
+  "limitations": [
+    "SR01-SR06 remain open",
+    "A40 parent, ARC11, deployment recovery and all engine configuration injection not accepted",
+    "T06/T07 persistence, command and artifact DTOs, training evidence remain pending",
+    "UI page/registry split and full browser usability acceptance not performed",
+    "Fixed workflow plans are not runnable jobs",
+    "Existing optional integration skips, subprocess ResourceWarning and FastAPI deprecation warnings remain; no new real engine or container acceptance"
+  ],
+  "migration": "No database schema or stored object migration. Old Python imports, public HTTP/CLI and numerical versions preserved."
+}

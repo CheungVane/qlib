@@ -23,7 +23,7 @@ def create_app(service: WorkbenchService):
     from urllib.parse import urlsplit
 
     from .dashboard import QUERY_IDS, validate_dashboard
-    from .execution import ExecutionError
+    from .domain.errors import ExecutionError
 
     # ``from __future__ import annotations`` turns annotations into strings; FastAPI resolves
     # them against module globals, so register the lazily imported request type explicitly.
@@ -105,7 +105,7 @@ def create_app(service: WorkbenchService):
 
     @app.get("/ui/{asset}", include_in_schema=False)
     def ui_asset(asset: str):
-        if asset not in {"app.js", "style.css"}:
+        if asset not in {"app.js", "state.js", "transport.js", "style.css"}:
             raise HTTPException(404, "asset not found")
         return FileResponse(str(ui_root / asset), headers={"Cache-Control": "no-store"})
 

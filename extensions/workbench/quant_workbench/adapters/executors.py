@@ -25,7 +25,7 @@ from ..cn_market import (
     CN_SYNTHETIC_DATASET_ID, CN_SYNTHETIC_SOURCE_INSTANCE, discover_project_root, load_profile,
     rdagent_snapshot_path,
 )
-from ..execution import InvalidExecutionRequest
+from ..domain.errors import InvalidExecutionRequest
 from ..execution_policy import container_flags
 from ..source_safety import Sanitizer
 

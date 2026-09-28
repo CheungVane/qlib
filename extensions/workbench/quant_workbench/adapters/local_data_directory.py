@@ -1,9 +1,8 @@
-"""Local data-directory adapter (T05 / A40 first step).
+"""Local registered-snapshot catalog adapter (T05 / A40 partial).
 
-Resolves registered snapshots by id against a configured data root, so analysis can ask for
-"snapshot X" instead of reading the current CN profile. Wiring this adapter into the
-application service, API and CLI is the remaining A40 work; this module only provides the
-adapter and its summaries.
+CatalogService exposes these summaries through API/CLI. Analysis still follows
+legacy profile paths; this adapter does not establish SR05 content integrity or
+certify ARC11 immutable analysis resolution.
 """
 
 from __future__ import annotations

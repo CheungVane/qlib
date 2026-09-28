@@ -91,13 +91,13 @@ class Review2Tests(unittest.TestCase):
             self.service.import_package("test", f"run-{index}", "generic_v1", package())
         run_ids = [row["run_id"] for row in self.service.list_runs(limit=5)["items"]]
         calls = []
-        original = self.service.get_revision
+        original = self.repository.get_revision
 
         def counting(run_id, revision_id=None):
             calls.append(run_id)
             return original(run_id, revision_id)
 
-        self.service.get_revision = counting
+        self.repository.get_revision = counting
         table = self.service.compare_table(run_ids)
         self.assertTrue(table["rows"])
         self.assertEqual(len([c for c in calls if c in run_ids]), len(run_ids),

@@ -1,6 +1,9 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
 const {test}=require('node:test');
-const source=fs.readFileSync(require('node:path').join(__dirname,'../quant_workbench/ui/app.js'),'utf8').replace(/init\(\);\s*$/,'');
+const readUI=name=>fs.readFileSync(require('node:path').join(__dirname,'../quant_workbench/ui',name),'utf8');
+// Flatten only these two dependency-free modules for the existing DOM harness.
+// Native ESM exports are separately tested below.
+const source=['state.js','transport.js'].map(name=>readUI(name).replace(/^export /gm,'')).join('\n')+'\n'+readUI('app.js').replace(/^import .*;\n/gm,'').replace(/init\(\);\s*$/,'');
 // ids that exist in index.html; they are always resolvable, everything else must be rendered
 const STATIC_IDS=['content','notice','page-title','page-subtitle','page-help','source-legend-help','health-label',
   'run-list','run-list-toggle','run-search','help-modal','help-modal-title','help-modal-body','help-modal-close'];
@@ -559,4 +562,24 @@ test('A40/T05: data page shows registered snapshots and their coverage',()=>{
   const missing=x.run("snapshotPanel({available:false,reason:'data_directory_not_configured'})");
   assert.match(missing,/未配置数据目录/);
   assert.match(missing,/data_directory_not_configured/);
+});
+
+
+test('A40: extracted state and transport expose native ESM factories', async()=>{
+ const load=name=>import('data:text/javascript;base64,'+Buffer.from(readUI(name)).toString('base64'));
+ const {createState}=await load('state.js');
+ const a=createState({search:'?run=r&revision=v&compare=a,b&history=research',hash:'#risk'});
+ const b=createState({search:'',hash:''});
+ assert.equal(a.state.revision,'v');assert.equal(a.state.view,'risk');
+ assert.equal(a.state.historyTab,'research');assert.equal(a.hasCompareQuery,true);
+ a.state.compareIds.push('c');assert.deepEqual(b.state.compareIds,[]);
+ const {createTransport}=await load('transport.js');
+ let generation=1, resolve;
+ const transport=createTransport(()=>new Promise(r=>resolve=r),()=>generation);
+ const pending=transport.api('/v1/runs');generation=2;resolve(response({items:[]}));
+ await assert.rejects(pending,{name:'StaleRender'});
+ const calls=[];
+ const raw=createTransport(async(...args)=>{calls.push(args);return response({ok:true});},()=>0);
+ await raw.request('/v1/executions',{method:'POST'});
+ assert.equal(calls[0][1].method,'POST');
 });

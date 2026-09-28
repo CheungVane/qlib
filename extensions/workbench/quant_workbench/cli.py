@@ -8,36 +8,10 @@ import os
 import sys
 from pathlib import Path
 
+from .bootstrap import build_service
 from .adapters.json_result import JsonResultImporter
-from .application import WorkbenchService
-from .adapters.attempt_import import AttemptResultImporter
-from .adapters.executors import QlibCNExecutor, RDAgentExecutor
-from .adapters.rdagent_status import RDAgentStatusProvider
-from .execution import ExecutionService
-from .storage import LocalResultRepository
-from .research import ResearchSnapshots
 
 
-def build_service(root: Path, with_executors: bool = True) -> WorkbenchService:
-    repository = LocalResultRepository(root)
-    agent_root = os.environ.get("QWB_RDAGENT_ROOT")
-    observer = RDAgentStatusProvider(agent_root) if agent_root else None
-    execution = None
-    if with_executors:
-        from .execution_policy import agent_limits, child_limits, load_policy
-        policy = load_policy()
-        limits = {**child_limits(policy), **agent_limits(policy)}
-        execution = ExecutionService(repository,
-                                     executors=[QlibCNExecutor(limits=limits),
-                                                RDAgentExecutor(limits=limits, budget_root=root / "agent_budget")],
-                                     importer=AttemptResultImporter(repository))
-    from .adapters.local_data_directory import LocalDataDirectory
-    data_root = Path(os.environ.get("QWB_DATA_ROOT")
-                     or (Path.home() / ".qlib" / "qlib_data")).expanduser()
-    registry = data_root / "_registry"
-    directory = LocalDataDirectory(registry, data_root) if registry.is_dir() else None
-    return WorkbenchService(repository, observer, ResearchSnapshots(root / "research"), execution,
-                            directory)
 
 
 def parser() -> argparse.ArgumentParser:
