@@ -43,9 +43,15 @@ def main() -> int:
     data_root = Path(args.data_root).expanduser()
     registry = Path(args.registry).expanduser()
     record = json.loads(Path(args.record).read_text())
-    published = dd.publish_snapshot(registry, record)
-    stored = dd.load_snapshot(registry, record["snapshot_id"])
-    reader = dd.FreeSnapshotReader(data_root, stored)
+    reader = dd.FreeSnapshotReader(data_root, record)
+    reader.require_verified().verify_all()
+    from quant_workbench.adapters.data_preparation import audit_bars
+    symbols_all = sorted({r['symbol'] for r in reader.instruments(args.universe)})
+    quality = audit_bars(reader.path('bar'), reader.calendar(), symbols_all)
+    if not quality['passed']:
+        Path(args.output).write_text(json.dumps({'published': False, 'quality': quality}, indent=2))
+        return 2
+    stored = record
 
     legacy = []
     for label in args.legacy:
@@ -70,6 +76,10 @@ def main() -> int:
     first, second = panel_paths
     replay = dd.verify_materialization(first[1], first[0])
 
+    if not bars['ok'] or not replay['ok'] or first[1]['output_digest'] != second[1]['output_digest']:
+        Path(args.output).write_text(json.dumps({'published': False, 'bar_quality': bars, 'replay': replay}, indent=2))
+        return 2
+    published = dd.publish_snapshot(registry, record, data_root=data_root)
     evidence = {
         "t05_slice": "directory_registry_materialization",
         "snapshot_id": stored["snapshot_id"],
@@ -103,7 +113,7 @@ def main() -> int:
                       "issue_count": bars["issue_count"],
                       "deterministic_replay": evidence["materialization"]["deterministic_replay"],
                       "legacy_registered": legacy}, ensure_ascii=False))
-    return 0
+    return 0 if evidence["bar_quality_gate"]["ok"] and replay["ok"] else 2
 
 
 if __name__ == "__main__":

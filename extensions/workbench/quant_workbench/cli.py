@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .domain.errors import SnapshotError
 import argparse
 import json
 import os
@@ -244,6 +245,9 @@ def main(argv: list[str] | None = None) -> int:
             raise LookupError("not found")
         print(json.dumps(result, ensure_ascii=False, allow_nan=False, indent=2))
         return 0
+    except SnapshotError as exc:
+        print(json.dumps({'code': exc.code, 'message': str(exc), 'details': exc.details}), file=sys.stderr)
+        return 1
     except (OSError, RuntimeError, ValueError, LookupError) as exc:
         print(json.dumps({"code": "command_failed", "message": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 1

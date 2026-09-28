@@ -10,8 +10,7 @@ Read-only with respect to the snapshot; writes only the evidence file.
 
 Usage:
   python3 scripts/run_factor_research.py --data-root ~/.qlib/qlib_data \
-    --registry ~/.qlib/qlib_data/_registry --snapshot-id free_cn_20260924 \
-    --enrichment ~/.qlib/qlib_data/free_cn_20260924_enrichment \
+    --registry ~/.qlib/qlib_data/_registry --snapshot-id free_cn_20260924_processed_v1 \
     --start 2025-01-02 --end 2026-09-24 \
     --output docs/spec/evidence/20260927-factor-research.json
 """
@@ -40,8 +39,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", required=True)
     parser.add_argument("--registry", required=True)
-    parser.add_argument("--snapshot-id", default="free_cn_20260924")
-    parser.add_argument("--enrichment", required=True)
+    parser.add_argument("--snapshot-id", default="free_cn_20260924_processed_v1")
+    parser.add_argument("--enrichment", help="deprecated; must match the sealed status directory")
     parser.add_argument("--universe", default="csi500")
     parser.add_argument("--start", default="2025-01-02")
     parser.add_argument("--end", default="2026-09-24")
@@ -56,16 +55,14 @@ def main() -> int:
     reader = dd.FreeSnapshotReader(args.data_root, dd.load_snapshot(args.registry, args.snapshot_id))
     start, end = date.fromisoformat(args.start), date.fromisoformat(args.end)
     dates = [day for day in reader.calendar() if start <= day <= end]
-    symbols = reader.universe_on(end, args.universe)
-    turnover_dir = Path(args.enrichment).expanduser() / "turnover"
+    symbols, membership = fp.historical_membership(reader, dates, args.universe)
+    if args.enrichment and (Path(args.enrichment).expanduser() / 'turnover').resolve() != reader.path('status').resolve():
+        parser.error('--enrichment must refer to the sealed snapshot; omit this deprecated option')
 
     closes, returns, size, flags_by_symbol = {}, {}, {}, {}
     turns_by_symbol = {}
     for symbol in symbols:
-        cache = turnover_dir / f"{symbol}.csv"
-        if not cache.exists():
-            continue
-        enrichment = free_sources.load_turnover_csv(cache)
+        enrichment = reader.turnover(symbol)
         loaded = fp.load_symbol_series(reader, symbol, dates, enrichment)
         close, high, low, change = (loaded["close"], loaded["high"],
                                     loaded["low"], loaded["change"])
@@ -81,7 +78,7 @@ def main() -> int:
                            for index in range(len(close))]
 
     industry_by_date = fp.rolling_industry(returns, dates, window=args.industry_window,
-                                           n_clusters=args.industry_clusters, step=21)
+                                           n_clusters=args.industry_clusters, step=21, membership=membership)
     industry_keys = sorted(industry_by_date)
 
     def industry_for(day: str) -> dict[str, int]:
@@ -118,42 +115,44 @@ def main() -> int:
             tradable_label = fp.label_tradability(flags, horizon)
             raw_label = fp.forward_return(close, horizon)
             for index in range(len(dates)):
-                if tradable_label[index] and math.isfinite(raw_label[index]):
+                if symbol in membership[index] and tradable_label[index] and math.isfinite(raw_label[index]):
                     labels[horizon][index][symbol] = raw_label[index]
         for name, values in series.items():
             for index in range(len(dates)):
-                if flags[index] and math.isfinite(values[index]):
+                if symbol in membership[index] and flags[index] and math.isfinite(values[index]):
                     panels[name][index][symbol] = values[index]
 
-    hypotheses, ic_series = {}, {}
+    hypotheses, ic_series, spreads = {}, {}, {}
     for name in FACTORS:
         for horizon in HORIZONS:
             for variant in ("raw", "neutralized"):
-                series = []
+                series, spread_values = [], []
                 for index, day in enumerate(dates):
                     factor = dict(panels[name][index])
                     if variant == "neutralized":
                         factor = fp.neutralize(factor, exposures_for(day.isoformat(), index),
                                                industry_for(day.isoformat()))
-                    value = fp.rank_ic(factor, labels[horizon][index])
-                    if value is not None:
-                        series.append(value)
-                if len(series) < 10:
-                    continue
-                t_stat = fp.newey_west_t(series, lags=horizon - 1)
+                    series.append(fp.rank_ic(factor, labels[horizon][index]))
+                    spread = fp.quantile_spread(factor, labels[horizon][index])
+                    spread_values.append(spread['spread_top_bottom'] if spread else None)
+                warmup = 20 if variant == 'raw' else ((args.industry_window + 20) // 21) * 21
+                stat = fp.research_stats(series, horizon, warmup)
                 key = f"{name}_h{horizon}_{variant}"
                 ic_series[key] = series
                 hypotheses[key] = {
                     "factor": name, "horizon": horizon, "variant": variant,
-                    "days": len(series),
-                    "mean_rank_ic": statistics.fmean(series),
-                    "std_rank_ic": statistics.stdev(series) if len(series) > 1 else None,
-                    "icir": (statistics.fmean(series) / statistics.stdev(series)
-                             if len(series) > 1 and statistics.stdev(series) > 0 else None),
-                    "nw_t": t_stat,
-                    "p_value": fp.normal_two_sided_p(t_stat),
-                    "positive_share": sum(1 for value in series if value > 0) / len(series),
+                    "days": stat['days'], 'expected_days': stat['expected_days'],
+                    'warmup_days': warmup, 'immature_tail_days': horizon,
+                    "mean_rank_ic": stat['ic_mean'], "std_rank_ic": stat['ic_std'],
+                    "icir": stat['icir'], "nw_t": stat['t_stat'], "p_value": stat['p_value'],
+                    "positive_share": stat['positive_ratio'],
+                    'significance_available': stat['significance_available'],
+                    'significance_reason': stat['significance_reason'],
                 }
+                eligible = fp.label_window(slice(0, len(dates)), horizon, warmup)
+                valid_spreads = [v for v in spread_values[eligible] if v is not None]
+                if valid_spreads:
+                    spreads[key] = {'days': len(valid_spreads), 'mean_spread': statistics.fmean(valid_spreads)}
 
     turnover_stats = {}
     for name in FACTORS:
@@ -167,38 +166,22 @@ def main() -> int:
                                     "mean_rank_turnover": statistics.fmean(per_day)}
 
     round_trip_cost = args.round_trip_cost
-    spreads = {}
-    for name in FACTORS:
-        for variant in ("raw", "neutralized"):
-            values = []
-            for index, day in enumerate(dates):
-                factor = dict(panels[name][index])
-                if variant == "neutralized":
-                    factor = fp.neutralize(factor, exposures_for(day.isoformat(), index),
-                                           industry_for(day.isoformat()))
-                spread = fp.quantile_spread(factor, labels[5][index])
-                if spread is not None:
-                    values.append(spread["spread_top_bottom"])
-            if values:
-                spreads[f"{name}_{variant}"] = {"days": len(values),
-                                                "mean_spread": statistics.fmean(values)}
-
     q_values = fp.benjamini_hochberg({key: item["p_value"] for key, item in hypotheses.items()
                                       if item["p_value"] is not None})
     for key, item in hypotheses.items():
         item["fdr_q"] = q_values.get(key)
         item["ic_series_digest"] = "sha256:" + hashlib.sha256(
-            json.dumps([round(value, 8) for value in ic_series[key]]).encode()).hexdigest()
-        item["stability"] = fp.stability(ic_series[key], folds=args.stability_folds)
+            json.dumps([round(value, 8) if value is not None else None for value in ic_series[key]]).encode()).hexdigest()
+        item["stability"] = fp.stability([v if v is not None else float('nan') for v in ic_series[key][fp.label_window(slice(0, len(dates)), item['horizon'], item['warmup_days'])]], folds=args.stability_folds)
         turnover = turnover_stats.get(item["factor"], {}).get("mean_rank_turnover")
         if turnover is not None:
-            spread = spreads.get(f"{item['factor']}_{item['variant']}")
+            spread = spreads.get(key)
             if spread:
                 item["cost_screen"] = fp.cost_threshold(
                     spread["mean_spread"], turnover, item["horizon"], round_trip_cost)
 
     fdr_survivors = [key for key, item in hypotheses.items()
-                     if (item.get("fdr_q") or 1.0) <= 0.05]
+                     if item.get("fdr_q") is not None and item["fdr_q"] <= 0.05]
     cost_survivors = [key for key, item in hypotheses.items()
                       if (item.get("cost_screen") or {}).get("passes")]
     evidence = {
@@ -224,9 +207,9 @@ def main() -> int:
         "neutralization": {"exposures": ["log_float_cap", "market_beta", "industry_dummies"],
                            "method": "cross_sectional_ols_residual"},
         "label": {"horizons": list(HORIZONS), "basis": "adjusted close on snapshot calendar",
-                  "two_sided_tradability": True},
+                  "whole_window_status_mask": True},
         "hypotheses": hypotheses,
-        "quantile_spread_h5": spreads,
+        "quantile_spread_by_hypothesis": spreads,
         "factor_rank_turnover": turnover_stats,
         "families": {"hypotheses_tested": len(hypotheses), "fdr": "benjamini_hochberg"},
         "cost_model": {"round_trip_cost": round_trip_cost,
@@ -237,18 +220,20 @@ def main() -> int:
             "free_community_unverified inputs; exploratory only, not alpha evidence",
             "industry is a statistical proxy, not a PIT named classification",
             "size uses derived float shares from turnover; corporate-action jumps remain",
-            "no risk-model (beta/风格) neutralisation beyond size and industry",
-            "one-word limit detection is approximate",
+            "size, market beta and statistical industry only; not a full risk model",
+            "all flat bars excluded conservatively; not a legal limit or fill model",
         ],
         "paths_recorded": False,
     }
+    if Path(args.output).exists():
+        raise ValueError("output already exists; choose a new result version")
     Path(args.output).write_text(json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
-    top = sorted(hypotheses.items(), key=lambda item: item[1]["mean_rank_ic"])
+    top = sorted(((k, v) for k, v in hypotheses.items() if v["mean_rank_ic"] is not None), key=lambda item: item[1]["mean_rank_ic"])
     print(json.dumps({"hypotheses": len(hypotheses),
-                      "most_negative": {top[0][0]: round(top[0][1]["mean_rank_ic"], 4)},
-                      "most_positive": {top[-1][0]: round(top[-1][1]["mean_rank_ic"], 4)},
+                      "most_negative": {top[0][0]: round(top[0][1]["mean_rank_ic"], 4)} if top else None,
+                      "most_positive": {top[-1][0]: round(top[-1][1]["mean_rank_ic"], 4)} if top else None,
                       "fdr_survivors": sum(1 for item in hypotheses.values()
-                                           if (item.get("fdr_q") or 1) <= 0.05)},
+                                           if item.get("fdr_q") is not None and item["fdr_q"] <= 0.05)},
                      ensure_ascii=False))
     return 0
 

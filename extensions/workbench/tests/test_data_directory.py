@@ -85,7 +85,7 @@ class RegistryTests(unittest.TestCase):
 
     def test_reproducibility_requires_complete_evidence(self):
         record = real_record()
-        self.assertEqual(dd.reproducibility(record)["state"], "reproducible")
+        self.assertEqual(dd.reproducibility(record)["state"], "limited")
         partial = dict(record, provenance={"completeness": "partial"})
         self.assertEqual(dd.reproducibility(partial)["state"], "limited")
         no_version = dict(record, materializer={"name": "x"})
@@ -203,6 +203,11 @@ class FakeSnapshotTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             reader = self.build(Path(folder), {"open": [9.0, 9.1], "high": [9.2, 9.3],
                                                "low": [8.9, 9.0], "close": [9.1, 9.2]})
+            from quant_workbench.adapters.snapshot_files import seal_record
+            raw = reader.record
+            next(c for c in raw['components'] if c['kind'] == 'universe')['uri'] = 'instruments'
+            reader = dd.FreeSnapshotReader(folder, seal_record(Path(folder), raw,
+                {'price_basis': 'finv_adjusted_v1'}, {'passed': True}))
             record = dd.materialize_panel(reader, output=Path(folder) / "panel.csv",
                                           universe="all", fields=["close"],
                                           start=date(2026, 9, 23), end=date(2026, 9, 24), seed=7)

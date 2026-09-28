@@ -47,3 +47,14 @@ class BudgetExhausted(ExecutionError):
 
     code = "budget_exhausted"
     status_code = 409
+
+
+class SnapshotError(ValueError):
+    """Public DATA04-A failure; details contain logical identities, never host paths."""
+    def __init__(self, code: str, snapshot_id: str, component: str | None = None):
+        self.code = code
+        self.status_code = 404 if code == 'snapshot_not_found' else 409
+        self.details = {'snapshot_id': snapshot_id}
+        if component is not None:
+            self.details['component'] = component
+        super().__init__(code)

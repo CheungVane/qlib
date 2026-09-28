@@ -32,17 +32,15 @@ def aligned_series(reader: FreeSnapshotReader, symbol: str, field: str,
     """Values aligned to `dates`; NaN outside the instrument's recorded coverage."""
     if field not in free_sources.ARCHIVE_FIELDS:
         raise DataDirectoryError(f"unknown feature field: {field}")
-    path = reader.path("bar") / symbol.lower() / f"{field}.day.bin"
-    try:
-        head = free_sources.read_bin_head_tail(path)
-        values = free_sources.read_bin_values(path)
-    except (free_sources.FreeSourceError, OSError):
-        return [float("nan")] * len(dates)
+    reader.require_verified()
+    if reader.record['interpretation']['price_basis'] != 'finv_adjusted_v1':
+        raise DataDirectoryError('free pipeline requires declared finv_adjusted_v1')
+    start, values = reader.bin_series(symbol, field)
     positions = {day: index for index, day in enumerate(reader.calendar())}
     result = []
     for day in dates:
         position = positions.get(day)
-        offset = None if position is None else position - head["start_index"]
+        offset = None if position is None else position - start
         result.append(values[offset] if offset is not None and 0 <= offset < len(values)
                       else float("nan"))
     return result
@@ -53,7 +51,7 @@ def load_symbol_series(reader: FreeSnapshotReader, symbol: str, dates: Sequence[
     """All archive fields a factor slice needs, aligned to `dates` (+ turnover from cache)."""
     fields = ("close", "high", "low", "change", "volume", "factor")
     series = {field: aligned_series(reader, symbol, field, dates) for field in fields}
-    series["turn"] = [enrichment.get(day.isoformat(), {}).get("turn") or float("nan")
+    series["turn"] = [enrichment.get(day.isoformat(), {}).get("turn") if enrichment.get(day.isoformat(), {}).get("turn") is not None else float("nan")
                       for day in dates]
     return series
 
@@ -87,15 +85,15 @@ def forward_return(closes: Sequence[float], horizon: int = DEFAULT_HORIZON) -> l
     labels = [float("nan")] * len(closes)
     for index in range(len(closes) - horizon):
         start, end = closes[index], closes[index + horizon]
-        if math.isfinite(start) and math.isfinite(end) and start > 0:
+        if all(math.isfinite(v) and v > 0 for v in closes[index:index + horizon + 1]):
             labels[index] = end / start - 1.0
     return labels
 
 
 def label_tradability(flags: Sequence[bool], horizon: int = DEFAULT_HORIZON) -> list[bool]:
-    """Buy-side at t **and** sell-side at t+h must both be tradable."""
+    """Require every observation in the label window, including its endpoints."""
     total = len(flags)
-    return [bool(flags[index] and index + horizon < total and flags[index + horizon])
+    return [bool(index + horizon < total and all(flags[index:index + horizon + 1]))
             for index in range(total)]
 
 
@@ -112,14 +110,12 @@ def tradable(values: dict[str, Sequence[float]], dates: Sequence[date],
             flags.append(False)
             continue
         high, low = values["high"][index], values["low"][index]
-        change = values["change"][index]
-        if not all(math.isfinite(item) for item in (high, low, change)):
+        if not all(math.isfinite(item) and item > 0 for item in (high, low)):
             flags.append(False)
             continue
-        limit = ST_LIMIT if status.get("isST") == 1 else NORMAL_LIMIT
         flat = abs(high - low) <= 1e-5 * max(abs(high), 1.0)
-        if flat and abs(change) >= limit:  # `change` is a decimal fraction in the archive
-            flags.append(False)  # one-word board: cannot get filled
+        if flat:  # Conservative single-price-day exclusion; not an exchange limit rule.
+            flags.append(False)
             continue
         flags.append(True)
     return flags
@@ -181,7 +177,7 @@ def log_float_cap(closes: Sequence[float], factors: Sequence[float],
 
 
 def rolling_industry(returns_by_symbol: dict[str, Sequence[float]], dates: Sequence[date],
-                     *, window: int = 120, n_clusters: int = 8, step: int = 21) -> dict[str, dict[str, int]]:
+                     *, window: int = 120, n_clusters: int = 8, step: int = 21, membership=None) -> dict[str, dict[str, int]]:
     """Cluster trailing return windows on a fixed grid: labels use past data only (PIT)."""
     from .free_sources import statistical_industry
 
@@ -190,7 +186,8 @@ def rolling_industry(returns_by_symbol: dict[str, Sequence[float]], dates: Seque
         if index < window or index % step:
             continue
         trailing = {symbol: list(values[index - window + 1:index + 1])
-                    for symbol, values in returns_by_symbol.items()}
+                    for symbol, values in returns_by_symbol.items()
+                    if membership is None or symbol in membership[index]}
         usable = {symbol: values for symbol, values in trailing.items()
                   if len(values) == window and all(math.isfinite(value) for value in values)
                   and len(set(values)) > 1}
@@ -240,7 +237,8 @@ def neutralize(factor: dict[str, float], exposures: Sequence[dict[str, float]],
     exposures = list(exposures) or [{}]
     symbols = [symbol for symbol in sorted(factor)
                if math.isfinite(factor.get(symbol, float("nan")))
-               and all(math.isfinite(item.get(symbol, float("nan"))) for item in exposures)]
+               and all(math.isfinite(item.get(symbol, float("nan"))) for item in exposures)
+               and (industry is None or symbol in industry)]
     if len(symbols) < 20:
         return {}
     industry = industry or {}
@@ -260,7 +258,9 @@ def neutralize(factor: dict[str, float], exposures: Sequence[dict[str, float]],
 
 def stability(series: Sequence[float], folds: int = 6) -> dict:
     """Consecutive-fold IC stability: sign consistency and dispersion of fold means."""
-    values = [value for value in series if math.isfinite(value)]
+    values = list(series)
+    if any(not math.isfinite(v) for v in values):
+        return {"state": "unavailable", "reason": "missing_trading_day_ic", "folds": 0}
     if len(values) < folds * 5:
         return {"state": "insufficient", "folds": 0}
     size = len(values) // folds
@@ -320,21 +320,33 @@ def quantile_spread(factor: dict[str, float], label: dict[str, float],
 # -- inference ---------------------------------------------------------------
 def newey_west_t(values: Sequence[float], lags: int) -> float | None:
     """NW(Bartlett) t-statistic of the mean; same convention as FACTOR_ANALYSIS §4.1."""
-    series = [value for value in values if math.isfinite(value)]
-    count = len(series)
-    if count < max(10, lags + 2):
-        return None
-    average = statistics.fmean(series)
-    centred = [value - average for value in series]
-    gamma0 = sum(value * value for value in centred) / count
-    omega = gamma0
-    for lag in range(1, lags + 1):
-        covariance = sum(centred[index] * centred[index - lag]
-                         for index in range(lag, count)) / count
-        omega += 2 * (1 - lag / (lags + 1)) * covariance
-    if omega <= 0:
-        return None
-    return average / math.sqrt(omega / count)
+    from .factors_v2 import stats
+    expected = list(range(len(values)))
+    rows = [{'date': i, 'ic': v} for i, v in enumerate(values)
+            if v is not None and math.isfinite(v)]
+    return stats(rows, lags + 1, 1, expected)['t_stat']
+
+
+def historical_membership(reader, dates, universe):
+    reader.require_verified()
+    membership = [set(reader.universe_on(day, universe)) for day in dates]
+    return sorted(set().union(*membership)), membership
+
+
+def label_window(block, horizon, warmup=20):
+    """Positions whose complete label ends inside this block (exclusive stop)."""
+    return slice(max(block.start or 0, warmup), max(max(block.start or 0, warmup), block.stop - horizon))
+
+
+def research_stats(values, horizon, warmup, *, block=None):
+    """Keep the predeclared axis; missing interior IC blocks significance."""
+    from .factors_v2 import stats
+    block = block or slice(0, len(values))
+    window = label_window(block, horizon, warmup)
+    expected = list(range(window.start, window.stop))
+    rows = [{'date': i, 'ic': values[i]} for i in expected
+            if values[i] is not None and math.isfinite(values[i])]
+    return stats(rows, horizon, 12, expected)
 
 
 def benjamini_hochberg(p_values: dict[str, float]) -> dict[str, float]:

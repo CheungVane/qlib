@@ -12,7 +12,7 @@ TOP_LEVEL = set('''__init__ api application bootstrap cli cn_market cn_schema da
  source_safety storage storage_attempts storage_base storage_factors storage_results telemetry
  validation validation_v2'''.split())
 PURE_STDLIB = {'__future__', 'dataclasses', 'enum', 'typing', 'collections', 'datetime',
-               'hashlib', 'json', 'math', 're', 'decimal', 'pathlib', 'uuid'}
+               'struct', 'hashlib', 'json', 'math', 're', 'decimal', 'pathlib', 'uuid'}
 # Removing these edges is allowed. Adding an edge requires an architecture review.
 LEGACY = {
     'services.results': {'provenance', 'metrics', 'research'},

@@ -1,0 +1,619 @@
+{
+  "archive_members_compared": 18033,
+  "archive_sha256": "4ce65c37755265bec24266e922468195e66166e5f91996595ac8eaade6db85fa",
+  "date": "2026-09-28",
+  "historical_available_at": "unknown",
+  "historical_cache_completion": "unknown",
+  "independent_oracle": {
+    "absolute_tolerance": 1e-12,
+    "counts": {
+      "chunks_verified": 12,
+      "missing_cells_verified": 256007,
+      "numeric_cells_verified": 12581224,
+      "rows_verified": 1426359
+    },
+    "input_content_digest": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+    "max_relative_error": 6.340442945848004e-16,
+    "oracle": "original archive field bytes and original BaoStock CSV; independent arithmetic",
+    "passed": true,
+    "paths_recorded": false,
+    "relative_tolerance": 1e-12,
+    "snapshot_id": "free_cn_20260924_processed_v1"
+  },
+  "limits": [
+    "free community source, not official or PIT-certified",
+    "286 historical member dates lack status; 36628 lack close; no imputation",
+    "historical cache completion remains unknown",
+    "generic UI factor analysis still uses its CN profile; ARC11 pending",
+    "no live provider calls, no execution training or backtest certification",
+    "old raw data, registry and research outputs preserved; v2/v3 are intermediate processing versions"
+  ],
+  "normalized_panels": {
+    "chunks": 12,
+    "materializer_version": "2.1",
+    "rows": 1426359
+  },
+  "panel_manifest": {
+    "chunks": [
+      {
+        "end": "2015-12-31",
+        "independent_keys_verified": true,
+        "missing": {
+          "missing_adjusted_close": 14124,
+          "missing_amount_cny": 14124,
+          "missing_float_cap_estimate": 14124,
+          "missing_float_shares_estimate": 14124,
+          "missing_is_st": 0,
+          "missing_raw_close": 14124,
+          "missing_raw_volume_shares": 14124,
+          "missing_status_dates": 0,
+          "missing_tradestatus": 0,
+          "missing_turn_percent": 14124,
+          "source_nan_amount": 14124,
+          "source_nan_close": 14124,
+          "source_nan_factor": 0,
+          "source_nan_volume": 14124
+        },
+        "path": "2015.csv",
+        "replay_verified": true,
+        "rows": 122000,
+        "sha256": "b6d1e57c4d4ba6f0a578e7d0345cb036a60f52166acea19fb61029885fec1bfa",
+        "size_bytes": 16332314,
+        "start": "2015-01-05",
+        "unique_keys": 122000,
+        "unit_identity_verified": true
+      },
+      {
+        "end": "2016-12-30",
+        "independent_keys_verified": true,
+        "missing": {
+          "missing_adjusted_close": 7483,
+          "missing_amount_cny": 7483,
+          "missing_float_cap_estimate": 7483,
+          "missing_float_shares_estimate": 7483,
+          "missing_is_st": 0,
+          "missing_raw_close": 7483,
+          "missing_raw_volume_shares": 7483,
+          "missing_status_dates": 0,
+          "missing_tradestatus": 0,
+          "missing_turn_percent": 7483,
+          "source_nan_amount": 7483,
+          "source_nan_close": 7483,
+          "source_nan_factor": 0,
+          "source_nan_volume": 7483
+        },
+        "path": "2016.csv",
+        "replay_verified": true,
+        "rows": 122000,
+        "sha256": "1ede91c9adb31fec33f49940f9580063c0badbead7a1f790019773cf470ff52a",
+        "size_bytes": 17205302,
+        "start": "2016-01-04",
+        "unique_keys": 122000,
+        "unit_identity_verified": true
+      },
+      {
+        "end": "2017-12-29",
+        "independent_keys_verified": true,
+        "missing": {
+          "coverage_outside_amount": 6,
+          "coverage_outside_close": 6,
+          "coverage_outside_factor": 6,
+          "coverage_outside_volume": 6,
+          "missing_adjusted_close": 6648,
+          "missing_amount_cny": 6648,
+          "missing_float_cap_estimate": 6648,
+          "missing_float_shares_estimate": 6648,
+          "missing_is_st": 5,
+          "missing_raw_close": 6648,
+          "missing_raw_volume_shares": 6648,
+          "missing_status_dates": 5,
+          "missing_tradestatus": 5,
+          "missing_turn_percent": 6648,
+          "source_nan_amount": 6642,
+          "source_nan_close": 6642,
+          "source_nan_factor": 0,
+          "source_nan_volume": 6642
+        },
+        "path": "2017.csv",
+        "replay_verified": true,
+        "rows": 122000,
+        "sha256": "6ea9ba15843a8d46d1704a681b5c4759a3ca9672232c83482cd90fec7cc14e57",
+        "size_bytes": 17370865,
+        "start": "2017-01-03",
+        "unique_keys": 122000,
+        "unit_identity_verified": true
+      },
+      {
+        "end": "2018-12-28",
+        "independent_keys_verified": true,
+        "missing": {
+          "coverage_outside_amount": 1,
+          "coverage_outside_close": 1,
+          "coverage_outside_factor": 1,
+          "coverage_outside_volume": 1,
+          "missing_adjusted_close": 5945,
+          "missing_amount_cny": 5945,
+          "missing_float_cap_estimate": 5945,
+          "missing_float_shares_estimate": 5945,
+          "missing_is_st": 0,
+          "missing_raw_close": 5945,
+          "missing_raw_volume_shares": 5945,
+          "missing_status_dates": 0,
+          "missing_tradestatus": 0,
+          "missing_turn_percent": 5945,
+          "source_nan_amount": 5944,
+          "source_nan_close": 5944,
+          "source_nan_factor": 0,
+          "source_nan_volume": 5944
+        },
+        "path": "2018.csv",
+        "replay_verified": true,
+        "rows": 121500,
+        "sha256": "3115e6e67ea86bc1afdb780a40d57349da70ff3f3e2c8de867075c80e7787fcb",
+        "size_bytes": 17426637,
+        "start": "2018-01-02",
+        "unique_keys": 121500,
+        "unit_identity_verified": true
+      },
+      {
+        "end": "2019-12-31",
+        "independent_keys_verified": true,
+        "missing": {
+          "coverage_outside_amount": 141,
+          "coverage_outside_close": 141,
+          "coverage_outside_factor": 141,
+          "coverage_outside_volume": 141,
+          "missing_adjusted_close": 343,
+          "missing_amount_cny": 343,
+          "missing_float_cap_estimate": 343,
+          "missing_float_shares_estimate": 343,
+          "missing_is_st": 121,
+          "missing_raw_close": 343,
+          "missing_raw_volume_shares": 343,
+          "missing_status_dates": 121,
+          "missing_tradestatus": 121,
+          "missing_turn_percent": 343,
+          "source_nan_amount": 202,
+          "source_nan_close": 202,
+          "source_nan_factor": 0,
+          "source_nan_volume": 202
+        },
+        "path": "2019.csv",
+        "replay_verified": true,
+        "rows": 122000,
+        "sha256": "0e2aac622a9118e5d925cf2a532a20d4c10283b6abdcd08b9a5f5fdd1fbba6b2",
+        "size_bytes": 18093584,
+        "start": "2019-01-02",
+        "unique_keys": 122000,
+        "unit_identity_verified": true
+      },
+      {
+        "end": "2020-12-31",
+        "independent_keys_verified": true,
+        "missing": {
+          "missing_adjusted_close": 231,
+          "missing_amount_cny": 231,
+          "missing_float_cap_estimate": 231,
+          "missing_float_shares_estimate": 231,
+          "missing_is_st": 0,
+          "missing_raw_close": 231,
+          "missing_raw_volume_shares": 231,
+          "missing_status_dates": 0,
+          "missing_tradestatus": 0,
+          "missing_turn_percent": 230,
+          "source_nan_amount": 231,
+          "source_nan_close": 231,
+          "source_nan_factor": 0,
+          "source_nan_volume": 231
+        },
+        "path": "2020.csv",
+        "replay_verified": true,
+        "rows": 121500,
+        "sha256": "4ddadf623478a0fb04cbb9dad2321fc156d0d7815c8deeab4c6fa3fb4d9d1f26",
+        "size_bytes": 17924166,
+        "start": "2020-01-02",
+        "unique_keys": 121500,
+        "unit_identity_verified": true
+      },
+      {
+        "end": "2021-12-31",
+        "independent_keys_verified": true,
+        "missing": {
+          "coverage_outside_amount": 79,
+          "coverage_outside_close": 79,
+          "coverage_outside_factor": 79,
+          "coverage_outside_volume": 79,
+          "missing_adjusted_close": 255,
+          "missing_amount_cny": 255,
+          "missing_float_cap_estimate": 255,
+          "missing_float_shares_estimate": 255,
+          "missing_is_st": 71,
+          "missing_raw_close": 255,
+          "missing_raw_volume_shares": 255,
+          "missing_status_dates": 71,
+          "missing_tradestatus": 71,
+          "missing_turn_percent": 253,
+          "source_nan_amount": 176,
+          "source_nan_close": 176,
+          "source_nan_factor": 0,
+          "source_nan_volume": 176
+        },
+        "path": "2021.csv",
+        "replay_verified": true,
+        "rows": 121500,
+        "sha256": "2a2dcce3cf2d6f73742ad8b5af78b6c4ed265772a7975d6057f98ef81ee62634",
+        "size_bytes": 17907673,
+        "start": "2021-01-04",
+        "unique_keys": 121500,
+        "unit_identity_verified": true
+      },
+      {
+        "end": "2022-12-30",
+        "independent_keys_verified": true,
+        "missing": {
+          "missing_adjusted_close": 298,
+          "missing_amount_cny": 298,
+          "missing_float_cap_estimate": 298,
+          "missing_float_shares_estimate": 298,
+          "missing_is_st": 0,
+          "missing_raw_close": 298,
+          "missing_raw_volume_shares": 298,
+          "missing_status_dates": 0,
+          "missing_tradestatus": 0,
+          "missing_turn_percent": 191,
+          "source_nan_amount": 298,
+          "source_nan_close": 298,
+          "source_nan_factor": 0,
+          "source_nan_volume": 298
+        },
+        "path": "2022.csv",
+        "replay_verified": true,
+        "rows": 121000,
+        "sha256": "ebd95c2d8e6631acfd1f6e37d0fd141f8d95f97002bfb6a01b3d561915422343",
+        "size_bytes": 17855507,
+        "start": "2022-01-04",
+        "unique_keys": 121000,
+        "unit_identity_verified": true
+      },
+      {
+        "end": "2023-12-29",
+        "independent_keys_verified": true,
+        "missing": {
+          "coverage_outside_amount": 29,
+          "coverage_outside_close": 29,
+          "coverage_outside_factor": 29,
+          "coverage_outside_volume": 29,
+          "missing_adjusted_close": 343,
+          "missing_amount_cny": 343,
+          "missing_float_cap_estimate": 343,
+          "missing_float_shares_estimate": 343,
+          "missing_is_st": 0,
+          "missing_raw_close": 343,
+          "missing_raw_volume_shares": 343,
+          "missing_status_dates": 0,
+          "missing_tradestatus": 0,
+          "missing_turn_percent": 107,
+          "source_nan_amount": 314,
+          "source_nan_close": 314,
+          "source_nan_factor": 0,
+          "source_nan_volume": 314
+        },
+        "path": "2023.csv",
+        "replay_verified": true,
+        "rows": 121001,
+        "sha256": "e1e869cab7b1bd35f9b62ca36656475c32078412bb20e5c81fa4bd325708da58",
+        "size_bytes": 17908284,
+        "start": "2023-01-03",
+        "unique_keys": 121001,
+        "unit_identity_verified": true
+      },
+      {
+        "end": "2024-12-31",
+        "independent_keys_verified": true,
+        "missing": {
+          "coverage_outside_amount": 242,
+          "coverage_outside_close": 242,
+          "coverage_outside_factor": 242,
+          "coverage_outside_volume": 242,
+          "missing_adjusted_close": 521,
+          "missing_amount_cny": 521,
+          "missing_float_cap_estimate": 521,
+          "missing_float_shares_estimate": 521,
+          "missing_is_st": 0,
+          "missing_raw_close": 521,
+          "missing_raw_volume_shares": 521,
+          "missing_status_dates": 0,
+          "missing_tradestatus": 0,
+          "missing_turn_percent": 66,
+          "source_nan_amount": 279,
+          "source_nan_close": 279,
+          "source_nan_factor": 0,
+          "source_nan_volume": 279
+        },
+        "path": "2024.csv",
+        "replay_verified": true,
+        "rows": 121242,
+        "sha256": "2465c14ae0d0da4d86863f53e87827497034fa000d4d1990de6ca14e23a26324",
+        "size_bytes": 17862942,
+        "start": "2024-01-02",
+        "unique_keys": 121242,
+        "unit_identity_verified": true
+      },
+      {
+        "end": "2025-12-31",
+        "independent_keys_verified": true,
+        "missing": {
+          "coverage_outside_amount": 116,
+          "coverage_outside_close": 116,
+          "coverage_outside_factor": 116,
+          "coverage_outside_volume": 116,
+          "missing_adjusted_close": 355,
+          "missing_amount_cny": 355,
+          "missing_float_cap_estimate": 355,
+          "missing_float_shares_estimate": 355,
+          "missing_is_st": 89,
+          "missing_raw_close": 355,
+          "missing_raw_volume_shares": 355,
+          "missing_status_dates": 89,
+          "missing_tradestatus": 89,
+          "missing_turn_percent": 195,
+          "source_nan_amount": 239,
+          "source_nan_close": 239,
+          "source_nan_factor": 0,
+          "source_nan_volume": 239
+        },
+        "path": "2025.csv",
+        "replay_verified": true,
+        "rows": 121616,
+        "sha256": "ee384b1c4afa3ba05d151984fd08cf0cd988f8ded3d2ab0547b830f4363b8564",
+        "size_bytes": 17871876,
+        "start": "2025-01-02",
+        "unique_keys": 121616,
+        "unit_identity_verified": true
+      },
+      {
+        "end": "2026-09-24",
+        "independent_keys_verified": true,
+        "missing": {
+          "coverage_outside_amount": 8,
+          "coverage_outside_close": 8,
+          "coverage_outside_factor": 8,
+          "coverage_outside_volume": 8,
+          "missing_adjusted_close": 82,
+          "missing_amount_cny": 82,
+          "missing_float_cap_estimate": 82,
+          "missing_float_shares_estimate": 82,
+          "missing_is_st": 0,
+          "missing_raw_close": 82,
+          "missing_raw_volume_shares": 82,
+          "missing_status_dates": 0,
+          "missing_tradestatus": 0,
+          "missing_turn_percent": 82,
+          "source_nan_amount": 74,
+          "source_nan_close": 74,
+          "source_nan_factor": 0,
+          "source_nan_volume": 74
+        },
+        "path": "2026.csv",
+        "replay_verified": true,
+        "rows": 89000,
+        "sha256": "58d5e41e758925672dc2eeb5cc01466cefa335f0afb185146e3e14192f692e85",
+        "size_bytes": 13050989,
+        "start": "2026-01-05",
+        "unique_keys": 89000,
+        "unit_identity_verified": true
+      }
+    ],
+    "columns": [
+      "date",
+      "symbol",
+      "adjusted_close",
+      "raw_close",
+      "raw_volume_shares",
+      "amount_cny",
+      "turn_percent",
+      "tradestatus",
+      "is_st",
+      "float_shares_estimate",
+      "float_cap_estimate"
+    ],
+    "historical_available_at": "unknown",
+    "historical_cache_completion": "unknown",
+    "input_content_digest": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+    "materializer_version": "2.1",
+    "missing_representation": "empty CSV cell",
+    "price_basis": "finv_adjusted_v1",
+    "schema_version": 1,
+    "snapshot_id": "free_cn_20260924_processed_v1",
+    "source_class": "free_community_unverified",
+    "window": {
+      "end": "2026-09-24",
+      "start": "2015-01-05"
+    }
+  },
+  "panel_missing_totals": {
+    "coverage_outside_amount": 622,
+    "coverage_outside_close": 622,
+    "coverage_outside_factor": 622,
+    "coverage_outside_volume": 622,
+    "missing_adjusted_close": 36628,
+    "missing_amount_cny": 36628,
+    "missing_float_cap_estimate": 36628,
+    "missing_float_shares_estimate": 36628,
+    "missing_is_st": 286,
+    "missing_raw_close": 36628,
+    "missing_raw_volume_shares": 36628,
+    "missing_status_dates": 286,
+    "missing_tradestatus": 286,
+    "missing_turn_percent": 35667,
+    "source_nan_amount": 36006,
+    "source_nan_close": 36006,
+    "source_nan_factor": 0,
+    "source_nan_volume": 36006
+  },
+  "paths_recorded": false,
+  "published": true,
+  "quality": {
+    "cache": {
+      "files": 1791,
+      "missing_turn": 128151,
+      "rows": 4601971,
+      "zero_turn": 19
+    },
+    "cache_errors": [],
+    "checked_symbols": 1803,
+    "errors": [],
+    "invalid_groups": 0,
+    "membership_status_coverage": {
+      "membership_rows": 1426359,
+      "missing_status_dates": 286,
+      "observed_st_dates": 1983,
+      "observed_status_dates": 1426073,
+      "observed_suspended_dates": 35384
+    },
+    "missing_cache": [
+      {
+        "last_membership": "2012-07-30",
+        "symbol": "SH600087"
+      },
+      {
+        "last_membership": "2012-03-29",
+        "symbol": "SH600102"
+      },
+      {
+        "last_membership": "2009-06-30",
+        "symbol": "SH600253"
+      },
+      {
+        "last_membership": "2012-03-29",
+        "symbol": "SH600263"
+      },
+      {
+        "last_membership": "2011-06-30",
+        "symbol": "SH600553"
+      },
+      {
+        "last_membership": "2010-06-30",
+        "symbol": "SH600607"
+      },
+      {
+        "last_membership": "2010-01-03",
+        "symbol": "SH600840"
+      },
+      {
+        "last_membership": "2012-03-29",
+        "symbol": "SH600991"
+      },
+      {
+        "last_membership": "2009-05-05",
+        "symbol": "SZ000515"
+      },
+      {
+        "last_membership": "2013-04-25",
+        "symbol": "SZ000522"
+      },
+      {
+        "last_membership": "2010-01-03",
+        "symbol": "SZ000602"
+      }
+    ],
+    "missing_field_points": {
+      "adjclose": 302561,
+      "amount": 302561,
+      "change": 304364,
+      "close": 302561,
+      "factor": 17,
+      "high": 302561,
+      "low": 302561,
+      "open": 302561,
+      "volume": 302561,
+      "vwap": 302561
+    },
+    "observed_field_points": {
+      "adjclose": 8438471,
+      "amount": 8438471,
+      "change": 8438471,
+      "close": 8438471,
+      "factor": 8438471,
+      "high": 8438471,
+      "low": 8438471,
+      "open": 8438471,
+      "volume": 8438471,
+      "vwap": 8438471
+    },
+    "passed": true,
+    "relative_tolerance": 1e-05
+  },
+  "real_adjustment_examples": [
+    {
+      "dates": [
+        "2025-07-15",
+        "2025-07-16"
+      ],
+      "equal": true,
+      "explicit_basis_generic_return": -0.0029417748991149573,
+      "scope": "original source symbol outside frozen CSI500 selection",
+      "source_reference_return": -0.0029417748991149573,
+      "symbol": "SH600000"
+    },
+    {
+      "dates": [
+        "2026-07-15",
+        "2026-07-16"
+      ],
+      "equal": true,
+      "explicit_basis_generic_return": -0.004530722474683113,
+      "scope": "original source symbol outside frozen CSI500 selection",
+      "source_reference_return": -0.004530722474683113,
+      "symbol": "SH600000"
+    },
+    {
+      "dates": [
+        "2025-06-26",
+        "2025-06-27"
+      ],
+      "equal": true,
+      "explicit_basis_generic_return": 0.004502627002082038,
+      "factor_ratio": 1.0176909102051386,
+      "scope": "frozen CSI500 input",
+      "symbol": "SH600004",
+      "verified_reader_return": 0.004502627002082038
+    }
+  ],
+  "requirements": [
+    "FD01",
+    "FD02",
+    "FD03",
+    "FD04",
+    "FD05",
+    "FD06",
+    "FD07",
+    "SR06"
+  ],
+  "snapshot_id": "free_cn_20260924_processed_v1",
+  "source_class": "free_community_unverified",
+  "source_manifest_sha256": "dd2355056a33036a7ace5b9d955f3023668b6e4cf2b1790177e01cdc5782543d",
+  "spec_checkpoint": "af4dd5d9",
+  "validation": {
+    "final_targeted": {
+      "command": ".venv/bin/python -m unittest discover -s tests -p 'test_data*.py'",
+      "passed": 31,
+      "total": 31
+    },
+    "full_gate": {
+      "command": "bash scripts/workbench_gate.sh",
+      "exit_code": 0,
+      "javascript_passed": 26,
+      "python_passed": 303,
+      "python_skipped": 5,
+      "python_total": 308
+    },
+    "scope_note": "The full gate preceded one additional membership test, cache return-coverage metadata and immutable parsed-cache protection; final targeted tests cover these and all preparation counterexamples."
+  },
+  "verification": {
+    "bytes": 448160035,
+    "content_digest": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+    "files": 19824
+  },
+  "version": "2"
+}

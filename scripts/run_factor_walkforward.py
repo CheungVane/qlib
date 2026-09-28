@@ -10,8 +10,7 @@ Read-only with respect to the snapshot; writes only the evidence file.
 
 Usage:
   python3 scripts/run_factor_walkforward.py --data-root ~/.qlib/qlib_data \
-    --registry ~/.qlib/qlib_data/_registry --snapshot-id free_cn_20260924 \
-    --enrichment ~/.qlib/qlib_data/free_cn_20260924_enrichment \
+    --registry ~/.qlib/qlib_data/_registry --snapshot-id free_cn_20260924_processed_v1 \
     --start 2025-01-02 --end 2026-09-24 --folds 4 --min-train 120 \
     --output docs/spec/evidence/20260927-factor-walkforward.json
 """
@@ -46,8 +45,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", required=True)
     parser.add_argument("--registry", required=True)
-    parser.add_argument("--snapshot-id", default="free_cn_20260924")
-    parser.add_argument("--enrichment", required=True)
+    parser.add_argument("--snapshot-id", default="free_cn_20260924_processed_v1")
+    parser.add_argument("--enrichment", help="deprecated; must match the sealed status directory")
     parser.add_argument("--universe", default="csi500")
     parser.add_argument("--start", default="2025-01-02")
     parser.add_argument("--end", default="2026-09-24")
@@ -61,15 +60,13 @@ def main() -> int:
     reader = dd.FreeSnapshotReader(args.data_root, dd.load_snapshot(args.registry, args.snapshot_id))
     start, end = date.fromisoformat(args.start), date.fromisoformat(args.end)
     dates = [day for day in reader.calendar() if start <= day <= end]
-    symbols = reader.universe_on(end, args.universe)
-    turnover_dir = Path(args.enrichment).expanduser() / "turnover"
+    symbols, membership = fp.historical_membership(reader, dates, args.universe)
+    if args.enrichment and (Path(args.enrichment).expanduser() / 'turnover').resolve() != reader.path('status').resolve():
+        parser.error('--enrichment must refer to the sealed snapshot; omit this deprecated option')
 
     closes, returns, size, flags_by_symbol, turns_by_symbol = {}, {}, {}, {}, {}
     for symbol in symbols:
-        cache = turnover_dir / f"{symbol}.csv"
-        if not cache.exists():
-            continue
-        enrichment = free_sources.load_turnover_csv(cache)
+        enrichment = reader.turnover(symbol)
         loaded = fp.load_symbol_series(reader, symbol, dates, enrichment)
         closes[symbol] = loaded["close"]
         turns_by_symbol[symbol] = loaded["turn"]
@@ -89,7 +86,7 @@ def main() -> int:
                       if index and math.isfinite(market_close[index])
                       and math.isfinite(market_close[index - 1]) and market_close[index - 1] > 0
                       else float("nan") for index in range(len(market_close))]
-    industry_grid = fp.rolling_industry(returns, dates, window=120, n_clusters=8, step=21)
+    industry_grid = fp.rolling_industry(returns, dates, window=120, n_clusters=8, step=21, membership=membership)
     industry_keys = sorted(industry_grid)
     beta_grid = fp.rolling_beta(returns, market_returns, window=120, step=21)
     beta_keys = {dates[index].isoformat(): grid for index, grid in beta_grid.items()}
@@ -111,11 +108,11 @@ def main() -> int:
             mask = fp.label_tradability(flags, horizon)
             raw = fp.forward_return(close, horizon)
             for index in range(len(dates)):
-                if mask[index] and math.isfinite(raw[index]):
+                if symbol in membership[index] and mask[index] and math.isfinite(raw[index]):
                     labels[horizon][index][symbol] = raw[index]
         for name, values in series.items():
             for index in range(len(dates)):
-                if flags[index] and math.isfinite(values[index]):
+                if symbol in membership[index] and flags[index] and math.isfinite(values[index]):
                     raw_panels[name][index][symbol] = values[index]
 
     for index, day in enumerate(dates):
@@ -151,23 +148,21 @@ def main() -> int:
 
     folds = []
     for number, (train, test) in enumerate(windows, start=1):
-        train_keys = [key for key in ic_series
-                      if len([v for v in ic_series[key][train] if v is not None]) >= 20]
-        p_values = {}
-        for key in train_keys:
-            values = [v for v in ic_series[key][train] if v is not None]
-            horizon = int(key.split("_h")[1].split("_")[0])
-            t_stat = fp.newey_west_t(values, lags=horizon - 1)
-            probability = fp.normal_two_sided_p(t_stat)
-            if probability is not None:
-                p_values[key] = probability
+        def eligible(key, block):
+            horizon = int(key.split('_h')[1].split('_')[0])
+            return fp.label_window(block, horizon, 126 if key.endswith('_neutralized') else 20)
+        train_stats = {key: fp.research_stats(values, int(key.split('_h')[1].split('_')[0]),
+                         126 if key.endswith('_neutralized') else 20, block=train)
+                       for key, values in ic_series.items()}
+        p_values = {key: item['p_value'] for key, item in train_stats.items()
+                    if item['p_value'] is not None}
         q_values = fp.benjamini_hochberg(p_values)
         selected = []
         for key in sorted(p_values):
             name = key.split("_h")[0]
             horizon = int(key.split("_h")[1].split("_")[0])
-            spread = finite_mean(spread_series[key][train])
-            turnover = finite_mean(turnover_series[name][train])
+            spread = finite_mean(spread_series[key][eligible(key, train)])
+            turnover = finite_mean(turnover_series[name][eligible(key, train)])
             if spread is None or turnover is None:
                 continue
             screen = fp.cost_threshold(spread, turnover, horizon, args.round_trip_cost)
@@ -180,11 +175,15 @@ def main() -> int:
             "test": {"start": dates[test.start].isoformat(), "end": dates[test.stop - 1].isoformat(),
                      "days": test.stop - test.start},
             "selected": selected,
-            "test_ic_by_selected": {key: finite_mean(ic_series[key][test]) for key in selected},
+            "train_hypotheses": train_stats,
+            "purge": {"rule": "t+h < block.stop; applies to train and test",
+                      "label_tail_removed": {"h5": 5, "h10": 10},
+                      "declared_warmup": {"raw": 20, "neutralized": 126}},
+            "test_ic_by_selected": {key: finite_mean(ic_series[key][eligible(key, test)]) for key in selected},
             "test_ic_mean_of_selected": finite_mean(
-                [finite_mean(ic_series[key][test]) for key in selected]) if selected else None,
+                [finite_mean(ic_series[key][eligible(key, test)]) for key in selected]) if selected else None,
             "train_ic_mean_of_selected": finite_mean(
-                [finite_mean(ic_series[key][train]) for key in selected]) if selected else None,
+                [finite_mean(ic_series[key][eligible(key, train)]) for key in selected]) if selected else None,
         }
         folds.append(fold)
 
@@ -217,12 +216,14 @@ def main() -> int:
         "limitations": [
             "free_community_unverified inputs; exploratory only, not alpha evidence",
             "expanding window means later folds train on data that overlaps earlier tests "
-            "(standard walk-forward, but not a purged/embargoed protocol)",
+            "(label tails are purged per block; no extra embargo)",
             "no portfolio construction, no impact/liquidity cost, no execution model",
             "industry is a statistical proxy and size is derived from turnover",
         ],
         "paths_recorded": False,
     }
+    if Path(args.output).exists():
+        raise ValueError("output already exists; choose a new result version")
     Path(args.output).write_text(json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
     print(json.dumps({"folds": len(folds),
                       "selected_per_fold": [len(fold["selected"]) for fold in folds],

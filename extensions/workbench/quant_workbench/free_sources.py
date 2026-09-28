@@ -101,6 +101,8 @@ def load_instruments(text: str) -> list[dict]:
         if len(parts) != 3:
             raise FreeSourceError(f"bad instruments line: {line!r}")
         symbol, start, end = parts
+        if not symbol.isalnum() or date.fromisoformat(start) > date.fromisoformat(end):
+            raise FreeSourceError('invalid symbol or membership interval')
         rows.append({"symbol": symbol, "start": date.fromisoformat(start),
                      "end": date.fromisoformat(end)})
     if not rows:
@@ -135,9 +137,15 @@ def load_turnover_csv(path: str | Path) -> dict[str, dict]:
     """Parse a fetch_csi500_turnover CSV: `date,turn,tradestatus,isST`."""
     target = Path(path)
     result: dict[str, dict] = {}
-    lines = target.read_text(encoding="utf-8").splitlines()
+    return parse_turnover_csv(target.read_text(encoding="utf-8"))
+
+
+def parse_turnover_csv(text: str) -> dict[str, dict]:
+    result: dict[str, dict] = {}
+    lines = text.splitlines()
+    previous = None
     if not lines or lines[0].strip() != "date,turn,tradestatus,isST":
-        raise FreeSourceError(f"unexpected turnover header: {target}")
+        raise FreeSourceError("unexpected turnover header")
     for line in lines[1:]:
         if not line.strip():
             continue
@@ -148,9 +156,18 @@ def load_turnover_csv(path: str | Path) -> dict[str, dict]:
             st_value = int(is_st)
         except ValueError as error:
             raise FreeSourceError(f"bad turnover row: {line!r}") from error
+        if date.fromisoformat(day).isoformat() != day:
+            raise FreeSourceError("date must be canonical ISO format")
+        if previous is not None and day <= previous:
+            raise FreeSourceError("turnover dates must be strictly increasing and unique")
+        if status_value not in (0, 1) or st_value not in (0, 1):
+            raise FreeSourceError("invalid status flags")
+        if turn_value is not None and (not math.isfinite(turn_value) or turn_value < 0):
+            raise FreeSourceError("invalid turnover")
+        previous = day
         result[day] = {"turn": turn_value, "tradestatus": status_value, "isST": st_value}
     if not result:
-        raise FreeSourceError(f"turnover file is empty: {target}")
+        raise FreeSourceError("turnover file is empty")
     return result
 
 

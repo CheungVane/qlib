@@ -21,7 +21,7 @@ BaoStock is `free_community_unverified`: record it in provenance, never call it 
 
 Output: <out>/turnover/<SYMBOL>.csv with header `date,turn,tradestatus,isST`, plus
 <out>/unsupported_symbols.json for symbols BaoStock does not serve (e.g. Beijing).
-Resumable: existing per-symbol files are skipped.
+Resumable: only matching completed request metadata and verified nonempty CSVs are skipped.
 
 Usage:
   python3 scripts/fetch_csi500_turnover.py \
@@ -33,11 +33,19 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
+import io
+import csv
+from datetime import date, datetime, timezone
 import json
 import os
 import sys
 import time
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'extensions/workbench'))
+from quant_workbench.free_sources import parse_turnover_csv
+from quant_workbench.adapters.snapshot_files import atomic_create
 
 MIN_SLEEP_SECONDS = 0.5
 BLACKLIST_CODES = {"10001011"}
@@ -80,8 +88,24 @@ def is_blacklist(error_code: str, error_message: str) -> bool:
 def _write_symbol(bs, symbol: str, code: str, start: str, end: str, directory: Path) -> tuple[str, str]:
     """One sequential query; the caller owns pacing and blacklist handling."""
     target = directory / f"{symbol}.csv"
-    if target.exists() and target.stat().st_size > 0:
-        return symbol, "skipped"
+    date.fromisoformat(start)
+    date.fromisoformat(end)
+    if start > end:
+        raise ValueError('invalid query window')
+    metadata = target.with_suffix('.meta.json')
+    request = {'symbol': symbol, 'code': code, 'start': start, 'end': end,
+               'fields': 'date,turn,tradestatus,isST', 'frequency': 'd', 'adjustflag': '3'}
+    if target.exists() or metadata.exists():
+        try:
+            meta = json.loads(metadata.read_text())
+            data = target.read_bytes()
+            parsed = parse_turnover_csv(data.decode())
+            valid = (meta.get('request') == request and meta.get('completed') is True
+                     and meta.get('sha256') == hashlib.sha256(data).hexdigest()
+                     and all(start <= day <= end for day in parsed))
+        except (OSError, ValueError):
+            valid = False
+        return symbol, 'skipped' if valid else 'error:unverified_cache:use_new_version_directory'
     result = bs.query_history_k_data_plus(
         code, "date,turn,tradestatus,isST", start_date=start, end_date=end,
         frequency="d", adjustflag="3")
@@ -92,15 +116,30 @@ def _write_symbol(bs, symbol: str, code: str, start: str, end: str, directory: P
     rows = []
     while result.next():
         rows.append(result.get_row_data())
+    if is_blacklist(result.error_code, result.error_msg):
+        return symbol, f"blacklisted:{result.error_code}:{result.error_msg}"
+    if result.error_code != '0':
+        return symbol, f"error:{result.error_code}:{result.error_msg}"
     if not rows:
-        return symbol, "empty"
-    tmp = target.with_suffix(".csv.tmp")
-    with tmp.open("w", encoding="utf-8") as handle:
-        handle.write("date,turn,tradestatus,isST\n")
-        for row in rows:
-            handle.write(",".join(row) + "\n")
-    os.replace(tmp, target)
-    return symbol, f"ok:{len(rows)}"
+        return symbol, 'empty'
+    buffer = io.StringIO(newline='')
+    writer = csv.writer(buffer, lineterminator='\n')
+    writer.writerow(['date', 'turn', 'tradestatus', 'isST'])
+    writer.writerows(rows)
+    data = buffer.getvalue().encode()
+    try:
+        parsed = parse_turnover_csv(data.decode())
+        if any(not start <= day <= end for day in parsed):
+            raise ValueError('row outside requested window')
+    except ValueError as error:
+        return symbol, f'error:invalid_rows:{error}'
+    meta = {'request': request, 'completed': True, 'sha256': hashlib.sha256(data).hexdigest(),
+            'rows': len(parsed), 'returned_coverage': {'start': min(parsed), 'end': max(parsed)},
+            'observed_at': datetime.now(timezone.utc).isoformat(), 'historical_available_at': 'unknown', 'source_class': 'free_community_unverified'}
+    # Metadata is the completion marker; a crash before it leaves an unverified CSV.
+    atomic_create(target, data)
+    atomic_create(metadata, (json.dumps(meta, sort_keys=True) + '\n').encode())
+    return symbol, f'ok:{len(rows)}'
 
 
 def main() -> int:
@@ -176,7 +215,7 @@ def main() -> int:
     print(json.dumps({"symbols": len(universe), "fetched_or_skipped": done, "errors": errors,
                       "unsupported": len(unsupported), "sleep_seconds": pause,
                       "out_dir": str(out_dir)}, ensure_ascii=False))
-    return 0
+    return 0 if errors == 0 else 2
 
 
 if __name__ == "__main__":

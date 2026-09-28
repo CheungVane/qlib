@@ -18,6 +18,13 @@ import hashlib
 import json
 import math
 import shutil
+from copy import deepcopy
+from collections import OrderedDict
+import io
+import csv
+from .domain.errors import SnapshotError
+from .domain.data import decode_bin
+from .adapters.snapshot_files import VerifiedFiles, record_digest, atomic_create
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -27,7 +34,7 @@ from .free_sources import FreeSourceError
 
 SCHEMA_VERSION = 1
 COMPONENT_KINDS = ("bar", "calendar", "universe", "status", "financial", "code_map")
-MATERIALIZER_VERSION = "1"
+MATERIALIZER_VERSION = "2"
 LEGACY_SOURCE_CLASS = "legacy_unknown"
 
 
@@ -82,8 +89,16 @@ def build_snapshot_record(*, snapshot_id: str, source: dict, components: Sequenc
     }
 
 
-def publish_snapshot(registry: str | Path, record: dict) -> Path:
+def publish_snapshot(registry: str | Path, record: dict, *, data_root: str | Path | None = None) -> Path:
     """Write a snapshot record; an existing id may only be reused with identical content."""
+    identity = record.get('snapshot_id', '')
+    if not identity or any(c in identity for c in ('/', '\\')) or identity in ('.', '..'):
+        raise DataDirectoryError('unsafe snapshot id')
+    if record.get('schema_version') == 2:
+        if data_root is None:
+            raise DataDirectoryError('v2 publication requires explicit data root and quality verification')
+        from .adapters.data_preparation import validate_publication
+        validate_publication(Path(data_root), record)
     registry = Path(registry)
     registry.mkdir(parents=True, exist_ok=True)
     if (registry / f"{record['snapshot_id']}.legacy.json").exists():
@@ -97,7 +112,13 @@ def publish_snapshot(registry: str | Path, record: dict) -> Path:
             return target
         raise DataDirectoryError(
             f"snapshot {record['snapshot_id']} already published with a different digest")
-    target.write_text(json.dumps(record, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    payload = (json.dumps(record, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode()
+    try:
+        atomic_create(target, payload)
+    except FileExistsError:
+        existing = json.loads(target.read_text())
+        if existing != record:
+            raise DataDirectoryError("concurrent snapshot publication differs")
     return target
 
 
@@ -108,19 +129,28 @@ def list_snapshots(registry: str | Path) -> list[str]:
 
 
 def load_snapshot(registry: str | Path, snapshot_id: str) -> dict:
+    if not snapshot_id or any(c in snapshot_id for c in ("/", "\\")) or snapshot_id in (".", ".."):
+        raise DataDirectoryError("invalid snapshot id")
     path = Path(registry) / f"{snapshot_id}.json"
     if not path.exists():
-        raise DataDirectoryError(f"unknown snapshot: {snapshot_id}")
+        raise SnapshotError("snapshot_not_found", snapshot_id)
     record = json.loads(path.read_text())
-    if record.get("schema_version") != SCHEMA_VERSION:
+    if record.get("schema_version") not in (1, 2):
         raise DataDirectoryError(f"unsupported snapshot schema: {record.get('schema_version')}")
-    if component_digest(record.get("components", [])) != record.get("content_digest"):
+    actual = record_digest(record) if record.get("schema_version") == 2 else component_digest(record.get("components", []))
+    if record.get("snapshot_id") != snapshot_id:
+        raise SnapshotError("snapshot_content_mismatch", snapshot_id)
+    if actual != record.get("content_digest"):
+        if record.get("schema_version") == 2:
+            raise SnapshotError("snapshot_content_mismatch", snapshot_id)
         raise DataDirectoryError(f"snapshot {snapshot_id} digest does not match its manifest")
     return record
 
 
 def reproducibility(record: dict) -> dict:
     """A17: complete evidence plus a recorded materializer is required for 'reproducible'."""
+    if record.get("schema_version") != 2:
+        return {"state": "limited", "reason": "legacy manifest has no verified file inventory"}
     completeness = (record.get("provenance") or {}).get("completeness", "unknown")
     materializer = record.get("materializer") or {}
     missing = [key for key in ("name", "version") if not materializer.get(key)]
@@ -148,40 +178,41 @@ def materialize_panel(reader: "FreeSnapshotReader", *, output: str | Path, unive
     calendar = [day for day in reader.calendar() if start <= day <= end]
     if not calendar:
         raise DataDirectoryError("window does not intersect the snapshot calendar")
-    symbols = [item["symbol"] for item in reader.instruments(universe)]
-    if limit:
+    reader.require_verified()
+    members = reader.instruments(universe)
+    symbols = sorted({item['symbol'] for item in members
+                      if item['start'] <= end and item['end'] >= start})
+    if limit is not None:
+        if limit < 1:
+            raise DataDirectoryError('limit must be positive')
         symbols = symbols[:limit]
     target = Path(output)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    full_calendar = reader.calendar()
+    positions = {day: i for i, day in enumerate(reader.calendar())}
     rows = 0
-    with target.open("w", encoding="utf-8", newline="\n") as handle:
-        handle.write("date,symbol," + ",".join(fields) + "\n")
-        for symbol in sorted(symbols):
-            series = {}
-            for field in fields:
-                try:
-                    values = free_sources.read_bin_values(
-                        reader.path("bar") / symbol.lower() / f"{field}.day.bin")
-                except (FreeSourceError, OSError):
-                    continue
-                series[field] = values
-            if not series:
+    buffer = io.StringIO(newline='')
+    writer = csv.writer(buffer, lineterminator='\n')
+    writer.writerow(['date', 'symbol', *fields])
+    for symbol in symbols:
+        intervals = [(r['start'], r['end']) for r in members if r['symbol'] == symbol]
+        series = {field: reader.bin_series(symbol, field) for field in fields}
+        for day in calendar:
+            if not any(first <= day <= last for first, last in intervals):
                 continue
-            length = min(len(values) for values in series.values())
-            start_index = free_sources.read_bin_head_tail(
-                reader.path("bar") / symbol.lower() / f"{fields[0]}.day.bin")["start_index"]
-            for offset in range(length):
-                position = start_index + offset
-                if position >= len(full_calendar):
-                    break
-                day = full_calendar[position]
-                if not (start <= day <= end):
-                    continue
-                handle.write(",".join([day.isoformat(), symbol]
-                                      + [f"{series[field][offset]:.6f}" for field in fields]) + "\n")
-                rows += 1
-    digest = "sha256:" + hashlib.sha256(target.read_bytes()).hexdigest()
+            values = []
+            for field in fields:
+                offset, data = series[field]
+                i = positions[day] - offset
+                value = data[i] if 0 <= i < len(data) else float('nan')
+                values.append(format(value, '.17g') if math.isfinite(value) else '')
+            writer.writerow([day.isoformat(), symbol, *values])
+            rows += 1
+    payload = buffer.getvalue().encode()
+    if target.exists():
+        if target.read_bytes() != payload:
+            raise DataDirectoryError('materialization target already contains different bytes')
+    else:
+        atomic_create(target, payload)
+    digest = 'sha256:' + hashlib.sha256(payload).hexdigest()
     return {
         "materializer": {"name": "materialize_panel", "version": MATERIALIZER_VERSION},
         "seed": seed,
@@ -294,6 +325,13 @@ def validate_bars(reader: "FreeSnapshotReader", symbols: Sequence[str],
     NaN is treated as a missing observation (the qlib bin format pads suspended or
     unknown days with NaN) and counted separately; it is not a corruption issue.
     """
+    if reader.record.get('schema_version') == 2:
+        from .adapters.data_preparation import audit_bars
+        report = audit_bars(None, reader.calendar(), set(symbols), verified=reader.require_verified())
+        return {'ok': report['passed'], 'checked_symbols': report['checked_symbols'],
+                'issue_count': report['invalid_groups'], 'issues': report['errors'],
+                'missing_points': sum(report['missing_field_points'].values()),
+                'scope': 'all ten archive fields; v2 relative tolerance 1e-5'}
     issues: list[dict] = []
     checked = 0
     missing_points = 0
@@ -360,8 +398,7 @@ def coverage_report(reader: "FreeSnapshotReader", instruments: Sequence[dict],
     for row in instruments:
         symbol, declared_end = row["symbol"], row["end"]
         try:
-            head = free_sources.read_bin_head_tail(
-                reader.path("bar") / symbol.lower() / "close.day.bin")
+            head = reader.feature(symbol, 'close')
         except (free_sources.FreeSourceError, OSError):
             missing.append({"symbol": symbol, "declared_end": declared_end.isoformat()})
             continue
@@ -417,8 +454,11 @@ class FreeSnapshotReader:
 
     def __init__(self, data_root: str | Path, record: dict):
         self.data_root = Path(data_root)
-        self.record = record
-        self._calendar: list[date] | None = None
+        self.record = deepcopy(record)
+        self._verified = None
+        self._instruments = {}
+        self._bins = OrderedDict()
+        self._calendar: tuple[date, ...] | None = None
 
     def component(self, kind: str) -> dict:
         matches = [item for item in self.record["components"] if item["kind"] == kind]
@@ -433,27 +473,64 @@ class FreeSnapshotReader:
 
     def calendar(self) -> list[date]:
         if self._calendar is None:
-            text = self.path("calendar").read_text().split()
-            self._calendar = [date.fromisoformat(item) for item in text]
-        return self._calendar
+            text = (self.read_bytes("calendar").decode() if self.record.get("schema_version") == 2
+                    else self.path("calendar").read_text()).split()
+            self._calendar = tuple(date.fromisoformat(item) for item in text)
+        return list(self._calendar)
+
+    def require_verified(self):
+        if self._verified is None:
+            self._verified = VerifiedFiles(self.data_root, self.record)
+        return self._verified
+
+    def read_bytes(self, kind: str, name: str = '.') -> bytes:
+        return self.require_verified().read(kind, name)
+
+    def bin_series(self, symbol: str, field: str):
+        if field not in free_sources.ARCHIVE_FIELDS:
+            raise DataDirectoryError('unknown feature field')
+        key = (symbol, field)
+        if key not in self._bins:
+            data = self.read_bytes('bar', f'{symbol.lower()}/{field}.day.bin')
+            self._bins[key] = decode_bin(data, len(self.calendar()))
+            if len(self._bins) > 128:
+                self._bins.popitem(last=False)
+        self._bins.move_to_end(key)
+        return self._bins[key]
+
+    def turnover(self, symbol: str):
+        return free_sources.parse_turnover_csv(self.read_bytes('status', f'{symbol}.csv').decode())
 
     def instruments(self, name: str = "all") -> list[dict]:
-        return free_sources.load_instruments(self.path("universe").read_text()) if name == "all" \
-            else free_sources.load_instruments(
-                (self.path("universe").parent / f"{name}.txt").read_text())
+        if name not in self._instruments:
+            if self.record.get('schema_version') == 2:
+                text = self.read_bytes('universe', f'{name}.txt').decode()
+            else:
+                path = self.path('universe') if name == 'all' else self.path('universe').parent / f'{name}.txt'
+                text = path.read_text()
+            self._instruments[name] = tuple((row['symbol'], row['start'], row['end'])
+                                            for row in free_sources.load_instruments(text))
+        return [{'symbol': symbol, 'start': start, 'end': end}
+                for symbol, start, end in self._instruments[name]]
 
     def universe_on(self, day: date, name: str = "all") -> list[str]:
-        return sorted(free_sources.active_universe(self.instruments(name), day))
+        return sorted(set(free_sources.active_universe(self.instruments(name), day)))
 
     def feature(self, symbol: str, field: str) -> dict:
         if field not in free_sources.ARCHIVE_FIELDS:
             raise DataDirectoryError(f"unknown feature field: {field}")
+        if self.record.get('schema_version') == 2:
+            start, values = self.bin_series(symbol, field)
+            return {'start_index': start, 'points': len(values), 'last': values[-1]}
         return free_sources.read_bin_head_tail(
             self.path("bar") / symbol.lower() / f"{field}.day.bin")
 
     def validate(self) -> dict:
         """DATA05 checks that can be done from the manifest and small files only."""
         problems = []
+        verified = self.record.get('schema_version') == 2
+        if verified:
+            self.require_verified().verify_all()
         try:
             calendar = self.calendar()
         except (FreeSourceError, OSError) as error:
@@ -466,5 +543,6 @@ class FreeSnapshotReader:
             if not item.get("coverage_start") or not item.get("coverage_end"):
                 problems.append(f"coverage unknown for {item['kind']}")
         return {"ok": not problems, "problems": problems,
+                "integrity": 'verified_bytes' if verified else 'unverified_legacy',
                 "calendar": {"first": calendar[0].isoformat(), "last": calendar[-1].isoformat(),
                              "days": len(calendar)}}

@@ -6,8 +6,7 @@ Read-only with respect to the snapshot; writes only the evidence file.
 
 Usage:
   python3 scripts/run_factor_slice.py --data-root ~/.qlib/qlib_data \
-    --registry ~/.qlib/qlib_data/_registry --snapshot-id free_cn_20260924 \
-    --enrichment ~/.qlib/qlib_data/free_cn_20260924_enrichment \
+    --registry ~/.qlib/qlib_data/_registry --snapshot-id free_cn_20260924_processed_v1 \
     --start 2025-01-02 --end 2026-09-24 --horizon 5 \
     --output docs/spec/evidence/20260927-factor-slice.json
 """
@@ -33,8 +32,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", required=True)
     parser.add_argument("--registry", required=True)
-    parser.add_argument("--snapshot-id", default="free_cn_20260924")
-    parser.add_argument("--enrichment", required=True)
+    parser.add_argument("--snapshot-id", default="free_cn_20260924_processed_v1")
+    parser.add_argument("--enrichment", help="deprecated; must match the sealed status directory")
     parser.add_argument("--universe", default="csi500")
     parser.add_argument("--start", default="2025-01-02")
     parser.add_argument("--end", default="2026-09-24")
@@ -45,8 +44,9 @@ def main() -> int:
     reader = dd.FreeSnapshotReader(args.data_root, dd.load_snapshot(args.registry, args.snapshot_id))
     start, end = date.fromisoformat(args.start), date.fromisoformat(args.end)
     dates = [day for day in reader.calendar() if start <= day <= end]
-    symbols = reader.universe_on(end, args.universe)
-    turnover_dir = Path(args.enrichment).expanduser() / "turnover"
+    symbols, membership = fp.historical_membership(reader, dates, args.universe)
+    if args.enrichment and (Path(args.enrichment).expanduser() / 'turnover').resolve() != reader.path('status').resolve():
+        parser.error('--enrichment must refer to the sealed snapshot; omit this deprecated option')
 
     factors = {name: [] for name in ("momentum_20", "volatility_20", "turnover_20")}
     labels_by_day: list[dict[str, float]] = [dict() for _ in dates]
@@ -58,24 +58,23 @@ def main() -> int:
         high = fp.aligned_series(reader, symbol, "high", dates)
         low = fp.aligned_series(reader, symbol, "low", dates)
         change = fp.aligned_series(reader, symbol, "change", dates)
-        cache = turnover_dir / f"{symbol}.csv"
-        if not cache.exists():
-            stats["missing_turnover"] += 1
-            continue
-        enrichment = free_sources.load_turnover_csv(cache)
-        turns = [enrichment.get(day.isoformat(), {}).get("turn") or float("nan") for day in dates]
+        enrichment = reader.turnover(symbol)
+        turns = [enrichment.get(day.isoformat(), {}).get("turn") if enrichment.get(day.isoformat(), {}).get("turn") is not None else float("nan") for day in dates]
         flags = fp.tradable({"high": high, "low": low, "change": change}, dates, enrichment)
         labels = fp.forward_return(closes, args.horizon)
+        label_mask = fp.label_tradability(flags, args.horizon)
         series = {"momentum_20": fp.momentum(closes, 20),
                   "volatility_20": fp.volatility(closes, 20),
                   "turnover_20": fp.mean_of(turns, 20)}
         stats["symbols"] += 1
         for index, day in enumerate(dates):
+            if symbol not in membership[index]:
+                continue
             if not flags[index]:
                 stats["filtered_rows"] += 1
                 continue
             stats["tradable_rows"] += 1
-            if math.isfinite(labels[index]):
+            if label_mask[index] and math.isfinite(labels[index]):
                 labels_by_day[index][symbol] = labels[index]
             for name, values in series.items():
                 if math.isfinite(values[index]):
@@ -83,14 +82,15 @@ def main() -> int:
 
     summary = {}
     for name in factors:
-        daily = []
-        for index in range(len(dates)):
-            value = fp.rank_ic(factor_by_day[name][index], labels_by_day[index])
-            if value is not None:
-                daily.append(value)
-        payload = json.dumps([round(value, 8) for value in daily]).encode()
+        indices = range(20, max(20, len(dates) - args.horizon))
+        axis = [{'date': dates[index].isoformat(),
+                 'ic': fp.rank_ic(factor_by_day[name][index], labels_by_day[index])}
+                for index in indices]
+        daily = [row['ic'] for row in axis if row['ic'] is not None]
+        payload = json.dumps(axis, sort_keys=True).encode()
         summary[name] = {
-            "days": len(daily),
+            "days": len(daily), "expected_days": len(axis), "warmup_days": 20,
+            "missing_ic_days": len(axis) - len(daily), "immature_tail_days": args.horizon,
             "mean_rank_ic": statistics.fmean(daily) if daily else None,
             "std_rank_ic": statistics.stdev(daily) if len(daily) > 1 else None,
             "positive_share": (sum(1 for value in daily if value > 0) / len(daily)) if daily else None,
@@ -105,18 +105,20 @@ def main() -> int:
         "universe": {"name": args.universe, "symbols": len(symbols)},
         "label": {"kind": "forward_return", "horizon": args.horizon,
                   "basis": "adjusted close on the snapshot calendar",
-                  "note": "last h rows have no label; suspensions inside the window are spanned"},
-        "tradability": {"rule": "tradestatus==1 and not one-word limit board",
+                  "note": "last h rows have no label; full window requires observed positive prices, trading status and non-ST"},
+        "tradability": {"rule": "tradestatus==1, non-ST, positive high/low and non-flat bar",
                         "excluded_st": True, **stats},
         "factors": summary,
         "limitations": [
             "free_community_unverified sources; exploratory only",
-            "one-word limit detection is an approximation from high==low and |change|",
-            "sell-side tradability at t+h is not yet filtered",
+            "all flat bars excluded conservatively; not a legal limit or fill model",
+            "entry through exit observations are required; this is not an execution simulation",
             "factor values are raw; no industry/size neutralisation yet",
         ],
         "paths_recorded": False,
     }
+    if Path(args.output).exists():
+        raise ValueError("output already exists; choose a new result version")
     Path(args.output).write_text(json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
     print(json.dumps({name: {"days": item["days"], "mean_rank_ic": item["mean_rank_ic"]}
                       for name, item in summary.items()}, ensure_ascii=False))

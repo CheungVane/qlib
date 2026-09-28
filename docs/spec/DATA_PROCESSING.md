@@ -38,8 +38,8 @@ v2在原记录基础上新增：`interpretation`（价格/单位/成员集合/�
 | --- | --- | --- |
 | DP1 冻结规范 | 本文、来源/架构索引、处理任务与限制登记 | 先提交规范检查点，尚不声明实现 |
 | DP2 检查/冻结原料 | 验原始archive SHA；逐成员核对选择的解包文件；复制全历史成员/基准所需行情及1791缓存、计算内容清单 | 差异拒绝，保留旧原料；单独记录11个无缓存成员是否在研究区间内 |
-| DP3 质量/发布 | 日历/成员、bin、OHLC、缓存结构及逐日成员内覆盖；来源未知字段披露；验证后发布新snapshot | 任一结构/非法值/必需组件失败不发布；真实缺测逐类计数，不冒充已核实停牌原因 |
-| DP4 物化 | 每年度、每证券的合法成员日期，输出规范字段；唯一标的排序后limit；一份字节级复跑与独立键集合/字段换算校对 | 重复键/错位/内容身份改变拒绝；新版本分块，不覆盖旧360行样例 |
+| DP3 质量/候选 | 日历/成员、bin、OHLC、缓存结构及逐日成员内覆盖；来源未知字段披露；验证后只在内存构造候选身份 | 任一结构/非法值/必需组件失败不发布；真实缺测逐类计数，不冒充已核实停牌原因 |
+| DP4 物化/发布 | 每年度、每证券的合法成员日期，输出规范字段；唯一标的排序后limit；字节级复跑与独立键集合/字段换算校对，全部通过后才原子登记 | 重复键/错位/内容身份改变拒绝且不登记；新版本分块，不覆盖旧360行样例 |
 | DP5 研究重算 | 三条入口统一读取已验证快照，历史池与标签掩码，NW缺口/跨折标签修复；复跑2025-01-02至2026-09-24试点 | 缺证据的统计项unavailable，不能为了产生p值删缺IC；结果保持探索性 |
 | DP6 交付 | 相关反例/回归、完整门禁、真实数据脱敏摘要；回写spec/commit/push | 分别报告数据处理、研究复算及尚未验收能力 |
 
@@ -60,3 +60,32 @@ NW必须复用FACTOR_ANALYSIS §4.1的实现及完整日期轴；预先声明因
 - 缓存修复：新采集必须检查游标终态/内容/请求范围，原缓存无完成记录时不得直接当成功续传；可离线结构/覆盖审计并登记`historical_completion=unknown`，本次研究以实际可用行且披露未知为限。新增来源数据另开版本目录。
 - 旧通用因子结果不改写。来源格式有明确口径才计算；schema2可经目录端口读取已验证字节，旧演示路径仅按明确的已登记模拟格式兼容，不能借默认路径把免费快照当原始价。旧未知口径拒绝并说明。
 - schema2数据处理通过只证明固定输入/口径及限定质量范围；不是供应商历史修订/PIT认证，不关闭完整训练、交易、云部署或SR01—04执行/验证任务。FD状态逐项由证据更新，不能因新目录存在就宣称完成。
+
+## 7. 本批执行版本约定（2026-09-28）
+
+DP2—DP4首次处理生成`free_cn_20260924_v2`及年度面板，复验发现发布报告还需在发布前登记逐日成员内状态覆盖，而不是仅在下游面板统计。因此最终交付使用新身份`free_cn_20260924_processed_v1`；v2/v3与其面板保留为本批中间产物，不作为推荐入口，也不改写其登记记录。最终版复用相同原始来源，重新冻结和验收；不得把“新处理版本”误认为新的供应商历史版本。年度规范物化器版本2.1，输出`panels_v2_1/`，区分source_nan与coverage_outside计数。
+
+通用旧模拟因子入口仅兼容已登记`scenario.json`的synthetic=true且mode=current_rules_counterfactual格式（raw_with_factor_v1），或摘要覆盖的`price_semantics.json`显式声明；未知口径拒绝。免费研究三条脚本必须经schema2目录读取器核验，不能再传入任意enrichment目录。普通UI因子分析的ARC11目录端口接入仍单列待实施，不以本批离线处理关闭。
+
+发布时序（与FD06及步骤表一致）：DP3仅在内存构造候选published记录（用于确定最终摘要），不写registry；DP4年度复跑、独立键/换算验证通过后才原子登记。任何物化失败都不得出现新的published文件。v2/v3是修复迭代期间的中间版本，最终版首次登记须遵循此时序。
+
+## 8. 已交付入口与重跑操作
+
+实际根目录由`--data-root`传入（本机使用`~/.qlib/qlib_data`），不要硬编码到应用核心。推荐snapshot_id为`free_cn_20260924_processed_v1`，登记文件`_registry/<snapshot_id>.json`；冻结输入`processed/<snapshot_id>/`，规范面板`processed/<snapshot_id>/panels_v2_1/`，年度CSV及manifest都在其下。manifest覆盖输出哈希、每年行数/唯一键、输入身份、缺失类别和验证项。目录存在不等于发布，消费者必须通过registry解析及VerifiedFiles核验。
+
+```bash
+# 离线重跑：完全相同的冻结文件/面板可复用；任何差异拒绝覆盖。
+extensions/workbench/.venv/bin/python scripts/prepare_free_data.py --data-root ~/.qlib/qlib_data
+# 新版本研究输出文件必须不存在；不要覆盖证据目录中的已交付报告。
+extensions/workbench/.venv/bin/python scripts/run_factor_research.py \
+  --data-root ~/.qlib/qlib_data --registry ~/.qlib/qlib_data/_registry \
+  --snapshot-id free_cn_20260924_processed_v1 --output /tmp/my-new-research.json
+# slice/walkforward入口使用相同根、registry、snapshot-id和独立output参数。
+# 独立原文件逐值校验；仅读文件，不接触数据源网络。
+extensions/workbench/.venv/bin/python docs/spec/evidence/20260928-verify-processed-panel.py \
+  --data-root ~/.qlib/qlib_data --snapshot-id free_cn_20260924_processed_v1
+```
+
+如本批来源发生修订，先登记新输入范围/解释版本，再使用新的snapshot_id处理；此CLI仅处理既有固定来源，不是通用自动更新器。没有采集完成凭据的旧缓存不能用fetch脚本“跳过即成功”；新采集另用版本目录，保持既有顺序/限速规则。该缓存保护已离线测试，本批没有联网验证供应商恢复。
+
+本批验收、缺口数量、研究复算及仍未支持能力见[IMPLEMENTATION顶部](IMPLEMENTATION.md)和[处理证据](evidence/20260928-data-processing.json)。数据固定与语义正确不等于供应商历史真值、PIT或可执行交易认证。工作台通用因子UI仍使用原CN配置；本批未自动替换演示数据或伪称真实训练/回测已接入。

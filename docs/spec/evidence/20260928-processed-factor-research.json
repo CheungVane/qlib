@@ -1,0 +1,641 @@
+{
+  "cost_model": {
+    "basis": "configs/cn commission 2bp x2 + stamp 5bp sell + transfer 0.1bp x2",
+    "formula": "expected_cost = min(2, h*daily_rank_turnover) * round_trip_cost",
+    "kind": "screening only, not a backtest",
+    "round_trip_cost": 0.00092
+  },
+  "factor_rank_turnover": {
+    "momentum_20": {
+      "days": 400,
+      "mean_rank_turnover": 0.07157401290711067
+    },
+    "turnover_20": {
+      "days": 401,
+      "mean_rank_turnover": 0.009435442619802673
+    },
+    "volatility_20": {
+      "days": 400,
+      "mean_rank_turnover": 0.02525066658592445
+    }
+  },
+  "families": {
+    "fdr": "benjamini_hochberg",
+    "hypotheses_tested": 12
+  },
+  "hypotheses": {
+    "momentum_20_h10_neutralized": {
+      "cost_screen": {
+        "assumed_turnover": 0.7157401290711067,
+        "expected_cost": 0.0006584809187454182,
+        "gross_spread": -0.0025053870126898426,
+        "net": -0.003163867931435261,
+        "passes": false,
+        "round_trip_cost": 0.00092
+      },
+      "days": 285,
+      "expected_days": 285,
+      "factor": "momentum_20",
+      "fdr_q": 0.003326115856761225,
+      "horizon": 10,
+      "ic_series_digest": "sha256:023803206db1f6bec29114e7b2f70595d99692cdaffbc93d9cabf7a16c082742",
+      "icir": -0.4570173283183854,
+      "immature_tail_days": 10,
+      "mean_rank_ic": -0.03923458800906721,
+      "nw_t": -3.2613820989020783,
+      "p_value": 0.001108705285587075,
+      "positive_share": 0.3333333333333333,
+      "significance_available": true,
+      "significance_reason": null,
+      "stability": {
+        "dispersion": 1.1067864140932129,
+        "fold_means": [
+          -0.0429485263267528,
+          -0.06793699519398483,
+          -0.0073238589818609545,
+          -0.00891595695249939,
+          0.004671129922099005,
+          -0.10800655801601777
+        ],
+        "folds": 6,
+        "same_sign_share": 0.8333333333333334,
+        "state": "available"
+      },
+      "std_rank_ic": 0.08584923498072282,
+      "variant": "neutralized",
+      "warmup_days": 126
+    },
+    "momentum_20_h10_raw": {
+      "cost_screen": {
+        "assumed_turnover": 0.7157401290711067,
+        "expected_cost": 0.0006584809187454182,
+        "gross_spread": -0.0027265990562976164,
+        "net": -0.0033850799750430346,
+        "passes": false,
+        "round_trip_cost": 0.00092
+      },
+      "days": 391,
+      "expected_days": 391,
+      "factor": "momentum_20",
+      "fdr_q": 0.024013989970853807,
+      "horizon": 10,
+      "ic_series_digest": "sha256:e9037dcbfcac905f1bf7c86b5afea1f526d8d47d78281d6f27bc19934a0449e8",
+      "icir": -0.2985040155620151,
+      "immature_tail_days": 10,
+      "mean_rank_ic": -0.06056694452430087,
+      "nw_t": -2.40870285323889,
+      "p_value": 0.01600932664723587,
+      "positive_share": 0.4322250639386189,
+      "significance_available": true,
+      "significance_reason": null,
+      "stability": {
+        "dispersion": 1.4358444052684516,
+        "fold_means": [
+          -0.12658984720034422,
+          -0.010437829339130804,
+          -0.03867871382877912,
+          0.013295130043280725,
+          0.0069003887169234775,
+          -0.20360146948937785
+        ],
+        "folds": 6,
+        "same_sign_share": 0.6666666666666666,
+        "state": "available"
+      },
+      "std_rank_ic": 0.202901607237233,
+      "variant": "raw",
+      "warmup_days": 20
+    },
+    "momentum_20_h5_neutralized": {
+      "cost_screen": {
+        "assumed_turnover": 0.35787006453555337,
+        "expected_cost": 0.0003292404593727091,
+        "gross_spread": -0.0015884329036027513,
+        "net": -0.0019176733629754604,
+        "passes": false,
+        "round_trip_cost": 0.00092
+      },
+      "days": 290,
+      "expected_days": 290,
+      "factor": "momentum_20",
+      "fdr_q": 0.00037491983576411073,
+      "horizon": 5,
+      "ic_series_digest": "sha256:3beee18c3b1828a69ad48c818bcade78dcd40c706d6f3b421defae5f38012271",
+      "icir": -0.42724347870148954,
+      "immature_tail_days": 5,
+      "mean_rank_ic": -0.03843059858212593,
+      "nw_t": -4.164209458672763,
+      "p_value": 3.1243319647009225e-05,
+      "positive_share": 0.33448275862068966,
+      "significance_available": true,
+      "significance_reason": null,
+      "stability": {
+        "dispersion": 0.8359771371106707,
+        "fold_means": [
+          -0.05858647917857585,
+          -0.045768567850453655,
+          -0.025933423765962815,
+          -0.005231836275152051,
+          -0.005696772220714383,
+          -0.08713009586902916
+        ],
+        "folds": 6,
+        "same_sign_share": 1.0,
+        "state": "available"
+      },
+      "std_rank_ic": 0.08995011158257368,
+      "variant": "neutralized",
+      "warmup_days": 126
+    },
+    "momentum_20_h5_raw": {
+      "cost_screen": {
+        "assumed_turnover": 0.35787006453555337,
+        "expected_cost": 0.0003292404593727091,
+        "gross_spread": -0.001959497430113241,
+        "net": -0.00228873788948595,
+        "passes": false,
+        "round_trip_cost": 0.00092
+      },
+      "days": 396,
+      "expected_days": 396,
+      "factor": "momentum_20",
+      "fdr_q": 0.00377673041181772,
+      "horizon": 5,
+      "ic_series_digest": "sha256:2773ffed72646144447d54f8ba03be44b522f155b9440233bf8eb75c62180fdd",
+      "icir": -0.2854684431650808,
+      "immature_tail_days": 5,
+      "mean_rank_ic": -0.056729904984497356,
+      "nw_t": -3.1607495025382066,
+      "p_value": 0.0015736376715907165,
+      "positive_share": 0.4292929292929293,
+      "significance_available": true,
+      "significance_reason": null,
+      "stability": {
+        "dispersion": 1.2535380083631524,
+        "fold_means": [
+          -0.08904981892295971,
+          -0.04337488320116839,
+          -0.042217549792125955,
+          0.005766324478298707,
+          0.00980321627844323,
+          -0.18130671874747198
+        ],
+        "folds": 6,
+        "same_sign_share": 0.6666666666666666,
+        "state": "available"
+      },
+      "std_rank_ic": 0.1987256607263296,
+      "variant": "raw",
+      "warmup_days": 20
+    },
+    "turnover_20_h10_neutralized": {
+      "cost_screen": {
+        "assumed_turnover": 0.09435442619802673,
+        "expected_cost": 8.680607210218458e-05,
+        "gross_spread": -0.0016213169709247987,
+        "net": -0.0017081230430269832,
+        "passes": false,
+        "round_trip_cost": 0.00092
+      },
+      "days": 285,
+      "expected_days": 285,
+      "factor": "turnover_20",
+      "fdr_q": 0.01824337178836124,
+      "horizon": 10,
+      "ic_series_digest": "sha256:194b0685b989e7d40318841223ce62c01f472b33a51c3704e0374a9219031fbc",
+      "icir": -0.38034957687471915,
+      "immature_tail_days": 10,
+      "mean_rank_ic": -0.02971609806424864,
+      "nw_t": -2.5542406757223124,
+      "p_value": 0.010641966876544055,
+      "positive_share": 0.32280701754385965,
+      "significance_available": true,
+      "significance_reason": null,
+      "stability": {
+        "dispersion": 1.3038411759282988,
+        "fold_means": [
+          -0.045098313373758234,
+          -0.029746682763026753,
+          -0.01760512323521793,
+          0.024953672686746736,
+          -0.014577734272344062,
+          -0.09222468673517764
+        ],
+        "folds": 6,
+        "same_sign_share": 0.8333333333333334,
+        "state": "available"
+      },
+      "std_rank_ic": 0.07812838470446526,
+      "variant": "neutralized",
+      "warmup_days": 126
+    },
+    "turnover_20_h10_raw": {
+      "cost_screen": {
+        "assumed_turnover": 0.09435442619802673,
+        "expected_cost": 8.680607210218458e-05,
+        "gross_spread": 0.005907347689735707,
+        "net": 0.005820541617633523,
+        "passes": true,
+        "round_trip_cost": 0.00092
+      },
+      "days": 391,
+      "expected_days": 391,
+      "factor": "turnover_20",
+      "fdr_q": 0.33836678032597717,
+      "horizon": 10,
+      "ic_series_digest": "sha256:9c33b1315c519d409cddb52eb9cb9a378d3c9cd9a063fd76f954a4b46ed43f17",
+      "icir": -0.12551358498740958,
+      "immature_tail_days": 10,
+      "mean_rank_ic": -0.034558746184111096,
+      "nw_t": -0.9573972611683115,
+      "p_value": 0.3383667803259772,
+      "positive_share": 0.4936061381074169,
+      "significance_available": true,
+      "significance_reason": null,
+      "stability": {
+        "dispersion": 2.8780370986633046,
+        "fold_means": [
+          -0.15505098227570674,
+          0.06541022732104076,
+          -0.06452472612807873,
+          0.05047875236068255,
+          0.036105791230958285,
+          -0.14332418308362774
+        ],
+        "folds": 6,
+        "same_sign_share": 0.5,
+        "state": "available"
+      },
+      "std_rank_ic": 0.27533869092797986,
+      "variant": "raw",
+      "warmup_days": 20
+    },
+    "turnover_20_h5_neutralized": {
+      "cost_screen": {
+        "assumed_turnover": 0.04717721309901336,
+        "expected_cost": 4.340303605109229e-05,
+        "gross_spread": -0.0016923891251545166,
+        "net": -0.0017357921612056089,
+        "passes": false,
+        "round_trip_cost": 0.00092
+      },
+      "days": 290,
+      "expected_days": 290,
+      "factor": "turnover_20",
+      "fdr_q": 0.002533877525849838,
+      "horizon": 5,
+      "ic_series_digest": "sha256:4e47a3ed445de4731cbb76382ec1fbcded7679c0d51d09b1d8d31cae1d56ca13",
+      "icir": -0.36716583330063235,
+      "immature_tail_days": 5,
+      "mean_rank_ic": -0.029335706791534313,
+      "nw_t": -3.4168639066748105,
+      "p_value": 0.0006334693814624595,
+      "positive_share": 0.3620689655172414,
+      "significance_available": true,
+      "significance_reason": null,
+      "stability": {
+        "dispersion": 0.946986650808302,
+        "fold_means": [
+          -0.036451927809136565,
+          -0.034801752720984756,
+          -0.023743849077351133,
+          0.009131823254119147,
+          -0.015131901329423748,
+          -0.0747835909626736
+        ],
+        "folds": 6,
+        "same_sign_share": 0.8333333333333334,
+        "state": "available"
+      },
+      "std_rank_ic": 0.0798977032471169,
+      "variant": "neutralized",
+      "warmup_days": 126
+    },
+    "turnover_20_h5_raw": {
+      "cost_screen": {
+        "assumed_turnover": 0.04717721309901336,
+        "expected_cost": 4.340303605109229e-05,
+        "gross_spread": 0.0029042572146699423,
+        "net": 0.00286085417861885,
+        "passes": true,
+        "round_trip_cost": 0.00092
+      },
+      "days": 396,
+      "expected_days": 396,
+      "factor": "turnover_20",
+      "fdr_q": 0.26385384038967613,
+      "horizon": 5,
+      "ic_series_digest": "sha256:76e238d45e9c2f20c59f4c41128048170563eb8e62982f1b8c01a6e68efcb75b",
+      "icir": -0.11296765468716846,
+      "immature_tail_days": 5,
+      "mean_rank_ic": -0.030412530821965284,
+      "nw_t": -1.2172742498657303,
+      "p_value": 0.22349988816293836,
+      "positive_share": 0.45707070707070707,
+      "significance_available": true,
+      "significance_reason": null,
+      "stability": {
+        "dispersion": 2.2204250700652004,
+        "fold_means": [
+          -0.11067622301273852,
+          0.01648180628230897,
+          -0.04056764430171618,
+          0.017252960051250592,
+          0.04424902134251668,
+          -0.10921510529341323
+        ],
+        "folds": 6,
+        "same_sign_share": 0.5,
+        "state": "available"
+      },
+      "std_rank_ic": 0.26921450132061314,
+      "variant": "raw",
+      "warmup_days": 20
+    },
+    "volatility_20_h10_neutralized": {
+      "cost_screen": {
+        "assumed_turnover": 0.2525066658592445,
+        "expected_cost": 0.00023230613259050492,
+        "gross_spread": -0.00039241535900629406,
+        "net": -0.000624721491596799,
+        "passes": false,
+        "round_trip_cost": 0.00092
+      },
+      "days": 285,
+      "expected_days": 285,
+      "factor": "volatility_20",
+      "fdr_q": 0.0042919424750276925,
+      "horizon": 10,
+      "ic_series_digest": "sha256:a5ef82e6fc95f9c0eb6319584e7aecbc101c017a13cda9c72b9058c4ebab9228",
+      "icir": -0.44214363626748476,
+      "immature_tail_days": 10,
+      "mean_rank_ic": -0.04481236337893068,
+      "nw_t": -3.0692497297230346,
+      "p_value": 0.0021459712375138463,
+      "positive_share": 0.3333333333333333,
+      "significance_available": true,
+      "significance_reason": null,
+      "stability": {
+        "dispersion": 0.7390108682708963,
+        "fold_means": [
+          -0.020789745129844345,
+          -0.06473420434774821,
+          -0.002756852898541487,
+          -0.02604594621966982,
+          -0.06974483446032015,
+          -0.08685860123820915
+        ],
+        "folds": 6,
+        "same_sign_share": 1.0,
+        "state": "available"
+      },
+      "std_rank_ic": 0.10135250109496188,
+      "variant": "neutralized",
+      "warmup_days": 126
+    },
+    "volatility_20_h10_raw": {
+      "cost_screen": {
+        "assumed_turnover": 0.2525066658592445,
+        "expected_cost": 0.00023230613259050492,
+        "gross_spread": 0.007154695640677726,
+        "net": 0.006922389508087221,
+        "passes": true,
+        "round_trip_cost": 0.00092
+      },
+      "days": 391,
+      "expected_days": 391,
+      "factor": "volatility_20",
+      "fdr_q": 0.26385384038967613,
+      "horizon": 10,
+      "ic_series_digest": "sha256:fd9bbbbf7153e45f244e07dd9ff3fd22bbe846975241207685e9444f405022c8",
+      "icir": -0.15325667384365393,
+      "immature_tail_days": 10,
+      "mean_rank_ic": -0.04262046886589161,
+      "nw_t": -1.170335402293377,
+      "p_value": 0.24186602035720312,
+      "positive_share": 0.4782608695652174,
+      "significance_available": true,
+      "significance_reason": null,
+      "stability": {
+        "dispersion": 2.0395131223101397,
+        "fold_means": [
+          -0.13659931672634457,
+          0.006474357260804675,
+          -0.0643241430319106,
+          0.0620152796982203,
+          0.02071131753787408,
+          -0.148022312793992
+        ],
+        "folds": 6,
+        "same_sign_share": 0.5,
+        "state": "available"
+      },
+      "std_rank_ic": 0.2780986158512825,
+      "variant": "raw",
+      "warmup_days": 20
+    },
+    "volatility_20_h5_neutralized": {
+      "cost_screen": {
+        "assumed_turnover": 0.12625333292962224,
+        "expected_cost": 0.00011615306629525246,
+        "gross_spread": 8.201198613345024e-06,
+        "net": -0.00010795186768190744,
+        "passes": false,
+        "round_trip_cost": 0.00092
+      },
+      "days": 290,
+      "expected_days": 290,
+      "factor": "volatility_20",
+      "fdr_q": 0.002533877525849838,
+      "horizon": 5,
+      "ic_series_digest": "sha256:ef4892a519388a707b64d03200b536259407102749549d3af8a361bb910dae3f",
+      "icir": -0.377785286277055,
+      "immature_tail_days": 5,
+      "mean_rank_ic": -0.038117767946823054,
+      "nw_t": -3.45707893068451,
+      "p_value": 0.0005460648811866345,
+      "positive_share": 0.35172413793103446,
+      "significance_available": true,
+      "significance_reason": null,
+      "stability": {
+        "dispersion": 0.5470304589639957,
+        "fold_means": [
+          -0.029207415299244355,
+          -0.05478328764535201,
+          -0.011138695159376209,
+          -0.02131969843936109,
+          -0.05732771946054202,
+          -0.05910947861469896
+        ],
+        "folds": 6,
+        "same_sign_share": 1.0,
+        "state": "available"
+      },
+      "std_rank_ic": 0.10089796858543816,
+      "variant": "neutralized",
+      "warmup_days": 126
+    },
+    "volatility_20_h5_raw": {
+      "cost_screen": {
+        "assumed_turnover": 0.12625333292962224,
+        "expected_cost": 0.00011615306629525246,
+        "gross_spread": 0.003983528403889927,
+        "net": 0.003867375337594674,
+        "passes": true,
+        "round_trip_cost": 0.00092
+      },
+      "days": 396,
+      "expected_days": 396,
+      "factor": "volatility_20",
+      "fdr_q": 0.19443702885148884,
+      "horizon": 5,
+      "ic_series_digest": "sha256:db47c0aec4d55f7e2f0c03503c9352e3fe84196b3d7a2fdcbbc34dc0d3ad2c07",
+      "icir": -0.13522315029869805,
+      "immature_tail_days": 5,
+      "mean_rank_ic": -0.036868921509323464,
+      "nw_t": -1.454427675533385,
+      "p_value": 0.14582777163861663,
+      "positive_share": 0.4444444444444444,
+      "significance_available": true,
+      "significance_reason": null,
+      "stability": {
+        "dispersion": 1.597012387107853,
+        "fold_means": [
+          -0.098439771854463,
+          -0.03339358290345465,
+          -0.04093611388560243,
+          0.019296888603445212,
+          0.038039802846003695,
+          -0.10578075186186964
+        ],
+        "folds": 6,
+        "same_sign_share": 0.6666666666666666,
+        "state": "available"
+      },
+      "std_rank_ic": 0.2726524373073894,
+      "variant": "raw",
+      "warmup_days": 20
+    }
+  },
+  "industry": {
+    "clusters": 8,
+    "kind": "statistical_industry_trailing_returns",
+    "note": "clusters use past returns only; not a named industry classification",
+    "points": 15,
+    "recluster_step_days": 21,
+    "window": 120
+  },
+  "label": {
+    "basis": "adjusted close on snapshot calendar",
+    "horizons": [
+      5,
+      10
+    ],
+    "whole_window_status_mask": true
+  },
+  "limitations": [
+    "free_community_unverified inputs; exploratory only, not alpha evidence",
+    "industry is a statistical proxy, not a PIT named classification",
+    "size uses derived float shares from turnover; corporate-action jumps remain",
+    "size, market beta and statistical industry only; not a full risk model",
+    "all flat bars excluded conservatively; not a legal limit or fill model"
+  ],
+  "market_factor": {
+    "beta_step_days": 21,
+    "beta_window": 120,
+    "kind": "csi500_index_returns",
+    "points": 15,
+    "symbol": "SH000905"
+  },
+  "neutralization": {
+    "exposures": [
+      "log_float_cap",
+      "market_beta",
+      "industry_dummies"
+    ],
+    "method": "cross_sectional_ols_residual"
+  },
+  "paths_recorded": false,
+  "quantile_spread_by_hypothesis": {
+    "momentum_20_h10_neutralized": {
+      "days": 285,
+      "mean_spread": -0.0025053870126898426
+    },
+    "momentum_20_h10_raw": {
+      "days": 391,
+      "mean_spread": -0.0027265990562976164
+    },
+    "momentum_20_h5_neutralized": {
+      "days": 290,
+      "mean_spread": -0.0015884329036027513
+    },
+    "momentum_20_h5_raw": {
+      "days": 396,
+      "mean_spread": -0.001959497430113241
+    },
+    "turnover_20_h10_neutralized": {
+      "days": 285,
+      "mean_spread": -0.0016213169709247987
+    },
+    "turnover_20_h10_raw": {
+      "days": 391,
+      "mean_spread": 0.005907347689735707
+    },
+    "turnover_20_h5_neutralized": {
+      "days": 290,
+      "mean_spread": -0.0016923891251545166
+    },
+    "turnover_20_h5_raw": {
+      "days": 396,
+      "mean_spread": 0.0029042572146699423
+    },
+    "volatility_20_h10_neutralized": {
+      "days": 285,
+      "mean_spread": -0.00039241535900629406
+    },
+    "volatility_20_h10_raw": {
+      "days": 391,
+      "mean_spread": 0.007154695640677726
+    },
+    "volatility_20_h5_neutralized": {
+      "days": 290,
+      "mean_spread": 8.201198613345024e-06
+    },
+    "volatility_20_h5_raw": {
+      "days": 396,
+      "mean_spread": 0.003983528403889927
+    }
+  },
+  "slice": "csi500_factor_research",
+  "snapshot_content_digest": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+  "snapshot_id": "free_cn_20260924_processed_v1",
+  "summary": {
+    "cost_survivors": [
+      "turnover_20_h10_raw",
+      "turnover_20_h5_raw",
+      "volatility_20_h10_raw",
+      "volatility_20_h5_raw"
+    ],
+    "fdr_survivors": [
+      "momentum_20_h10_neutralized",
+      "momentum_20_h10_raw",
+      "momentum_20_h5_neutralized",
+      "momentum_20_h5_raw",
+      "turnover_20_h10_neutralized",
+      "turnover_20_h5_neutralized",
+      "volatility_20_h10_neutralized",
+      "volatility_20_h5_neutralized"
+    ],
+    "interpretation": "a hypothesis must pass FDR **and** cover round-trip cost to be worth further work; the intersection here is the headline",
+    "survives_both": []
+  },
+  "universe": {
+    "name": "csi500",
+    "symbols": 643
+  },
+  "window": {
+    "end": "2026-09-24",
+    "start": "2025-01-02",
+    "trading_days": 421
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "factors": {
+    "momentum_20": {
+      "days": 396,
+      "expected_days": 396,
+      "ic_series_digest": "sha256:e8c9b89b84ee17695b6b1e17bce6b0d5c5c14e2b6883eb46a21ca079dea98881",
+      "immature_tail_days": 5,
+      "mean_rank_ic": -0.056729904984497356,
+      "missing_ic_days": 0,
+      "positive_share": 0.4292929292929293,
+      "std_rank_ic": 0.1987256607263296,
+      "warmup_days": 20
+    },
+    "turnover_20": {
+      "days": 396,
+      "expected_days": 396,
+      "ic_series_digest": "sha256:a8f518ab9cc3b6505ddd10d32ead2f94ffcbab77de7da06ae044a6b7bbd448ea",
+      "immature_tail_days": 5,
+      "mean_rank_ic": -0.030412530821965284,
+      "missing_ic_days": 0,
+      "positive_share": 0.45707070707070707,
+      "std_rank_ic": 0.26921450132061314,
+      "warmup_days": 20
+    },
+    "volatility_20": {
+      "days": 396,
+      "expected_days": 396,
+      "ic_series_digest": "sha256:0bbb8cd3e8ed90c519754055a223d3461e389324d82d1788277f41237482a2a1",
+      "immature_tail_days": 5,
+      "mean_rank_ic": -0.036868921509323464,
+      "missing_ic_days": 0,
+      "positive_share": 0.4444444444444444,
+      "std_rank_ic": 0.2726524373073894,
+      "warmup_days": 20
+    }
+  },
+  "label": {
+    "basis": "adjusted close on the snapshot calendar",
+    "horizon": 5,
+    "kind": "forward_return",
+    "note": "last h rows have no label; full window requires observed positive prices, trading status and non-ST"
+  },
+  "limitations": [
+    "free_community_unverified sources; exploratory only",
+    "all flat bars excluded conservatively; not a legal limit or fill model",
+    "entry through exit observations are required; this is not an execution simulation",
+    "factor values are raw; no industry/size neutralisation yet"
+  ],
+  "paths_recorded": false,
+  "slice": "csi500_factor_pipeline_first",
+  "snapshot_content_digest": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+  "snapshot_id": "free_cn_20260924_processed_v1",
+  "tradability": {
+    "excluded_st": true,
+    "filtered_rows": 694,
+    "missing_turnover": 0,
+    "rule": "tradestatus==1, non-ST, positive high/low and non-flat bar",
+    "symbols": 643,
+    "tradable_rows": 209922
+  },
+  "universe": {
+    "name": "csi500",
+    "symbols": 643
+  },
+  "window": {
+    "end": "2026-09-24",
+    "start": "2025-01-02",
+    "trading_days": 421
+  }
+}

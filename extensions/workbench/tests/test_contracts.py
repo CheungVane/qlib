@@ -51,6 +51,7 @@ def _snapshot(root, dates, instruments, prices):
         folder = root / "features" / code.lower()
         folder.mkdir(parents=True, exist_ok=True)
         np.asarray([0.0] + list(series), dtype="<f4").tofile(folder / "close.day.bin")
+    (root / "price_semantics.json").write_text('{"price_basis":"adjusted_v1"}')
     return root
 
 

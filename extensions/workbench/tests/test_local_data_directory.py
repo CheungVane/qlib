@@ -38,14 +38,15 @@ class LocalDataDirectoryTests(unittest.TestCase):
         self.assertEqual(summary["snapshot_id"], "snap")
         self.assertEqual(summary["calendar"], {"first": "2026-09-23", "last": "2026-09-24",
                                                "days": 2})
-        self.assertEqual(summary["reproducibility"]["state"], "reproducible")
+        self.assertEqual(summary["reproducibility"]["state"], "limited")
         self.assertNotIn(str(Path(folder)), str(summary), "absolute paths must not leak")
 
     def test_unknown_snapshot_and_empty_registry_fail_closed(self):
         with tempfile.TemporaryDirectory() as folder:
             adapter, _ = self.build(Path(folder))
-            with self.assertRaises(dd.DataDirectoryError):
+            with self.assertRaises(dd.SnapshotError) as caught:
                 adapter.summary("absent")
+            self.assertEqual(caught.exception.code, "snapshot_not_found")
             empty = LocalDataDirectory(Path(folder) / "nope", Path(folder))
             self.assertFalse(empty.available())
             self.assertEqual(empty.list_snapshots(), [])

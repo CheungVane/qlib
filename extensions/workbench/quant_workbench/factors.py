@@ -97,41 +97,48 @@ def panel_matrix(panel: dict[str, Any]):
     return grid
 
 
-def load_close_series(snapshot: Path, dates: list[str], instruments: list[str]) -> dict[str, Any]:
+def load_close_series(snapshot: Path, dates: list[str], instruments: list[str], *, price_basis: str | None = None) -> dict[str, Any]:
     """Read adjusted close from a recorded local snapshot (declared bin layout)."""
+    from .domain.data import adjusted_close, decode_bin
     np = _numpy()
-    day_file = snapshot / "calendars/day.txt"
-    if not day_file.is_file():
-        raise FactorError(f"snapshot has no calendar: {snapshot.name}")
-    calendar = day_file.read_text(encoding="utf-8").split()
+    if price_basis is None:
+        metadata = snapshot / 'price_semantics.json'
+        scenario = snapshot / 'scenario.json'
+        if metadata.is_file():
+            price_basis = json.loads(metadata.read_text()).get('price_basis')
+        elif scenario.is_file():
+            known = json.loads(scenario.read_text())
+            if known.get('synthetic') is True and known.get('mode') == 'current_rules_counterfactual':
+                price_basis = 'raw_with_factor_v1'
+    if price_basis not in ('finv_adjusted_v1', 'adjusted_v1', 'raw_with_factor_v1'):
+        raise FactorError('unknown price basis; use an explicitly declared format')
+    calendar = (snapshot / 'calendars/day.txt').read_text().split()
+    if not calendar or calendar != sorted(set(calendar)):
+        raise FactorError('invalid snapshot calendar')
     index = {day: position for position, day in enumerate(calendar)}
     grid = np.full((len(dates), len(instruments)), np.nan, dtype=float)
     missing = []
     for column, code in enumerate(instruments):
-        folder = snapshot / "features" / code.lower()
-        close_file, factor_file = folder / "close.day.bin", folder / "factor.day.bin"
+        folder = snapshot / 'features' / code.lower()
+        close_file = folder / 'close.day.bin'
         if not close_file.is_file():
             missing.append(code)
             continue
-        close = np.fromfile(close_file, dtype="<f4")
-        start = int(close[0])
-        close = close[1:]
-        factor = None
-        if factor_file.is_file():
-            raw = np.fromfile(factor_file, dtype="<f4")
-            factor = raw[1:]
+        start, close = decode_bin(close_file.read_bytes(), len(calendar))
+        factor_start, factors = 0, ()
+        if price_basis == 'raw_with_factor_v1':
+            factor_start, factors = decode_bin((folder / 'factor.day.bin').read_bytes(), len(calendar))
         for row, day in enumerate(dates):
             position = index.get(day)
             if position is None:
                 continue
             offset = position - start
+            factor_offset = position - factor_start
             if 0 <= offset < len(close):
-                value = float(close[offset])
-                if factor is not None and offset < len(factor):
-                    value *= float(factor[offset])
-                grid[row][column] = value
-    return {"values": grid, "missing_instruments": missing,
-            "fields": "close*factor" if (snapshot / "features").exists() else "close"}
+                factor = factors[factor_offset] if 0 <= factor_offset < len(factors) else None
+                grid[row][column] = adjusted_close(close[offset], factor, price_basis)
+    return {'values': grid, 'missing_instruments': missing, 'price_basis': price_basis,
+            'fields': 'close*factor' if price_basis == 'raw_with_factor_v1' else 'close'}
 
 
 def forward_returns(prices, horizon: int):

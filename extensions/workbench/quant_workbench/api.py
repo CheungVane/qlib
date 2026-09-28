@@ -23,7 +23,7 @@ def create_app(service: WorkbenchService):
     from urllib.parse import urlsplit
 
     from .dashboard import QUERY_IDS, validate_dashboard
-    from .domain.errors import ExecutionError
+    from .domain.errors import ExecutionError, SnapshotError
 
     # ``from __future__ import annotations`` turns annotations into strings; FastAPI resolves
     # them against module globals, so register the lazily imported request type explicitly.
@@ -47,6 +47,12 @@ def create_app(service: WorkbenchService):
         return JSONResponse(status_code=exc.status_code,
                             content={"code": exc.code, "message": str(exc), "request_id": rid,
                                      "details": exc.as_details()})
+
+    @app.exception_handler(SnapshotError)
+    async def snapshot_error(request: Request, exc: SnapshotError):
+        rid = getattr(request.state, "request_id", uuid.uuid4().hex)
+        return JSONResponse(status_code=exc.status_code, content={"code": exc.code,
+            "message": str(exc), "request_id": rid, "details": exc.details})
 
     @app.exception_handler(LookupError)
     async def lookup_error(request: Request, exc: LookupError):

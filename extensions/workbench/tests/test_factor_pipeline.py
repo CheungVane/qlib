@@ -13,7 +13,7 @@ class LabelTests(unittest.TestCase):
     def test_forward_return_uses_calendar_steps_and_keeps_missing(self):
         closes = [1.0, float("nan"), 3.0, 4.0, 5.0, 6.0]
         labels = fp.forward_return(closes, horizon=2)
-        self.assertAlmostEqual(labels[0], 2.0)          # 3/1-1
+        self.assertTrue(math.isnan(labels[0]))          # missing interior observation
         self.assertTrue(math.isnan(labels[1]))          # endpoint missing
         self.assertAlmostEqual(labels[2], 5 / 3 - 1)
         self.assertAlmostEqual(labels[3], 6 / 4 - 1)
@@ -99,12 +99,12 @@ class ExposureTests(unittest.TestCase):
         with self.assertRaises(DataDirectoryError):
             fp.walk_forward_windows(200, folds=0)
 
-    def test_label_requires_both_ends_tradable(self):
+    def test_label_requires_whole_window_tradable(self):
         flags = [True, False, True, True, True]
         self.assertEqual(fp.label_tradability(flags, horizon=1),
                          [False, False, True, True, False])
         self.assertEqual(fp.label_tradability(flags, horizon=2),
-                         [True, False, True, False, False])
+                         [False, False, True, False, False])
 
     def test_float_shares_and_log_cap(self):
         shares = fp.float_shares_from_series([777395.3125], [0.6796593070030212], [0.1586])
