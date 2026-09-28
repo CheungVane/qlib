@@ -1,0 +1,212 @@
+{
+  "review_date": "2026-09-28",
+  "code_baseline": "2d1e2985",
+  "source_data_mutated": false,
+  "provider_API_calls": 0,
+  "actual_data": {
+    "baseline": "2d1e2985",
+    "snapshot_id": "free_cn_20260924",
+    "calendar": {
+      "days": 6479,
+      "first": "2000-01-04",
+      "last": "2026-09-24",
+      "strictly_increasing": true
+    },
+    "membership": [
+      {
+        "date": "2015-01-05",
+        "historical_members": 500,
+        "end_members": 500,
+        "missed_historical": 413,
+        "not_yet_members": 413,
+        "missed_sample": [
+          "SH600006",
+          "SH600017",
+          "SH600026",
+          "SH600037",
+          "SH600039"
+        ]
+      },
+      {
+        "date": "2025-01-02",
+        "historical_members": 501,
+        "end_members": 500,
+        "missed_historical": 133,
+        "not_yet_members": 132,
+        "missed_sample": [
+          "SH600007",
+          "SH600056",
+          "SH600079",
+          "SH600096",
+          "SH600118"
+        ]
+      },
+      {
+        "date": "2025-12-31",
+        "historical_members": 500,
+        "end_members": 500,
+        "missed_historical": 51,
+        "not_yet_members": 51,
+        "missed_sample": [
+          "SH600007",
+          "SH600079",
+          "SH600096",
+          "SH600118",
+          "SH600487"
+        ]
+      },
+      {
+        "date": "2026-09-24",
+        "historical_members": 500,
+        "end_members": 500,
+        "missed_historical": 0,
+        "not_yet_members": 0,
+        "missed_sample": []
+      }
+    ],
+    "research_window": {
+      "dates": 421,
+      "distinct_historical_members": 643,
+      "selected_end_members": 500
+    },
+    "existing_materializations": [
+      {
+        "file": "panel-csi500-2026-09-01-1.csv",
+        "rows": 360,
+        "unique_keys": 18,
+        "duplicates": 342,
+        "outside_historical_membership": 0,
+        "distinct_symbols": 1,
+        "sha256": "sha256:db60e4b6e0b1f34a11d7e774c9c57666762a0966171defad9393911947bdd6bd"
+      },
+      {
+        "file": "panel-csi500-2026-09-01-2.csv",
+        "rows": 360,
+        "unique_keys": 18,
+        "duplicates": 342,
+        "outside_historical_membership": 0,
+        "distinct_symbols": 1,
+        "sha256": "sha256:db60e4b6e0b1f34a11d7e774c9c57666762a0966171defad9393911947bdd6bd"
+      }
+    ],
+    "cache_structure": {
+      "files": 1791,
+      "rows": 4601971,
+      "missing_turn": 128151,
+      "zero_turn": 19
+    },
+    "binary_headers": {
+      "symbols": 1802,
+      "mismatched": 0,
+      "mismatch_sample": [],
+      "missing_fields": 0,
+      "missing_sample": []
+    },
+    "archive_sha256_matches": true,
+    "double_adjustment_real_examples": [
+      {
+        "symbol": "SH600000",
+        "dates": [
+          "2025-07-15",
+          "2025-07-16"
+        ],
+        "factor_ratio": 1.0303429114156786,
+        "adjusted_close_return": -0.0029417748991149573,
+        "generic_factor_loader_return": 0.02731187450139494
+      },
+      {
+        "symbol": "SH600000",
+        "dates": [
+          "2026-07-15",
+          "2026-07-16"
+        ],
+        "factor_ratio": 1.0472111029455118,
+        "adjusted_close_return": -0.004530722474683113,
+        "generic_factor_loader_return": 0.042466480065658896
+      }
+    ],
+    "unit_sample": {
+      "symbol": "SH600000",
+      "date": "2026-09-24",
+      "raw_close": 9.000000087697828,
+      "raw_volume_lots": 528363.9593611471,
+      "amount_CNY": 475964875.0
+    }
+  },
+  "isolated_counterexamples": {
+    "shifted_bin_header_gate": {
+      "ok": true,
+      "checked_symbols": 1,
+      "issue_count": 0,
+      "missing_points": 0,
+      "issues": []
+    },
+    "materialization": {
+      "rows": 6,
+      "payload": "date,symbol,close,volume\n2025-01-02,AA,10.000000,10.000000\n2025-01-03,AA,10.000000,10.000000\n2025-01-06,AA,10.000000,10.000000\n2025-01-02,AA,10.000000,10.000000\n2025-01-03,AA,10.000000,10.000000\n2025-01-06,AA,10.000000,10.000000\n",
+      "draft_accepted": true
+    },
+    "content_drift_accepted": {
+      "record_digest_unchanged": true,
+      "validate_ok": true,
+      "last_date": "2025-01-07"
+    },
+    "header_only_cache": "skipped",
+    "duplicate_cache_last_wins": {
+      "2025-01-02": {
+        "turn": 999.0,
+        "tradestatus": 1,
+        "isST": 0
+      }
+    },
+    "midstream_error_cache": {
+      "status": "ok:1",
+      "published": true
+    },
+    "failed_gate_published": {
+      "exit_code": 0,
+      "bar_gate_ok": false,
+      "status": "published"
+    },
+    "train_label_leak_h5": {
+      "train_stop_exclusive": 120,
+      "test_start": 120,
+      "changed_train_rows": [
+        115
+      ],
+      "labels_needing_test_prices": 5
+    },
+    "train_label_leak_h10": {
+      "train_stop_exclusive": 120,
+      "test_start": 120,
+      "changed_train_rows": [
+        110
+      ],
+      "labels_needing_test_prices": 10
+    },
+    "interior_suspension_still_allowed": true
+  },
+  "existing_bar_gate_current_500": {
+    "ok": true,
+    "checked_symbols": 500,
+    "issue_count": 0,
+    "missing_points": 257975,
+    "issues": []
+  },
+  "existing_tests": {
+    "free_sources": 19,
+    "data_directory": 20,
+    "factor_pipeline": 23,
+    "fetch_pacing": 3,
+    "total": 65,
+    "passed": 65
+  },
+  "limitations": [
+    "No multi-provider full value reconciliation or historical vendor revision certification",
+    "Header alignment checked across 1802 historical names; bar numerical rules checked on end-date 500 names",
+    "257975 missing_points is a per-field count, not a count of missing trading dates",
+    "Counterexamples demonstrate defects, not corrected-behavior acceptance",
+    "Generic factor-loader double adjustment reproduced on real files directly; no claim all stored/UI results used this free snapshot",
+    "No production code, caches, original snapshots, materializations or registry rewritten"
+  ]
+}
