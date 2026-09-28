@@ -23,6 +23,7 @@
 | README.md | 唯一导航入口、阅读顺序及文档状态 | 新增规范必须登记，不把要求散落在聊天中 |
 | SPEC_GOVERNANCE.md | 维护优先级、工作流程、完成门槛 | 治理变化必须记录原因及用户依据 |
 | WORKBENCH_SPEC.md | 当前需求、架构与语义合同 | 稳定要求ID；修订标明受影响要求 |
+| DATA_PROCESSING.md | 免费日频数据的物理标准、版本及处理步骤 | 与DATA_SOURCES来源/FACTOR_ANALYSIS统计语义协作，不改写历史数据证据 |
 | ARCHITECTURE.md | 模块定位、端口/依赖、组合根、交互时序与后续填充规则 | 不替代专题业务语义，不以结构验收提升能力状态 |
 | RESEARCH_LIFECYCLE.md / TRADING_BOUNDARY.md | 实验/模型/策略生命周期与后续交易边界 | 新要求生效与实际实现状态分开，未实现不声明支持 |
 | RESEARCH_WORKBENCH.md | 研究结果、过程、比较与决策支持合同 | 与主规范一起执行；事实快照注明日期 |
