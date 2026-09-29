@@ -25,6 +25,7 @@
 | WORKBENCH_SPEC.md | 当前需求、架构与语义合同 | 稳定要求ID；修订标明受影响要求 |
 | DATA_PROCESSING.md | 免费日频数据的物理标准、版本及处理步骤 | 与DATA_SOURCES来源/FACTOR_ANALYSIS统计语义协作，不改写历史数据证据 |
 | DATA_PIPELINE.md / HUMAN_RESEARCH.md | U29采集编排/统一格式/质量报告及U30研究输入/评议/交接 | 目标协议与实际能力分开；分别引用数据物理/生命周期/统计/执行合同，不重复维护算法 |
+| PHYSICAL_CONTRACT.md / COMMAND_CONTRACT.md / ARTIFACT_CONTRACT.md | ARCHITECTURE共享设计的物理存储、传输DTO与产物载荷 | 字段只有一处权威定义，专题引用；不同于实际迁移/schema校验器已实现 |
 | ARCHITECTURE.md | 模块定位、端口/依赖、组合根、交互时序与后续填充规则 | 不替代专题业务语义，不以结构验收提升能力状态 |
 | RESEARCH_LIFECYCLE.md / TRADING_BOUNDARY.md | 实验/模型/策略生命周期与后续交易边界 | 新要求生效与实际实现状态分开，未实现不声明支持 |
 | RESEARCH_WORKBENCH.md | 研究结果、过程、比较与决策支持合同 | 与主规范一起执行；事实快照注明日期 |

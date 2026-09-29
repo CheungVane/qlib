@@ -100,18 +100,18 @@ source_bindings逐组件/字段组声明source_id、角色primary/supplement/val
 
 ## 8. 接口、模块及验收出口（ING08）
 
-端口与服务职责以[ARCHITECTURE](ARCHITECTURE.md)新增§9为准。新API为**待实现目标**，不声称现有服务已有路由：
+端口与服务职责以[ARCHITECTURE](ARCHITECTURE.md)新增§9为准。下表描述用例；精确键名、必填/null、完整Ref与错误以[COMMAND_CONTRACT](COMMAND_CONTRACT.md)为唯一传输合同，物理载荷见[ARTIFACT_CONTRACT](ARTIFACT_CONTRACT.md)。新API为**待实现目标**，不声称现有服务已有路由：
 
 | 接口 | 语义 |
 | --- | --- |
 | GET /v1/data-sources | 配置和能力目录；ready/limited/blocked/not_configured/not_implemented、组件/范围/限额/最近检查；无secret |
 | POST /v1/data-pipeline-definitions | 保存数据方案版本，返回id/digest；同内容可复用，更新须expected_revision |
 | POST /v1/data-preparation-plans | 输入definition_revision及base_snapshot_ref；返回冻结plan、预检与限制；无采集 |
-| POST /v1/data-pipeline-runs | 输入plan_id/digest、idempotency_key、execution_policy_revision；创建Run/Attempt，202及Location；重放200 |
+| POST /v1/data-pipeline-runs | 输入plan_ref、idempotency_key、execution_policy_ref；创建Run/Attempt，202及Location；重放200 |
 | GET /v1/data-pipeline-runs/{run_id} | 分阶段证据、Attempt、质量报告/快照引用；未发布明确null |
 | GET /v1/data-quality-reports/{report_id} | 摘要及分页问题链接，冻结版本 |
 
-取消/重试共用执行服务命令和错误外壳；定义保存/plan保存同样需要幂等键，内容冲突409，格式错误422、能力/门禁不满足409、未知身份404。CLI提供等价命令，调用同一用例服务；预览不产生采集Attempt。例：计划P1包含2025-01-02至2026-09-24，提交{plan_id:P1,plan_digest:D1,idempotency_key:K1,execution_policy_revision:EP1}；成功返回{run_id:R1,attempt_id:A1,status:queued}；若BAO必需且blocked，409/precondition_failed且checks包含source_unavailable，不创建Attempt、不扣采集预算。
+取消/重试共用执行服务命令和错误外壳；定义保存/plan保存同样需要幂等键，内容冲突409，格式错误422、能力/门禁不满足409、未知身份404。CLI提供等价命令，调用同一用例服务；预览不产生采集Attempt。例：计划P1包含2025-01-02至2026-09-24，提交包含完整plan_ref与execution_policy_ref的命令（完整JSON见COMMAND_CONTRACT §5）；成功返回{run_id:R1,attempt_id:A1,status:queued}；若BAO必需且blocked，409/precondition_failed且checks包含source_unavailable，不创建Attempt、不扣采集预算。
 
 验收A43见IMPLEMENTATION：多源/单位/冲突、分母手算、缺失与零、断点、并发幂等、取消/恢复、schema2保护和低负担UI。跨源与PIT未认证不会因流水线自动化而消失。
 

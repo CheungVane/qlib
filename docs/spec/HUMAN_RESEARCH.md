@@ -108,7 +108,7 @@ TrialLedger保存该研究搜索范围下全部候选、原始方向/假设/公�
 
 ## 9. 命令与返回例（HR09）
 
-以下为待实现目标，共用API/CLI用例服务，不占用现有只读`/v1/research`源快照路由：
+精确传输键、Ref、版本CAS及错误以[COMMAND_CONTRACT](COMMAND_CONTRACT.md)为唯一合同；版本载荷见[ARTIFACT_CONTRACT](ARTIFACT_CONTRACT.md)。以下为用例概览及符号示意（非可直接发送的完整JSON），待实现目标共用API/CLI用例服务，不占用现有只读`/v1/research`源快照路由：
 
 | 接口 | 语义 |
 | --- | --- |
