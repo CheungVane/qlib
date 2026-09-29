@@ -16,7 +16,7 @@
 | --- | --- |
 | Experiment | 研究主题容器；容纳多个实验定义版本与试验记录，不充当一次进程 |
 | ExperimentDefinitionRevision | 不可变实验定义：数据快照、历史股票池、特征/因子版本、标签及时间语义、预处理与拟合范围、模型配置、验证方案、组合规则、执行与评估情景、种子与代码/依赖身份；预算由Attempt单独引用执行政策版本 |
-| Run / Stage | Run 引用具体实验定义版本；Stage 声明输入、输出及依赖，可表达训练、预测、回测、评价；初期只需固定流程，不要求通用DAG编辑器 |
+| Run / Stage | Run 引用按workflow_kind判别的具体定义版本（研究定义/数据方案与plan，详见§6/§7）；Stage 声明输入、输出及依赖，可表达训练、预测、回测、评价；初期只需固定流程，不要求通用DAG编辑器 |
 | Attempt | 一次固定工作流的执行尝试，属于且仅属于一个Run；可包含多个Stage的执行证据。重试与重新实验按下方身份规则区分，历史未记录关联保持unknown |
 | ModelArtifactVersion | 不可变模型产物清单：模型、拟合后的预处理状态、特征顺序/类型/单位、标签、训练数据及区间、验证方案、代码/环境身份、种子、产物摘要与来源 Run/Attempt |
 | StrategyVersion | 不可变候选策略：信号生成、模型/因子版本、组合与调仓规则、风险约束和执行假设；允许无训练模型的规则策略，不强制依赖 ModelArtifactVersion |
@@ -72,3 +72,13 @@ LIFE01扩展：数据准备Run的definition_ref允许DataPipelineDefinitionRevis
 TrialLedger的候选身份与Attempt计费单位分开；全部方向/假设/公式分支、失败与保留集访问遵循HR07。自动推进仅到报告，策略采用/前瞻/交易仍受LIFE04及TRADING_BOUNDARY约束。新增业务规则已冻结，物理schema/完整DTO/迁移必须通过ARCHITECTURE §9.3设计门，当前对象草案未包含这些能力。
 
 文字评议的ExperimentDefinitionRevision使用明确的任务类型：direction_review/hypothesis_review允许snapshot_ref与evaluation_protocol_ref为null且标not_required_for_text_review，模型/组合/执行情景字段标not_applicable；不是可用于训练的残缺定义。formula_evaluate开始数值阶段前必须绑定快照、标签及评价协议。数据/协议从null变成已选版本时产生新定义和Run，不能运行中补入。字段可空的范围仅此处明示的文字任务，不放宽训练/回测原合同。
+
+## 7. 统一Run身份与定义类型（U31，目标未实现）
+
+当前storage_results以(source_instance_id, external_id)派生导入Run，当前Attempt入库后才取得该run_id；这不是已实现的“先建研究Run再执行”。目标共用Run身份，区分managed与imported来源：managed在开始执行前由ResearchRunService创建，Attempt和Stage均绑定它；imported保留历史ID，不补造Experiment、Attempt或训练证据。数据Run属于managed且允许无Experiment，结果列表按对象类型区分，不为数据任务伪造收益结果。
+
+新增ExternalRunBinding语义为(source_instance_id, external_id)→run_id唯一映射。已绑定同Run的重复导入可复用revision；自动入库携带target_run_id并核验Attempt归属。外部身份已绑定另一Run时返回明确binding_conflict，不静默合并或改写历史ID；保留待处理回执供显式解决。独立导入已绑定的来源时沿用绑定，未绑定时才创建imported Run。物理迁移先登记旧绑定，再启用managed写入；实际DDL/备份恢复/成功与冲突DTO在ARCHITECTURE §9.3冻结，当前未迁移。
+
+定义使用workflow_kind判别的类型联合，不能靠所有字段均为非空dict证明合法：data_prepare绑定DataPipelineDefinitionRevision+plan；文字评议绑定ExperimentDefinitionRevision的文字任务变体；formula_evaluate绑定有快照/公式/评价协议的变体；train/mine/backtest依各自适用输入校验。模型、组合等不适用字段在中立语义中显式not_applicable，不能伪造占位对象；具体DTO使用判别字段而非随意字符串。现有domain/research.py全字段草案仍待同步，不得直接作为全部任务的创建校验器。Run冻结后改变有效输入须新定义及新Run；重试只创建原Run的新Attempt。
+
+候选试验账本由ResearchWorkflowService管理，执行预算账本由ExecutionService管理；一个候选可有多个失败Attempt，预算消费不等于独立统计试验数。直接训练/挖掘同样登记候选、选择与保留集访问事件，不因未走人参与入口而绕过搜索完整性要求。

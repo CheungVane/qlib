@@ -29,18 +29,18 @@
 
 ## 执行结果自动入库（EXEC12）
 
-- 自动入库与显式 `import-qlib` 使用同一适配器与校验；来源实例、外部ID、adapter_version 与内容哈希共同决定 run/revision 身份，同内容重复导入复用既有 revision。
+- 自动入库与显式 `import-qlib` 使用同一适配器与校验。当前历史导入以来源实例+外部ID决定run，adapter_version及内容哈希决定revision，同内容重复导入复用既有revision。目标managed Run自动入库必须绑定预分配run_id；来源绑定和兼容迁移遵守RESEARCH_LIFECYCLE §7，不能为同一次执行再建一个结果Run。
 - 每次自动入库在平台库记录 ImportReceipt（attempt、run、revision、来源实例、外部ID、适配器版本、状态、时间、失败原因）；Attempt 的 `outcome.result_import` 是投影，回执是事实记录。
 - 自动入库不得跳过来源冲突拒绝、脱敏、情景指纹核验与只读源库访问；导入失败时 Attempt 保持执行成功但入库状态为失败并给出原因。
 - 导入对象的 provenance/字段来源与显式导入一致：引擎原始记录、工作台派生与模拟标记照旧，`imported` 不等于研究有效。
 
 ## 数据集内容版本与评估口径（比较表前置）
 
-- `run.dataset.version` 记录**已物化数据快照的内容摘要**：对已声明的数据组件按稳定相对路径排序后取文件 SHA-256，再汇总摘要（当前本地 `basis=files_sha256`）；排除 `scenario.json`、`content.json` 等配置/摘要元文件，并把摘要写入快照的 `content.json`；只登记文件数量与字节数，不写原始行情。
+- `run.dataset.version` 记录所属快照schema定义的内容版本，并携带身份依据；跨引擎比较使用同一规范快照身份。现有本地CN夹具的`basis=files_sha256`按稳定相对路径汇总文件SHA-256，排除`scenario.json`、`content.json`等元文件，保留为历史身份方式。格式2快照使用其登记content_digest，格式3依DATA_PIPELINE规范清单；引擎物化另记父快照、转换版本及输出摘要，不能拿引擎文件摘要替换逻辑快照身份。
 - 内容摘要与情景/配置指纹是两件事：GOV-CONFIG 仍然禁止用配置指纹代替数据内容版本。本机 CN 快照由固定种子与日历确定性生成，因此内容摘要稳定可复算。
 - CN适配器的比较身份按下方「身份分层」分别生成。旧版将 `evaluation_id` 直接等同完整情景指纹的规则已被替代，不能继续作为当前实现依据。
 - 历史 revision 不改写：缺少内容摘要或 `evaluation_id` 的旧对象继续保持不可排名状态，原因随比较结果显示；重跑或重新导入会产生新 revision。
-- 数据目录正式接入后，`dataset.version` 应由供应商数据的内容摘要或版本号填充，本机的文件摘要机制仍然适用于本地快照与夹具。
+- 供应商版本号属于来源证据，不能单独代替平台已核验的内容身份。不同身份方案之间不按字符串相似或日期相同推断等价；须另有可审计映射证据，否则保持不可排名。现有revision和数据摘要不原地重算。
 
 ## 比较模式
 

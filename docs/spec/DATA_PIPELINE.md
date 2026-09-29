@@ -55,9 +55,9 @@ plan是执行输入，不能将“截至最近完整交易日”留到执行时�
 | 记录族 | 逻辑主键和最低字段 |
 | --- | --- |
 | calendar | (market, session_date)，时区与开闭市时刻/状态及依据；日频日期是当地交易日 |
-| security / membership | 证券稳定security_id、source_symbol映射的有效区间；成分(universe_id, security_id, valid_from, valid_to)，闭区间解释；无交叉上市身份依据不合并 |
-| bar | (security_id, frequency, session_date)，raw_open/raw_high/raw_low/raw_close、adjusted_open/adjusted_high/adjusted_low/adjusted_close、volume_shares、amount及currency、price_basis与adjustment_ref；每字段可空且有原因 |
-| status | (security_id, session_date)，tradestatus/is_st/turnover_ratio等；状态未知为null，不当false；停牌与缺数据不同 |
+| security / membership | 证券稳定instrument_id、source_symbol映射的有效区间；成分(universe_id, instrument_id, valid_from, valid_to)，闭区间解释；无交叉上市身份依据不合并 |
+| bar | (instrument_id, frequency, session_date)，raw_open/raw_high/raw_low/raw_close、adjusted_open/adjusted_high/adjusted_low/adjusted_close、volume_shares、amount及currency、price_basis与adjustment_ref；每字段可空且有原因 |
+| status | (instrument_id, session_date)，tradestatus/is_st/turnover_ratio等；状态未知为null，不当false；停牌与缺数据不同 |
 | benchmark / adjustment | 通过同一稳定标识和解释引用登记；复权因子方向/基准/修订依据必须显式，不能只用字段名factor |
 
 每条观察另有observed_at（对应市场日期/事件时刻）、available_at及availability_evidence、ingested_at、source_ref/raw_batch_ref、source_revision或unknown、transform_ref。**ingested_at是本次取得时间，不补成历史available_at。** 原始层允许不同来源/修订同键并存，规范快照只保留按冻结规则选定的字段值并引用所有候选；缺失原因以同键同字段旁表/紧凑字典存储，不需为每格复制长文本。
@@ -82,7 +82,7 @@ source_bindings逐组件/字段组声明source_id、角色primary/supplement/val
 
 不输出一个未经校准的“正确概率”。首版UI的“可信程度”由四轴构成：**来源证据分类、结构/数值检查、跨源校验覆盖与一致性、历史可用时点完整性**，并有用途结论。source_evidence保留来源目录的source_class、原料溯源/发布清单校验状态及independence=independent/shared_upstream/unknown；没有证据不自动定高/低等级。historical_availability统计有依据的available_at覆盖，未知为unknown或partial，不把本次下载时间当完整证据。用户需要百分数的地方给可复算质量指标，不把覆盖率命名成置信度。后续若要综合评分，必须另冻结权重、校准样本与验证，当前不设权重。
 
-对于已知历史池与日历：E为区间内应有的唯一(date, security_id)集合。每字段f在E上分为有效V、缺行A、存在行但值缺失N、非法/未解冲突I、明确不适用X，互斥且总和=|E|。D=|E|-X；missing_rate=(A+N)/D、invalid_rate=I/D、valid_rate=V/D。D=0时比率null，显示无适用样本。E无法确定时分母unknown，禁止报100%覆盖。
+对于已知历史池与日历：E为区间内应有的唯一(date, instrument_id)集合。每字段f在E上分为有效V、缺行A、存在行但值缺失N、非法/未解冲突I、明确不适用X，互斥且总和=|E|。D=|E|-X；missing_rate=(A+N)/D、invalid_rate=I/D、valid_rate=V/D。D=0时比率null，显示无适用样本。E无法确定时分母unknown，禁止报100%覆盖。
 
 空白是缺失原因的一种：源空字符串/纯空格→blank；源null/NaN/sentinel分别记录；整行缺失为absent_row；覆盖外为outside_source_coverage（属于A的原因）；无法判断为unknown。不要把“空白数”再加到“缺失数”中。多字段缺失格与缺失行是不同分母；报告同时提供至少一必需字段缺失的唯一行数、各字段缺失格数及未受影响行数。有效零计入V。额外键、原始重复、折叠重复、非成员分别在E之外统计，不扩充覆盖分母。
 
@@ -114,3 +114,7 @@ source_bindings逐组件/字段组声明source_id、角色primary/supplement/val
 取消/重试共用执行服务命令和错误外壳；定义保存/plan保存同样需要幂等键，内容冲突409，格式错误422、能力/门禁不满足409、未知身份404。CLI提供等价命令，调用同一用例服务；预览不产生采集Attempt。例：计划P1包含2025-01-02至2026-09-24，提交{plan_id:P1,plan_digest:D1,idempotency_key:K1,execution_policy_revision:EP1}；成功返回{run_id:R1,attempt_id:A1,status:queued}；若BAO必需且blocked，409/precondition_failed且checks包含source_unavailable，不创建Attempt、不扣采集预算。
 
 验收A43见IMPLEMENTATION：多源/单位/冲突、分母手算、缺失与零、断点、并发幂等、取消/恢复、schema2保护和低负担UI。跨源与PIT未认证不会因流水线自动化而消失。
+
+### 全项目消费边界（U31）
+
+发布快照不自动开启训练/回测。数据流水线只证明报告所覆盖的组件与用途；下游根据自己的字段、时间和账户要求再次准入。全局身份及输入准备见ARCHITECTURE §0.3：CDF1统一使用DATA02的instrument_id，引擎物化是快照的派生产物，不能取代快照身份。新默认指针仅用于新草稿，不能改变已有公式、训练或回测的冻结引用。

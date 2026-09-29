@@ -221,3 +221,7 @@ docker inspect -f 'Memory={{.HostConfig.Memory}} Swap={{.HostConfig.MemorySwap}}
 ## U29/U30固定流程执行扩展（2026-09-29，仅设计）
 
 新增data_prepare、direction_review、hypothesis_review、formula_evaluate目标流程见ARCHITECTURE §9。共用Attempt状态/准入/幂等/取消/资源/失联合同；数据任务没有LLM调用可标not_applicable，研究文字任务按能力预检不机械要求Qlib/embedding，不能降低实际需要的运行时门禁。新增采集请求/字节限额由数据方案政策约束，自动研究链另有跨子Run总额度；二者不替换EXEC13按policy_revision的Attempt/调用账本。数据分块复用不是单Stage续跑；等待人工不新增Attempt状态。所有新后台自动推进先通过SR01—03行为验收，本批未修改执行代码。
+
+### 跨领域统一执行（U31，新增入口尚未实现）
+
+数据准备、Agent评议、公式计算、训练、回测共用ARCHITECTURE §0定义的Run/Attempt准入与恢复。预算要求由已登记执行能力及冻结政策确定，不以`rdagent.`名称前缀决定其他Agent是否计费；TrialLedger与Attempt预算分别记账。同幂等键且规范化有效载荷相同返回原对象，不同返回冲突，不启动第二次任务；当前submit先返回旧Attempt的路径仍需随SR03补齐比较证据。自动交接边、Run/Attempt绑定与预算预留共同通过原子准入，网络不在事务内；只读GET不承担维持超时或自动推进存活的职责。领域服务不得自行启动另一套后台worker管理系统。

@@ -1,6 +1,88 @@
 # 代码架构与实现交接合同
 
-状态：生效架构合同，版本1，2026-09-28。来源：用户U28明确要求先落实目录、模块、接口、交互、流程、时序及角色边界，供后续实现填充。关联ARC01—12、U03/U23/U26/U27、A40。基线66d4cc77；本批实施状态与证据见IMPLEMENTATION。本文只决定结构与职责，不替代EXECUTION、VALIDATION、FACTOR_ANALYSIS、RESULT_CONTRACT的数据语义。
+状态：生效架构合同，版本2，2026-09-29。U31要求全项目数据流、功能协同与可维护性统一设计；本次只修spec，未实现新增架构。原U28结构落地日期为2026-09-28。来源：用户U28明确要求先落实目录、模块、接口、交互、流程、时序及角色边界，供后续实现填充。关联ARC01—13、U03/U23/U26/U27/U31、A40/A45。原U28结构批次基线66d4cc77；本次审查基线f2a8821a。各批实施状态与证据见IMPLEMENTATION。本文只决定结构与职责，不替代EXECUTION、VALIDATION、FACTOR_ANALYSIS、RESULT_CONTRACT的数据语义。
+
+## 0. 全项目主合同（U31 / ARC13，目标设计）
+
+本文是跨专题集成入口。它决定对象归属、依赖与端到端交接；数据字段/质量归DATA_PIPELINE和DATA_PROCESSING，统计归FACTOR_ANALYSIS/VALIDATION，Run生命周期归RESEARCH_LIFECYCLE，Attempt归EXECUTION，结果身份归RESULT_CONTRACT。专题不得另设同义对象或另一套状态机。当前已实现部分见§8及IMPLEMENTATION；下面的完整闭环尚未实现。
+
+### 0.1 完整数据流与产品闭环
+
+```mermaid
+flowchart TD
+  Source[来源适配器 / 已登记原料] --> Raw[冻结原料及来源证据]
+  Raw --> Normalize[规范化 / 跨源裁决 / 质量检查]
+  Normalize --> Snapshot[不可变 DatasetSnapshot + QualityReport]
+  Idea[方向 / 假设 / 直接公式] --> Review[Agent评议 / 人工选择]
+  Review --> Formula[FactorDefinitionRevision]
+  Snapshot --> Prepare[共享输入准备：身份 / 日历 / 成员 / 可用时间]
+  Formula --> Prepare
+  Prepare --> Panel[版本化因子面板]
+  Panel --> FactorReport[IC / 正交评价报告]
+  FactorReport --> Select[人工选择特征及冻结研究定义]
+  Panel --> Select
+  Select --> Train[折内预处理 / 训练 / 样本外预测]
+  Prepare --> Train
+  Train --> Model[模型 + 预处理状态 + 输入契约]
+  Train --> Prediction[带可用时点的预测产物]
+  Model --> Infer[用已登记模型推理]
+  Prepare --> Infer
+  Infer --> Prediction
+  Prediction --> Strategy[策略版本 / 组合构建]
+  Panel --> Strategy
+  Strategy --> Backtest[固定情景下模拟成交]
+  Prepare --> Backtest
+  Backtest --> Result[不可变结果版本 / 诊断 / 比较]
+  Result --> Decision[人工保留 / 淘汰 / 新版本研究]
+```
+
+箭头表示版本化产物消费，不表示点击上游按钮会自动运行全部下游。直接公式没有伪造的方向/假设前序；人工可选择确定性因子策略而不训练模型。图中“面板→策略”必须经显式StrategyArtifact规则将因子值转为信号/权重，不能直接把数值当持仓。模型路线与确定性规则路线最终共用组合、执行情景和绩效口径；回测不隐式训练，改变费用只重跑回测。研究建议转成训练输入须用户明确选择，不把一次显著IC自动晋级为有效策略。实盘不在当前实施范围。
+
+### 0.2 对象所有权：一个事实只有一个写入负责人
+
+下表是目标职责，不代表相应文件已创建。服务通过端口写入；“拥有”不等于自己操作SQL。共享仓储事务协调跨表写入，不允许多个服务各存一份权威状态。
+
+| 对象/事实 | 唯一用例负责人 | 下游只消费什么 |
+| --- | --- | --- |
+| 数据方案、冻结计划、原料/规范批次、质量报告、快照发布及默认指针 | DataPipelineService | 已发布快照/报告确切引用；默认只用于新草稿 |
+| Experiment、按任务类型的定义、Run、Stage与产物关联 | ResearchRunService（services/research_runs.py；也管理无Experiment的数据Run） | run_id、冻结definition_ref、已登记阶段产物；不暴露仓储表 |
+| 人工输入/选择、候选交接边、自动链策略、候选试验账本 | ResearchWorkflowService（services/research_workflows.py） | 输入/候选版本和调用RunService的命令；不另造Run/Attempt注册表 |
+| Attempt、资源槽、截止时间、调用/费用预算、结束证据与入库回执 | ExecutionService | Attempt状态及证据；预算范围由冻结定义提供，计费/预留由此服务统一执行 |
+| 字段/算子与时间语义、特征/标签/样本准备规则 | domain纯规则 + 输入准备端口；RunService组织调用 | 带版本和依据的准备产物；不将标签或测试集拟合状态送入特征计算 |
+| 因子面板与因子评价报告 | FactorService | panel_ref/report_ref；统计版本和评价协议完整固定 |
+| 模型/预处理/预测/策略产物 | RunService登记；对应训练/预测/组合适配器生产 | 经验证的中立manifest及受控载荷；不返回引擎内存对象 |
+| 结果revision、导入来源绑定、比较与诊断投影 | ResultService；比较/风险/验证服务只读或显式发布派生报告 | 确切revision及依据；历史结果不被当前配置重解释 |
+
+存储适配器负责唯一约束、原子准入与发布，bootstrap负责组装。DataPipelineService和ResearchWorkflowService均通过RunService创建Run，再由ExecutionService准入Attempt；涉及自动边、Run、Attempt、预算的写入使用同一应用事务端口协调，不能分成三个独立提交。Run可先作为未执行对象保存；开始/重试的事务须绑定已存在或本事务创建的Run。资源不足不产生半条已准入自动边。预检无外部执行，事务内重验可能竞争的条件；网络、引擎和LLM调用全部在提交后。
+
+### 0.3 身份及贯穿全链的输入准备
+
+- `instrument_id`是唯一内部证券身份（DATA02）；供应商symbol是带有效期映射的别名。CDF1不另设security_id。日期轴、时区、会话、成员有效区间和字段单位在数据边界统一，不由每个引擎自行猜测。
+- DatasetSnapshot内容版本、引擎物化摘要、准备视图身份是三层。快照身份按所属schema规范清单计算；物化记录父快照、转换规则版本与输出摘要；准备视图另绑定日期范围、历史池、字段/公式、标签、样本政策及可用时间规则。不同引擎文件不同不等于逻辑数据不同；同快照也不等于评价样本相同。不得凭供应商版本字符串证明内容相同。旧files_sha256身份保留原解释，不原地升级成新逻辑身份。
+- `ArtifactRef`统一表示artifact_id、artifact_type、schema_version、content_digest；manifest包含父引用、生产Run/Attempt（历史导入可unknown）、代码/算法版本和来源证据。路径是可迁移的受控定位，不是身份。数值版本和来源分类不得藏在UI备注里。具体DTO与序列化在§9.3设计门冻结，不能把概念字段直接当现有API。
+- 目标新增`ports/data_inputs.py`的已验证分块读取/准备产物接口：输入是确切snapshot_ref及版本化准备请求，输出为中立分块/manifest引用和依据。数据适配器负责读取已核验字节；共享纯规则负责日历对齐、历史成员、标签完整窗口、样本排除和时间判定。Qlib/RD-Agent/公式引擎只能消费或等价物化这份合同，禁止各写另一套标签/成员规则。现有FactorDataPort仅为真实因子切片过渡接口，不能直接宣称通用输入准备已完成。
+- 标签可用于评价与训练监督，不能进入因子特征；训练预处理器仅在每折train拟合，valid/test只transform。统计用的标签残差不得复用成特征。特征选择也属于拟合/搜索，选择所见区间必须入TrialLedger，不得先看全部数据IC选因子再把同一区间声称为未见测试。
+- 每份预测记录signal_available_at；组合与成交使用各自声明的决策/可成交时点、原始成交价及公司行动处理依据。研究复权价格不能未经转换用于成交记账；缺少相应数据/规则时阻断对应真实回测能力。历史available_at未知可作明确受限探索，不能通过结构检查升级为严格PIT验证。
+
+缓存键至少包含所有影响该产物的父引用、规则/算法版本与有效参数；同键复用须核验已发布载荷，丢失/漂移不得返回成功。上游新版本只影响新任务，旧报告不自动刷新；重新评价生成新report_ref。切换数据、特征、样本或拟合配置使模型复用判定失效时，明确拒绝，不自动重训。
+
+### 0.4 状态、能力与低负担界面
+
+Execution状态、产物发布状态、数据质量/适用用途、统计有效性、Agent意见、人工决定相互独立。例如Attempt succeeded + report published + hypothesis rejected是正常业务结果；数据质量通过 + available_at unknown仍不能声称严格回测有效。UI和API使用同一能力投影，依据“实现已验收、配置/引擎可用、输入组件与时间证据满足、定义完整、执行政策允许”逐项返回可执行性和阻断原因，不能用一个ready字段代表全部质量。源适配器支持字段不等于当前快照有字段，快照有字段不等于训练引擎已接入。
+
+| 页面/动作 | 必须可见的上下文 | 完成后有意义的下一步 |
+| --- | --- | --- |
+| 数据准备 | 冻结范围/来源、质量问题及允许用途 | 查看报告、以确切快照创建研究草稿；设默认须显式动作 |
+| 三类研究输入 | Experiment、输入版本、人工/自动范围与预算 | 澄清、选择提案、查看公式报告；否定也可保存 |
+| 因子评价 | 面板/数据/标签/区间/参考集/统计版本 | 选择特征或定义规则策略；不能自动宣称有效模型 |
+| 训练验证 | 已选特征、切分、拟合范围、数据限制 | 查看每折证据、使用模型推理或创建回测草稿 |
+| 回测比较 | 策略/预测版本、成交情景、账户与样本 | 同口径比较、保留/淘汰、复制新版本 |
+
+数据页不要求先选结果Run；全局默认数据、编辑中草稿、活动Run、正在查看的历史report是不同上下文。跨页传确切引用，历史页不被全局默认替换。后端返回明确下一步/不可用原因；前端不推断数值越大越好或自行放宽门禁。长计算用显式命令进入共用执行通道，GET读取已发布报告/进度；当前因子GET同步计算保留为历史接口，迁移时另设版本化报告命令，不悄悄改变旧响应或假称其已持久化。刷新/离页不取消工作，等待人工不占运行槽。
+
+### 0.5 全局实施和验收原则
+
+先冻结上述共享身份、对象所有权与端口载荷，再实现安全执行及版本发布，然后逐条打通数据→公式评价、训练→样本外预测、已有策略→回测这三个纵向切片。T11/T12是领域工作包，不是可另建底座的独立项目。完整顺序与A45端到端验收见IMPLEMENTATION。保持模块化单体；按职责拆分大文件，不以行数或目录数量作为架构正确证明，不为每个DTO创建一个服务。
 
 ## 1. 架构选择与依赖
 
@@ -49,7 +131,7 @@ flowchart TD
 
 ## 3. 模块接口与对象所有权
 
-ports中的签名是代码接口权威，字段语义仍归专题。现有公开DTO为dict，保持兼容；新领域流程对象使用明确类型。禁止向核心传递SQLite Connection、MLflow Recorder或Qlib内部对象。
+ports中的现存签名描述已实现接口；目标接口以本合同及专题为准，尚未同步的差异必须登记，不能反向削弱spec。字段语义仍归专题。现有公开DTO为dict，保持兼容；新领域流程对象使用明确类型。禁止向核心传递SQLite Connection、MLflow Recorder或Qlib内部对象。
 
 | 接口 | 调用方 / 实现方 | 语义边界 |
 | --- | --- | --- |
@@ -105,7 +187,7 @@ domain/workflows定义三种固定计划及步骤依赖，用于约束职责与�
 - mine：准备冻结输入 → 生成候选因子 → 因子评价；生成器只产出候选，统一统计服务评价，TrialLedger保留失败/淘汰/选中。
 - backtest：准备冻结输入 → 读取已有信号或用已有模型预测 → 构建组合 → 模拟成交 → 评价；本路线无训练步骤，修改成本不重训。信号可用时点/成交时点依CN与数据合同。
 
-后续研究编排服务拥有Run/Stage关联，执行服务拥有Attempt与资源政策，领域规则拥有版本/复用判定，适配器拥有引擎细节，仓储拥有事务和不可变发布。UI不决定状态晋级。未登记模型/预测输入契约、缺真实训练证据或缺数据组件就拒绝对应步骤，不填空产物继续。
+后续ResearchRunService唯一拥有Run/Stage关联，ResearchWorkflowService只拥有人参与交接链，执行服务拥有Attempt与资源政策，领域规则拥有版本/复用判定，适配器拥有引擎细节，仓储拥有事务和不可变发布。UI不决定状态晋级。未登记模型/预测输入契约、缺真实训练证据或缺数据组件就拒绝对应步骤，不填空产物继续。
 
 T06/T07仍需冻结物理schema、研究命令DTO、产物载荷与运行适配契约；不得依据计划对象直接对外声称可训练。计划与接口不预先强制使用某个训练库或新基础设施。
 
@@ -186,7 +268,7 @@ UI优先选择真实数据组并明确来源/区间/基线性质；数据页不�
 | adapters/data_sources/<source>.py | 来源能力/限流/原料采集和源格式映射；每源独立模块 | 不负责跨源选择、计算研究指标、直接写业务状态 |
 | adapters/data_normalization.py / data_quality.py | 执行版本化CDF映射/检查，生成摘要和分块产物，复用领域判定 | 不改旧快照；异常不静默删除 |
 | domain/research_inputs.py / factor_expression.py | 三类输入/评议/交接规则、受限公式AST/单位/时间推导 | 不调用LLM、无动态代码执行 |
-| services/research_workflows.py | 主题/定义/人工决定、固定交接链、幂等自动推进、账本 | 不包含供应商提示词、模型客户端或统计公式 |
+| services/research_workflows.py | 输入/人工决定、固定交接链、幂等自动推进、候选账本；主题/定义/Run委托ResearchRunService | 不包含供应商提示词、模型客户端或统计公式 |
 | ports/research_agent.py / factor_compute.py | 中立Agent任务和确定性公式执行/评价接口 | 不把LLM文本当指标，不混同评议和计算 |
 | adapters/research_agents/<agent>.py | TaskEnvelope到具体Agent协议转换、脱敏/输出解析与能力声明 | 不越过执行服务启动无预算进程，不改上游源码 |
 | adapters/factor_expression_engine.py | 受限DSL编译/隔离计算、产物验证；引擎实现可替换 | 不准任意Python/eval和临时安装依赖 |
@@ -212,7 +294,7 @@ UI优先选择真实数据组并明确来源/区间/基线性质；数据页不�
 | FactorComputer.compute(definition_ref, snapshot_ref, protocol_ref, execution_context) → FactorPanelManifestRef | 受控worker，冻结计算身份；不把标签传成特征 |
 | FactorEvaluator.evaluate(panel_refs, protocol_ref, reference_set_ref) → EvaluationReportRef | 复用统一统计，实现与声明版本一致，未知/未支持项保持不可用 |
 
-服务通过共用ExecutionService创建/取消/监督Attempt，执行器注册固定workflow_kind；worker调用适配器并提交经验证的产物引用。bootstrap唯一组装注册表，新增来源或Agent由显式配置和能力注册完成，不通过名称反射导入任意类。上述方法不表示全部在HTTP请求线程顺序同步运行。
+领域服务通过ResearchRunService绑定Run，再由共用ExecutionService创建/取消/监督Attempt，执行器注册固定workflow_kind；worker调用适配器并提交经验证的产物引用。bootstrap唯一组装注册表，新增来源或Agent由显式配置和能力注册完成，不通过名称反射导入任意类。上述方法不表示全部在HTTP请求线程顺序同步运行。
 
 ### 9.2 Run身份、事务与跨阶段时序
 

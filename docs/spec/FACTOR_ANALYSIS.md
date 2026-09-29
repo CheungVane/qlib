@@ -165,3 +165,7 @@
 等权增量诊断使用同一S_t和同一标准化秩输入：full=Pearson(mean(rank(F),rank(B)),rank(Y))；without=Pearson(mean(rank(B)),rank(Y))；delta=full-without。预期方向符号若使用必须事前冻结，对full/without一致应用；不按结果翻符号。full/without各自退化则delta不可用，不在两个不同样本集上相减。跨日期均值/NW完整轴规则沿用§4.1，明确描述性共同样本覆盖；不能用正交相关证明经济独立、因果关系或成本后收益。
 
 独立验收oracle：n=6，B=[1,2,3,4,5,6]，F=[2,4,1,6,3,5]，Y=F时partial_rank_ic=1，Y=-F时为-1（1e-10容差）；F=B时zero_residual_variance；B重复两列时reference_rank_deficient；无参考集不可用；给其中一列插null后按共同S_t重算，与独立手算/最小二乘实现一致。新增未来价格不得改变此前生成的因子值，但可改变对应尚未成熟标签；验证分割/拟合范围继续服从VALIDATION。
+
+### 全链输入与报告边界（U31）
+
+身份、共享输入准备、因子到训练/规则策略的交接及报告生命周期见ARCHITECTURE §0。snapshot相同不代表label、样本、成员或统计协议相同；报告须绑定全部有效版本。当前GET同步计算是已实现查询行为，目标持久报告采用显式计算命令与不可变report_ref，迁移不得回写旧v1/v2统计。因子评价通过不会自动产生模型或回测，也不会把探索性输入升级为严格PIT。
