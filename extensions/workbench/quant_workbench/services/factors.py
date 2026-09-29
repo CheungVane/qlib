@@ -4,12 +4,14 @@ from typing import Any
 
 from collections.abc import Callable
 from pathlib import Path
-from ..ports import FactorRepository
+from ..ports import FactorRepository, FactorDataPort
+from ..domain.errors import SnapshotError
 from .. import factors as factor_layer
 
 class FactorService:
     def __init__(self, repository: FactorRepository,
-                 snapshot_resolver: Callable[[dict[str, Any]], Path]):
+                 snapshot_resolver: Callable[[dict[str, Any]], Path], market_data: FactorDataPort | None = None):
+        self.market_data = market_data
         self.repository = repository
         self.factor_snapshot_dir = snapshot_resolver
 
@@ -79,26 +81,40 @@ class FactorService:
         dataset = datasets[0]
         if len(calendars) > 1:
             raise factor_layer.FactorError("factors must share one calendar")
-        snapshot = self.factor_snapshot_dir(dataset)
-        digest = factor_layer.verify_snapshot(snapshot, dataset)
-        if analysis_version == 2:
-            from ..factors_v2 import align
-            if len({entry["name"] for entry in entries}) != len(entries):
-                raise factor_layer.FactorError("v2 requires distinct factor names for name-keyed diagnostics")
-            entries = align(entries, snapshot)
-        panels = [entry["panel"] for entry in entries]
-        dates, instruments = factor_layer.aligned_rows(panels)
-        prices = factor_layer.load_close_series(snapshot, dates, instruments)
         window = tuple(sorted(set(horizons or factor_layer.DEFAULT_HORIZONS)))
         if any(isinstance(h, bool) or not isinstance(h, int) or not 1 <= h <= 60 for h in window):
             raise factor_layer.FactorError("horizons must be integers between 1 and 60")
-        returns = {h: factor_layer.forward_returns(prices["values"], h) for h in window}
-        limitations = []
-        if prices["missing_instruments"]:
-            limitations.append(f"{len(prices['missing_instruments'])} 个标的在快照中缺价格，未参与计算")
+        if str(dataset.get('id', '')).startswith('snapshot:'):
+            if self.market_data is None:
+                raise SnapshotError('snapshot_unverified', dataset['id'].removeprefix('snapshot:'))
+            source = self.market_data.resolve(dataset, next(iter(calendars), None))
+            from ..factors_v2 import align
+            entries = align(entries, calendar=source.calendar())
+            dates, instruments = factor_layer.aligned_rows([entry['panel'] for entry in entries])
+            inputs = source.read(dates, instruments, window)
+            # Apply the same observed membership/status mask to every factor family.
+            entries = [{**entry, 'panel': factor_layer.canonical_panel({**entry['panel'],
+                        'values': [v if keep else None for v, keep in zip(entry['panel']['values'], inputs['membership'])]})}
+                       for entry in entries]
+            returns, snapshot_basis, limitations = inputs['labels'], inputs['basis'], inputs['limitations']
+        else:
+            snapshot = self.factor_snapshot_dir(dataset)
+            digest = factor_layer.verify_snapshot(snapshot, dataset)
+            if analysis_version == 2:
+                from ..factors_v2 import align
+                entries = align(entries, snapshot)
+            dates, instruments = factor_layer.aligned_rows([entry['panel'] for entry in entries])
+            prices = factor_layer.load_close_series(snapshot, dates, instruments)
+            returns = {h: factor_layer.forward_returns(prices['values'], h) for h in window}
+            limitations = []
+            if prices['missing_instruments']:
+                limitations.append(f"{len(prices['missing_instruments'])} 个标的在快照中缺价格，未参与计算")
+            snapshot_basis = {'label': snapshot.name, 'content_digest': digest['digest'],
+                              'files': digest['file_count'], 'price_fields': prices['fields']}
+        if analysis_version == 2 and len({entry['name'] for entry in entries}) != len(entries):
+            raise factor_layer.FactorError('v2 requires distinct factor names for name-keyed diagnostics')
         report = factor_layer.analyze(entries, returns, horizons=window, dataset=dataset,
                                       calendar_id=next(iter(calendars), None), limitations=tuple(limitations),
                                       analysis_version=analysis_version)
-        report["basis"]["snapshot"] = {"label": snapshot.name, "content_digest": digest["digest"],
-                                       "files": digest["file_count"], "price_fields": prices["fields"]}
+        report['basis']['snapshot'] = snapshot_basis
         return report

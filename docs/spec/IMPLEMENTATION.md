@@ -1,11 +1,11 @@
 # 实施计划与验收矩阵
 
-## 当前执行里程碑（2026-09-28）
+## 当前执行里程碑（2026-09-29）
 
 持续实施授权：按T01—T10逐步实施，每完成一个小里程碑回写spec，并按GOV02提交推送。**当前有两条轨道，不要混读**：
 
 - **主线**：T01-R/F/U与T03保留既有验收；T02-D定义冻结、B/U已有交付，但同质性与DTO合同验收因SR04重新打开。T04已有两条容器路线、资源上限和调用计数证据，但SR01—03推翻整体完成声明，A41重新打开。T06只有对象/接口草案，尚无持久化研究闭环。
-- **数据源轨道（用户2026-09-27明确要求）**：T05-S已有快照登记、目录浏览接口与数据页，分析路径仍读取当前CN配置；本批格式2离线读取/物化已核验真实字节，但通用UI分析ARC11仍待接入。T08-P三条研究脚本已纠正历史池、标签和NW并复算，不能关闭T08/A37。
+- **数据源轨道（用户2026-09-27明确要求）**：T05-S已有快照登记、目录浏览接口与数据页；格式2离线读取/物化和snapshot命名空间的真实因子UI分析已按冻结身份核验消费字节。旧模拟因子仍走兼容配置路径，ARC11全路径迁移未完成。T08-P三条研究脚本已纠正历史池、标签和NW并复算，不能关闭T08/A37。
 - **最新监督复验**：基线`668506ed`，门禁Python 292项（287通过、5跳过）、JS25项通过，退出码0；独立反例仍复现SR01—06。测试通过不能替代合同验收，详见[监督审查](review-20260927-supervision.md)及其脱敏证据。历史环境安装版本和测试数量只适用于各自批次，见CHANGELOG。
 - **测试沙箱硬边界（2026-09-27）**：任何把 checkout 路径交给执行器的用例必须使用 `extensions/workbench/tests/sandbox.py::isolated_repo_root()`（打标记并断言解析回自身）；`discover_project_root(explicit)` 现在对不像 checkout 的显式根抛 `ProjectRootNotFound`，不再静默回退到真实仓库。仓库根 `runs/` 残留已删除并加入 `.gitignore`，见CHANGELOG。
 - 因此本阶段不是"跳过T02"：用户指定了数据优先，两条轨道并行；主线顺序未变更。
@@ -27,7 +27,15 @@
 
 详细[处理验收JSON](evidence/20260928-data-processing.json)、[独立oracle脚本](evidence/20260928-verify-processed-panel.py)、[切片](evidence/20260928-processed-factor-slice.json)、[研究](evidence/20260928-processed-factor-research.json)、[分折](evidence/20260928-processed-factor-walkforward.json)。规范面板36,628条缺close，其中36,006源NaN、622字段覆盖外；286缺状态不是“确认停牌”，保留空值，不能补0或归因猜测。归档全历史缺失字段点与面板成员行使用不同分母，不混读。
 
-当前FD状态：FD01/02/03/04/06/07在本批免费离线处理范围已修复并验收；FD05/SR05的格式2读取/物化保护已验，**通用UI分析的历史身份端口仍待做，因此父项不关闭**。SR06三个研究入口已纠正复验；A16/A17/A30/A33/A37/A40仅相应子项提升，历史可用时点、公司行动/修订认证、完整训练/试验账本/组合回测仍缺，不把数字当alpha证据。
+当前FD状态：FD01/02/03/04/06/07在本批免费离线处理范围已修复并验收；FD05/SR05的格式2读取/物化保护已验，**真实因子UI的历史身份端口已于2026-09-29接入；其他历史分析路径仍未迁移，因此父项不关闭**。SR06三个研究入口已纠正复验；A16/A17/A30/A33/A37/A40仅相应子项提升，历史可用时点、公司行动/修订认证、完整训练/试验账本/组合回测仍缺，不把数字当alpha证据。
+
+### UI恢复与真实因子接入（2026-09-29）
+
+已恢复8765服务：旧进程schema4仍在运行，新前端state.js请求404导致事件未绑定；确认6个Attempt均终态后，一致性备份库并按既有迁移升至schema6。新入口增加模块加载失败提示，资源均可读取。没有重新执行或改写历史模拟运行。
+
+真实接入限定为：free_cn_20260924_processed_v1 → 三个确定性基线面板 → 因子v2 API/UI。20日热身后2025-02-07至2026-09-24，401日×643历史标的；内容/日历/消费文件摘要错误立即拒绝，不能回退当前配置。首次无上下文打开进入因子页，优先真实组。重复导入三个面板均复用原ID。实际API与浏览器均已显示统计及来源；训练、自动挖掘闭环、组合回测没有切换到真实执行。
+
+复现命令、接口/错误示例与时序见[ARCHITECTURE §8](ARCHITECTURE.md#8-真实快照因子ui接入2026-09-29用户明确授权)。验收摘要见[evidence/20260929-real-factor-ui.json](evidence/20260929-real-factor-ui.json)。门禁313项Python（308通过、5跳过）与28项JS通过；浏览器键盘导航、真实组与统计显示通过。IAB鼠标自动化出现落点偏移，本批不宣称完整鼠标位置验收。此交付仅提升A40/ARC11真实因子入口子项，SR05及T05—T08父项继续开放；SR01—04优先级不变。
 
 ### 免费数据处理专项审查（2026-09-28）
 
@@ -51,7 +59,7 @@
 | SR02 失联与取消 | 开放：未确认结束仍占槽；核对容器身份/清理结果，覆盖迟到退出和重启 | T04/A41 |
 | SR03 试验预算竞争 | 开放：同一范围多连接原子预留，到限只允许限定次数；执行EXEC13-A已冻结的幂等与准入失败消费语义 | T04/A41 |
 | SR04 验证同质性/DTO | 开放：异成本/异日历拒绝合并统计，未知身份与短窗口/全排除遵守§2A，API/CLI一致 | T02/A31/A32诊断子项；A36仍开放 |
-| SR05 快照内容漂移 | 部分修复：本批格式2离线读取/物化已验证真实字节；通用分析的ARC11端口接入仍开放 | T05/A17/A40 |
+| SR05 快照内容漂移 | 部分修复：本批格式2离线读取/物化已验证真实字节；真实因子ARC11端口已接入；旧模拟、其他研究/风险分析路径迁移仍开放 | T05/A17/A40 |
 | SR06 研究统计缺口 | 本批三脚本已修复复验：共用NW、完整轴、缺IC无显著性；真实新版本证据见上节。父项不关闭 | T08-P/A30/A33/A37 |
 | SR07 文档状态冲突 | 本批已修当前索引与专题状态；后续关闭SR须同步全部当前状态引用 | spec治理 |
 
@@ -67,7 +75,7 @@
 | T02-U 界面切换v2 | 完成（2026-09-27） | 验证卡显式请求`analysis_version=2`，遇到v1响应显示"旧定义，未满足当前纠正合同"而不混用；展示逐期Sharpe、PSR/DSR逐项可用性与原因、可用配置数、**声明试验数N及其来源**、Σw并标注"不是独立样本量"、共同观测交集窗口、相关性假设、PBO丢弃余数/折叠重复、被排除配置与原因、探索性警告、定义卡与限制；说明文案同步（不再称"有效样本数"）；JS新增3项（v2正常/v1拒显/不可用与退化）；浏览器实机验收见[截图](evidence/20260927-t02u-validation.png) | 界面交付证据保留；不能关闭SR04或T02整体；A36仍待T06/T07，A30其他估计量缺陷独立保留 |
 | T03 比较合同复验 | 完成（2026-09-27） | 新增`metrics.field_applicability`登记**首批回测指标字段适用表**（执行身份对回测行必需；资金口径字段对金额/收益/风险行必需、纯比率行豁免）；修复两处真实缺口：equity模式此前**未校验evaluation_id**、metric模式此前**未校验execution_id与资金口径**（mode不得绕过）；新增6项反例测试（equity缺评估身份、metric不同成本情景、不同初始资金、未知现金流、纯比率豁免、适用表覆盖） | A13/A27/A28的匹配身份缺失/差异反例已覆盖；D08关闭；比较页UI行为未改（仍由服务端判方向与可比性） |
 | T04 执行政策与预算 | **部分；A41重新打开**。既有十二片功能与容器/调用预算实测保留，但SR01—03尚未修复 | 前八片见CHANGELOG历史条目；⑨⑩Qlib容器片：`--memory/--memory-swap`cgroup硬上限、`--ulimit cpu=`、固定挂载`/qwb/{run,data,src}`+路径改写（残留宿主路径即拒绝）、跟踪库路径归一化、退出码137/152归`failed/resource_limit`。⑪**`agent_max_calls`**：`quant_workbench/hooks/agent_budget/`经`PYTHONPATH`+`sitecustomize`包装`litellm.completion`，调用前`flock`文件账本原子预留、到限拒绝；终态单调核对进V5账本，取消/重启不回退。⑫**RD-Agent容器路由**：新增镜像`qwb-rdagent-cpu:local`（`scripts/build_rdagent_runner_image.sh`，只装上游`requirements.txt`，检出挂载不打包），整个Attempt（驱动+因子代码）在一容器内；探针把`QTDockerEnv`换成同容器`LocalEnv`（本机`.env`设了`MODEL_COSTEER_ENV_TYPE=docker`），Ollama地址改写为宿主可达。证据见[container-route](evidence/20260927-container-route.json)与[agent-call-budget](evidence/20260927-agent-call-budget.json) | 本阶段不含：多任务调度/排队、远程执行器、按供应商返回计量的token核算（预算单位是调用次数） |
-| T05-S 数据源切片（用户指定，非T05完成） | 部分：快照与缓存、目录浏览和相关检查已有交付；SR05内容不可变性验收未通过 | FINV release 2026-09-27下载校验（SHA-256一致、发布方validate `ok:true`、日历末日2026-09-24、退市股在库、北交所缺口已登记）；定池中证500、区间2015-01-05→2026-09-24；BaoStock换手率1,791/1,802只、4,601,971行（源端随后拉黑本机，缓存保全）；新增`free_sources.py`、`data_directory.py`（登记/清单摘要/组件清单/as-of/FreeSnapshotReader/物化/bar门禁/legacy/迁移恢复；不可变性缺口见SR05）、`fetch_csi500_turnover.py`、`verify_free_snapshot.py`、`register_free_snapshot.py`与55项相关测试；全量门禁绿（Python全量+JS21）；操作手册与资产清单见[DATA_SOURCES §7](DATA_SOURCES.md)；证据见[record](evidence/20260927-free-snapshot-record.json)、[登记](evidence/20260927-free-snapshot.json)、[t05-directory](evidence/20260927-t05-directory.json) | T05本体剩余：SR05、真实财务修订源、A40分析数据访问。目录浏览已接service/API/CLI/UI，**分析路径**仍走`configs/cn/profile.json`，ARC11未通过；覆盖门禁已有检查但不等于完整源数据认证；A16/A17仅部分证据；非csi500扩展未做 |
+| T05-S 数据源切片（用户指定，非T05完成） | 部分：快照与缓存、目录浏览和相关检查已有交付；SR05内容不可变性验收未通过 | FINV release 2026-09-27下载校验（SHA-256一致、发布方validate `ok:true`、日历末日2026-09-24、退市股在库、北交所缺口已登记）；定池中证500、区间2015-01-05→2026-09-24；BaoStock换手率1,791/1,802只、4,601,971行（源端随后拉黑本机，缓存保全）；新增`free_sources.py`、`data_directory.py`（登记/清单摘要/组件清单/as-of/FreeSnapshotReader/物化/bar门禁/legacy/迁移恢复；不可变性缺口见SR05）、`fetch_csi500_turnover.py`、`verify_free_snapshot.py`、`register_free_snapshot.py`与55项相关测试；全量门禁绿（Python全量+JS21）；操作手册与资产清单见[DATA_SOURCES §7](DATA_SOURCES.md)；证据见[record](evidence/20260927-free-snapshot-record.json)、[登记](evidence/20260927-free-snapshot.json)、[t05-directory](evidence/20260927-t05-directory.json) | T05本体剩余：SR05、真实财务修订源、A40分析数据访问。目录浏览已接service/API/CLI/UI，真实因子分析已按snapshot身份消费；旧模拟路径仍走`configs/cn/profile.json`，ARC11全路径验收未通过；覆盖门禁已有检查但不等于完整源数据认证；A16/A17仅部分证据；非csi500扩展未做 |
 | T08-P 因子研究管线（试点，非T08完成） | 本批修正FD01/04与SR06并完成离线复算 | 421日历史并集643只、12假设：8过FDR、4过成本、交集0；4折选择0/2/4/3项。见本页数据处理批次及20260928新证据。20260927的500只/7过FDR/1项交集为纠正前历史输出，不能作为当前证据 | 仍缺额外embargo设计、组合构建/冲击/成交模型、T06/T07账本与真实训练；不能关闭A30/A33/A37；历史available_at未知，不认证收益有效性 |
 
 可复现：`scripts/workbench_gate.sh`；风险专项 `extensions/workbench/.venv/bin/python -m unittest discover -s extensions/workbench/tests -p 'test_risk*.py'`。新增回归在 `extensions/workbench/tests/test_risk_v2.py`，覆盖四个独立手算答案、非零rf、v1兼容、缺测不跳过或回退、未知现金流/已扣rf定义不猜测、确切revision与历史不变、CLI/API一致、CVaR尾部不足及非法参数。完整门禁中出现既有执行测试的subprocess ResourceWarning及预期故障注入日志；退出码0，不把这些日志描述为无告警。
@@ -99,7 +107,7 @@ T01-F证据：`extensions/workbench/.venv/bin/python -m unittest discover -s ext
 | D02 研究证据 | 当前验证服务以已记录收益及h生成事后折/权重，没有完整折内训练、样本外预测和最终测试访问证据；现有固定边界purge不等同完整协议 | U20/U23、VAL01—06；A36；A31只证明算法 |
 | D03 试验范围 | T02-B已修正声明N进入公式和Σw命名，B/U数值与界面证据保留；SR04同质性、DTO及错误响应仍未满足冻结合同。TrialLedger与完整选择历史未接入 | A31/A32相关诊断子项重新打开；A36完整训练与账本仍归T06/T07 |
 | D04 生命周期 | 缺实验定义修订、模型产物输入契约、策略版本及完整Run/Attempt关联；现有合成执行目录不能代替研究工作流 | LIFE01—05；A35/A39/A42 |
-| D05 真实数据与规模 | 快照登记、目录浏览service/API/CLI/UI已接入；SR05内容核验缺口、分析仍依赖当前profile；分块面板与分析预算未验收。下载落盘不等于历史身份可复现 | DATA06、ARC11；A37/A38/A40；A16/A17仅部分证据 |
+| D05 真实数据与规模 | 快照登记、目录浏览service/API/CLI/UI已接入；SR05已有格式2消费字节校验及真实因子端口；旧模拟/其他分析仍依赖当前profile；分块面板与分析预算未验收。下载落盘不等于历史身份可复现 | DATA06、ARC11；A37/A38/A40；A16/A17仅部分证据 |
 | D06 架构与部署 | U28已拆专职服务、补端口并提取前端状态/请求；因子仍依赖当前profile，执行仍有仓库配置路径依赖；专业页面/注册表和部署恢复未完成 | ARC10—12；A40结构子项见顶部，C7/C10保留 |
 | D07 执行预算 | **重新打开（SR01—03）**：无轮询超时未强制、失联槽位/容器结束确认不可靠、试验预算竞争可超支；既有容器内存/CPU与调用钩子证据保留 | LIFE06、EXEC06、AGENT04；A41部分 |
 | D08 比较合同 | **已复验并关闭（T03，2026-09-27）**：三类匹配身份与仅回测组排名统一；补齐equity模式的evaluation_id校验与metric模式的execution_id/资金口径校验（mode不得绕过），首批字段适用表由`metrics.field_applicability`声明 | COMPARE01/U18；A13/A27/A28反例已覆盖 |
@@ -119,7 +127,7 @@ T01-F证据：`extensions/workbench/.venv/bin/python -m unittest discover -s ext
 | A39-R | 模拟器中覆盖订单超时核对、重复回报、部分成交/撤单竞争、重启对账、陈旧数据与紧急停止；核对账户守恒。仅证明模拟执行协议 | TRADE01—05 |
 | A39-L | 选定券商/账户/环境并获相应授权后，在真实接口验证订单及恢复对账，证据去敏；先完成交易详细设计与A39-F/R，未选择券商时本项保持阻塞 | TRADE06 |
 | A40 | 分析通过数据目录端口按历史snapshot定位；改变当前profile或数据根不改变历史数据身份；服务所需端口完整，CLI/API语义一致；声明的部署方式可启动/恢复，前端拆分保持URL/选择/刷新行为 | ARC10—12 |
-| A40证据（部分，适配器+入口+展示层） | `adapters/local_data_directory.py` 按快照ID解析（列表/加载/摘要/校验，不回传绝对路径，不可读给`unreadable_reason`）；`WorkbenchService.data_snapshots()/data_snapshot()` + API `GET /v1/data-snapshots[/{id}]` + CLI `qwb data-snapshots|data-snapshot`（未知快照404、未配置目录给原因）；数据页显示快照ID/内容摘要/日历覆盖/组件/可复现性（6项Python + 1项JS测试）。**未做**：**分析路径仍读当前CN配置**，未按snapshot解析；部署启动/恢复与完整专业页面拆分未验；2026-09-28状态/请求拆分及服务/存储框架证据见顶部，A40与ARC11仍不通过 | ARC10—12 / T05 |
+| A40证据（部分，适配器+入口+展示层） | `adapters/local_data_directory.py` 按快照ID解析（列表/加载/摘要/校验，不回传绝对路径，不可读给`unreadable_reason`）；`WorkbenchService.data_snapshots()/data_snapshot()` + API `GET /v1/data-snapshots[/{id}]` + CLI `qwb data-snapshots|data-snapshot`（未知快照404、未配置目录给原因）；数据页显示快照ID/内容摘要/日历覆盖/组件/可复现性（6项Python + 1项JS测试）。**已补真实因子路径**：按snapshot+摘要+日历解析，消费字节漂移拒绝；**未做**：旧模拟/其他分析路径迁移；部署启动/恢复与完整专业页面拆分未验；2026-09-28状态/请求拆分及服务/存储框架证据见顶部，A40与ARC11仍不通过 | ARC10—12 / T05 |
 | A41 | 并发满拒绝新准入；超时终止运行进程并保留证据；Agent到限阻止下一调用；CPU/内存硬限制实测生效，未支持则该环境验收不通过；启动失败/queued取消/迟到退出纠正可追溯；重启/取消不清空同范围预算事实 | LIFE06、EXEC06、AGENT04 |
 | A41（T04第1—12片） | **部分；整体通过声明撤回（监督基线668506ed）**。SR01—03重新打开超时、恢复/槽位、试验预算子项；下述为此前已观察到的限定证据，不能外推完整A41。政策：缺字段/非法值拒绝、内容哈希revision、`/v1/executions/catalog`暴露政策与用量。内存+CPU：**两条入口都在容器内运行**——Qlib用`--memory=2GiB/--memory-swap=2GiB`+`--ulimit cpu=3600`（实测128MiB上限分配400MB→`failed/resource_limit`(137)），RD-Agent整Attempt同容器（运行中实测容器`Memory=MemorySwap=2147483648`、`Ulimits=cpu=3600:3600`；平台Attempt `231ed548`baseline退出0、quality`passed_checks`、19项指标）。**Agent调用**：`sitecustomize`包装`litellm.completion`（真实RD-Agent导入路径`wrapped=True`，未改上游源码），调用前原子预留、到限拒绝；容器内真实loop在limit=3时发3次即被拦（10次内部重试全部被拒、`used=3`无超支）；平台级loop在limit=4时以`outcome.agent_budget.calls.status=budget_exhausted`（`used=4/attempt_used=4/blocked_by_this_attempt=true`）收尾；4进程并发抢占只放出恰好limit个名额；终态用量单调核对进V5账本，`calls_enforced=true`。并发：槽满`capacity_exceeded`(409)、**事务内预留**、幂等重放不占槽、取消释放。超时：**deadline在V6落盘并在启动时冻结**，确认结束才落`failed/timeout`、未确认留`interrupted`+`timeout_unconfirmed`。预算：V5账本有串行到限拒绝证据，但试验预留并发原子性被SR03推翻。**本机之外未验**：其它Docker/Podman后端、无Docker的环境按设计拒绝准入；多任务调度与远程执行器不在本项内 | LIFE06、EXEC06、AGENT04 / T04 |
 | A42 | 保存/复制实验、比较配置差异、复用模型、保存候选策略，跨专业页面保留同一实验及确切版本；统一发现入口可跳转，来源与关键限制始终可见 | LIFE07、U21/U26 |
@@ -134,14 +142,14 @@ T01-F证据：`extensions/workbench/.venv/bin/python -m unittest discover -s ext
 | T02 事后诊断真实性 | B/U已交付；SR04合同验收重新打开（[VALIDATION §2A](VALIDATION.md)） | 不依赖TrialLedger：披露选择范围、N依据、权重和及独立状态；按§2A定义卡实现，N必须进入公式并锁定输入revision。不完整集合只标探索性。出口A31/A32及A36诊断子项 |
 | T03 比较合同 | **已完成**（2026-09-27） | 首批回测指标字段适用表（`field_applicability`），equity/metric均验证身份缺失/差异与不同初始资金反例；服务端判方向和可比性。出口A13/A27/A28 |
 | T04 执行政策 | 已部分交付；先修SR01—03 | 持久化并发槽、截止时间、政策修订与Agent计数；启动前检查、超时终止/恢复。出口A41；上限未支持的环境不通过 |
-| T05 数据目录边界 | 部分：目录浏览已接入；SR05、分析路径按快照解析、真实财务修订源与完整A40待验 | 按[数据源清单](DATA_SOURCES.md)实现适配器与快照身份（FINV主 + BAO校验 + EM补充）；snapshot身份→组件清单→物化引用；旧路径显式登记，未知不补造；设计并验证迁移/恢复。覆盖门禁`coverage_report()`比较区间声明与实际末日（标记而非结论，不替代过期vs退市判定），实测见[证据](evidence/20260927-coverage-gate.json)。出口A16/A17和A40数据访问子项。A38分块可独立开展，超旧上限的真实研究须先通过A38 |
+| T05 数据目录边界 | 部分：目录浏览已接入；SR05其余路径、真实财务修订源与完整A40待验；真实因子已按快照解析 | 按[数据源清单](DATA_SOURCES.md)实现适配器与快照身份（FINV主 + BAO校验 + EM补充）；snapshot身份→组件清单→物化引用；旧路径显式登记，未知不补造；设计并验证迁移/恢复。覆盖门禁`coverage_report()`比较区间声明与实际末日（标记而非结论，不替代过期vs退市判定），实测见[证据](evidence/20260927-coverage-gate.json)。出口A16/A17和A40数据访问子项。A38分块可独立开展，超旧上限的真实研究须先通过A38 |
 | T06 实验/模型/策略对象 | **接口草案已冻结（2026-09-27）**；物理实现待T04/T05 | `domain/research.py`（旧`research_lifecycle.py`兼容导出）冻结对象必填身份字段、内容摘要（不含名称/标签）、模型复用需特征/预处理/标签契约全匹配、规则策略可无模型、重试/新Run/新定义判定、interrupted重试须确认旧进程结束、TrialLedger保留失败与同配置多Attempt并记录测试集访问。**未做**：物理schema、仓储、命令样例与API、账本持久化；不得当作T06完成，出口A35仍待实现 |
 | T07 实际验证证据 | T02、T06 | 分折训练、折内预处理、预测/标签、测试集访问与账本快照；失败保持unverified/invalidated。出口A36其余子项，与T02合并后才可标A36通过 |
 | T08 限定真实研究 | T01、T03、T05—T07、DEC01 | 明确来源/股票池/区间的真实链路，必要历史组件通过质量与时间语义验收。出口A37；来源待选只阻塞本任务 |
 | T09 上下文交互 | T06；证据入口依赖T07，可先做标注mock原型 | 保存/复制实验、模型复用、版本链接与专业页面跳转；前端拆分保持行为。出口A42及A40前端/CLI/API子项；完整A40还需声明部署方式的启动恢复验收 |
 | T10 前瞻与交易 | 前瞻依赖T08；实盘另需DEC02 | 先完成TRADING_BOUNDARY设计门，再分别验A39-F前瞻、A39-R模拟订单恢复、A39-L真实券商；模拟通过不触发真实下单 |
 
-**下一步**：先处理SR01—03执行保护，再处理SR04验证合同、SR05剩余通用分析身份接入；SR06本批三脚本已复验；各自可分成小里程碑，每项须补正确行为回归、核对专题与验收并回写证据，再按GOV02提交推送。旧研究证据不可恢复为当前证据；本批复算仍仅探索性，不作为完整研究验收。SR修复不自动关闭T05—T08或A36/A37；已有真实源、训练账本、分块和交易缺口继续保留。
+**下一步**：先处理SR01—03执行保护，再处理SR04验证合同、SR05旧模拟/其他分析路径的身份迁移（本批真实因子入口已验）；SR06本批三脚本已复验；各自可分成小里程碑，每项须补正确行为回归、核对专题与验收并回写证据，再按GOV02提交推送。旧研究证据不可恢复为当前证据；本批复算仍仅探索性，不作为完整研究验收。SR修复不自动关闭T05—T08或A36/A37；已有真实源、训练账本、分块和交易缺口继续保留。
 
 ### 个人使用目标补充（U27）
 
@@ -178,7 +186,7 @@ T01-F证据：`extensions/workbench/.venv/bin/python -m unittest discover -s ext
 
 | 待决定项 | 谁在何时解决 | 缺省行为 |
 | --- | --- | --- |
-| DEC01 首个真实来源/股票池/区间及使用权限 | **已决定（2026-09-27用户确认）**：免费来源FINV主+BAO校验；股票池=中证500；区间=2015-01-05→2026-09-24；已授权下载并落盘，证据见[快照登记](evidence/20260927-free-snapshot.json) | 快照已登记并接入目录浏览；分析解析与SR05身份保护未通过，T05/A16/A17/A37不因此完成；只能按已接入的具体路径声明能力 |
+| DEC01 首个真实来源/股票池/区间及使用权限 | **已决定（2026-09-27用户确认）**：免费来源FINV主+BAO校验；股票池=中证500；区间=2015-01-05→2026-09-24；已授权下载并落盘，证据见[快照登记](evidence/20260927-free-snapshot.json) | 快照已登记并接入目录浏览；真实因子解析与格式2消费身份已验，其余SR05身份保护未通过，T05/A16/A17/A37不因此完成；只能按已接入的具体路径声明能力 |
 | DEC02 券商/账户、部署环境与风险阈值 | T10真实接入前选择并记录授权，详细交易设计先评审 | A39-L阻塞，不以模拟替代，不自动下单 |
 | 工程选择：本地格式、DTO键、迁移版本、运行预算数值 | 对应实现者按有效spec先登记，不为普通可逆工程选择反复询问用户 | 保留单机/单人、端口与有界保护；运行预算无有效配置时拒绝，不能猜默认无限 |
 
@@ -205,7 +213,7 @@ T01-F证据：`extensions/workbench/.venv/bin/python -m unittest discover -s ext
 | M0 | 部分 | 独立包、锁文件、核心无 Qlib/MLflow 依赖、结果契约/端口、JSON 样本、关键非法值校验 | 正式配置加载、迁移入口、JSON Schema/OpenAPI 一致性门禁 |
 | M1 | 部分 | Qlib 和 JSON 导入、SQLite + 哈希对象、幂等 revision、CLI/API、分页、故障注入与恢复、真实模拟 Qlib 报告逐点映射 | 通用导入回执与失败记录覆盖（Qlib自动入库已有回执）、正式备份/迁移命令、完整产物引用模型 |
 | M2 | 预览 | 浏览器实际检查总览/回测/训练/比较（历史浏览器检查；小屏专项尚未验收）、双引擎列表与搜索；RD-Agent 只读状态页；未知数据版本禁止排名，未接入卡片显示 `not_recorded` | 可配置布局持久化、可访问性/长序列降采样及完整状态呈现 |
-| M3 | 部分（执行层、容器资源上限与Qlib自动入库已交付；A41重新打开，目录仅接浏览） | 独立CN配置/编译器、分项费用/数量/T+1/容量适配、标签边界清除、日历夹具与质量记录；Qlib和RD-Agent共享情景单轮已实测；持久化Attempt、隔离进程执行器、界面启动/取消、幂等与来源校验已实测（A18/A19）；Qlib回测成功后自动发布结果并写ImportReceipt（A24）；Qlib入口容器化并提供内存/CPU硬上限与`resource_limit`归类（A41子项） | SR01—03、SR05、分析数据目录与snapshot按类型校验（A16/A17）、RD-Agent结果入库；不能把探针视为M3整体完成 |
+| M3 | 部分（执行层、容器资源上限与Qlib自动入库已交付；A41重新打开，目录已接浏览与真实因子分析） | 独立CN配置/编译器、分项费用/数量/T+1/容量适配、标签边界清除、日历夹具与质量记录；Qlib和RD-Agent共享情景单轮已实测；持久化Attempt、隔离进程执行器、界面启动/取消、幂等与来源校验已实测（A18/A19）；Qlib回测成功后自动发布结果并写ImportReceipt（A24）；Qlib入口容器化并提供内存/CPU硬上限与`resource_limit`归类（A41子项） | SR01—03、SR05、分析数据目录与snapshot按类型校验（A16/A17）、RD-Agent结果入库；不能把探针视为M3整体完成 |
 | M4 | 局部 | HTTP窗口错误率/4xx/耗时/覆盖与Attempt级失败率、取消/中断、P95耗时、按入口分组已采集（A25） | 实时会话与回放验收、持久化遥测与历史保留策略 |
 | M5 | 未开始 | 无新增阶段完成声明 | 按后续阶段验收推进 |
 

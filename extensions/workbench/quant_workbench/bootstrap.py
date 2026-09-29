@@ -50,8 +50,10 @@ def build_workbench(settings: WorkbenchSettings, *, with_executors: bool = True)
                                                 RDAgentExecutor(limits=limits, budget_root=root / "agent_budget")],
                                      importer=AttemptResultImporter(repository), policy=policy)
     from .adapters.local_data_directory import LocalDataDirectory
+    from .adapters.snapshot_analysis import SnapshotAnalysisDirectory
     data_root = settings.data_root
     registry = data_root / "_registry"
     directory = LocalDataDirectory(registry, data_root) if registry.is_dir() else None
     return WorkbenchService(repository, observer, ResearchSnapshots(root / "research"), execution,
-                            directory, analysis_configuration=default_analysis_configuration())
+                            directory, analysis_configuration=default_analysis_configuration(),
+                            factor_data=SnapshotAnalysisDirectory(registry, data_root))

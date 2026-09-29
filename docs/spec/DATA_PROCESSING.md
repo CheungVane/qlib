@@ -65,7 +65,7 @@ NW必须复用FACTOR_ANALYSIS §4.1的实现及完整日期轴；预先声明因
 
 DP2—DP4首次处理生成`free_cn_20260924_v2`及年度面板，复验发现发布报告还需在发布前登记逐日成员内状态覆盖，而不是仅在下游面板统计。因此最终交付使用新身份`free_cn_20260924_processed_v1`；v2/v3与其面板保留为本批中间产物，不作为推荐入口，也不改写其登记记录。最终版复用相同原始来源，重新冻结和验收；不得把“新处理版本”误认为新的供应商历史版本。年度规范物化器版本2.1，输出`panels_v2_1/`，区分source_nan与coverage_outside计数。
 
-通用旧模拟因子入口仅兼容已登记`scenario.json`的synthetic=true且mode=current_rules_counterfactual格式（raw_with_factor_v1），或摘要覆盖的`price_semantics.json`显式声明；未知口径拒绝。免费研究三条脚本必须经schema2目录读取器核验，不能再传入任意enrichment目录。普通UI因子分析的ARC11目录端口接入仍单列待实施，不以本批离线处理关闭。
+通用旧模拟因子入口仅兼容已登记`scenario.json`的synthetic=true且mode=current_rules_counterfactual格式（raw_with_factor_v1），或摘要覆盖的`price_semantics.json`显式声明；未知口径拒绝。免费研究三条脚本必须经schema2目录读取器核验，不能再传入任意enrichment目录。2026-09-28离线处理时普通UI的ARC11目录端口尚未实施；2026-09-29真实因子路径已按ARCHITECTURE §8接入。旧模拟及其他分析的迁移仍未完成，不关闭父项。
 
 发布时序（与FD06及步骤表一致）：DP3仅在内存构造候选published记录（用于确定最终摘要），不写registry；DP4年度复跑、独立键/换算验证通过后才原子登记。任何物化失败都不得出现新的published文件。v2/v3是修复迭代期间的中间版本，最终版首次登记须遵循此时序。
 

@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import Any
 from .ports import (WorkbenchRepository, AgentObservationPort, ResearchObservationPort,
-                    DataDirectoryPort, AnalysisConfigurationPort)
+                    DataDirectoryPort, AnalysisConfigurationPort, FactorDataPort)
 from .provenance import capabilities_audit
 from .services.results import ResultService, display_run_title, GENERIC_RUN_TITLES
 from .services.comparison import ComparisonService
@@ -20,7 +20,8 @@ class WorkbenchService:
                  research: ResearchObservationPort | None = None,
                  execution: ExecutionService | None = None,
                  data_directory: DataDirectoryPort | None = None, *,
-                 analysis_configuration: AnalysisConfigurationPort | None = None):
+                 analysis_configuration: AnalysisConfigurationPort | None = None,
+                 factor_data: FactorDataPort | None = None):
         self.repository = repository
         self.rdagent = rdagent
         self.research = research
@@ -33,7 +34,7 @@ class WorkbenchService:
         self.analysis_configuration = analysis_configuration
         self.results = ResultService(repository)
         self.comparison = ComparisonService(self.results)
-        self.factors = FactorService(repository, lambda dataset: self.factor_snapshot_dir(dataset))
+        self.factors = FactorService(repository, lambda dataset: self.factor_snapshot_dir(dataset), factor_data)
         self.risk = RiskService(self.results, analysis_configuration)
         self.validation = ValidationService(self.results)
         self.catalog = CatalogService(data_directory)

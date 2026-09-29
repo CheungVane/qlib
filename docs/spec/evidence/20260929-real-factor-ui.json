@@ -1,0 +1,1768 @@
+{
+  "date": "2026-09-29",
+  "scope": "real snapshot factor UI only; no real training or portfolio backtest",
+  "restoration": {
+    "observed_cause": "older live process returned HTTP 404 for state.js imported by current app.js",
+    "consistent_database_backup_before_restart": true,
+    "schema_before": 4,
+    "schema_after": 6,
+    "terminal_attempts_before_restart": 6,
+    "active_attempts_before_restart": 0,
+    "asset_http_status": {
+      "startup.js": 200,
+      "app.js": 200,
+      "state.js": 200,
+      "transport.js": 200
+    }
+  },
+  "import": {
+    "snapshot_id": "free_cn_20260924_processed_v1",
+    "content_digest": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+    "panels": [
+      {
+        "name": "momentum_20",
+        "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1",
+        "dates": 401,
+        "instruments": 643,
+        "valid_values": 199718
+      },
+      {
+        "name": "volatility_20",
+        "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea",
+        "dates": 401,
+        "instruments": 643,
+        "valid_values": 199438
+      },
+      {
+        "name": "turnover_20",
+        "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472",
+        "dates": 401,
+        "instruments": 643,
+        "valid_values": 199523
+      }
+    ],
+    "repeat_all_reused": true
+  },
+  "analysis": {
+    "schema_version": 2,
+    "sample": {
+      "start": "2025-02-07",
+      "end": "2026-09-24",
+      "dates": 401,
+      "instruments": 643,
+      "cells": 257843
+    },
+    "snapshot": {
+      "label": "free_cn_20260924_processed_v1",
+      "content_digest": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+      "files": 19824,
+      "verification_scope": "consumed file bytes",
+      "price_fields": "close (already adjusted)",
+      "price_basis": "finv_adjusted_v1",
+      "market_data_kind": "real",
+      "source_class": "free_community_unverified",
+      "historical_available_at": "unknown",
+      "universe": "csi500",
+      "label_mask": "whole-window observed prices/status, non-ST, non-flat"
+    },
+    "parameters": {
+      "horizons": [
+        1,
+        5,
+        10
+      ],
+      "primary_horizon": 1,
+      "requested_factor_count": 3,
+      "cross_section_min": 5,
+      "ddof": 1,
+      "small_sample_correction": false,
+      "sample": {
+        "start": "2025-02-07",
+        "end": "2026-09-24",
+        "dates": 401,
+        "instruments": 643,
+        "cells": 257843
+      },
+      "factor_names": [
+        "turnover_20",
+        "volatility_20",
+        "momentum_20"
+      ],
+      "tested_factor_count": 3
+    },
+    "statistics": [
+      {
+        "name": "turnover_20",
+        "rank_ic": {
+          "horizon": 1,
+          "days": 400,
+          "available": true,
+          "ic_mean": -0.028979109113842695,
+          "ic_std": 0.27641637601685914,
+          "icir": -0.10483861170394335,
+          "positive_ratio": 0.4525,
+          "nw_lag": 0,
+          "nw_se_mean": 0.013803531966309198,
+          "nw_omega": 0.07621499789796796,
+          "t_stat": -2.099398123941981,
+          "p_value": 0.03578181994313083,
+          "tests_disclosed": 3,
+          "significance_available": true,
+          "significance_reason": null,
+          "expected_days": 400,
+          "definitions": {
+            "ic_mean": {
+              "definition_id": "platform.factor.rank_ic.ic_mean.v2",
+              "formula": "mean(daily cross-sectional IC)",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            },
+            "ic_std": {
+              "definition_id": "platform.factor.rank_ic.ic_std.v2",
+              "formula": "std(daily IC, ddof=1)",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            },
+            "icir": {
+              "definition_id": "platform.factor.rank_ic.icir.v2",
+              "formula": "mean(IC)/std(IC, ddof=1)",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            },
+            "positive_ratio": {
+              "definition_id": "platform.factor.rank_ic.positive_ratio.v2",
+              "formula": "count(IC>0)/N",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            },
+            "nw_omega": {
+              "definition_id": "platform.factor.rank_ic.nw_omega.v2",
+              "formula": "gamma0+2*sum((1-k/(L+1))*gamma_k); gamma_k=sum(products)/N",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            },
+            "nw_se_mean": {
+              "definition_id": "platform.factor.rank_ic.nw_se_mean.v2",
+              "formula": "sqrt(omega/N); L=min(h-1,N-1); no small-sample correction",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            },
+            "t_stat": {
+              "definition_id": "platform.factor.rank_ic.t_stat.v2",
+              "formula": "mean(IC)/se_mean",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            },
+            "p_value": {
+              "definition_id": "platform.factor.rank_ic.p_value.v2",
+              "formula": "erfc(abs(t)/sqrt(2)); normal approximation",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            }
+          }
+        },
+        "fdr_q": 0.03578181994313083
+      },
+      {
+        "name": "volatility_20",
+        "rank_ic": {
+          "horizon": 1,
+          "days": 400,
+          "available": true,
+          "ic_mean": -0.036149665957094596,
+          "ic_std": 0.2781245785785665,
+          "icir": -0.12997652398018034,
+          "positive_ratio": 0.4575,
+          "nw_lag": 0,
+          "nw_se_mean": 0.013888835264924257,
+          "nw_omega": 0.07715989800648146,
+          "t_stat": -2.602785998073521,
+          "p_value": 0.009246965344956445,
+          "tests_disclosed": 3,
+          "significance_available": true,
+          "significance_reason": null,
+          "expected_days": 400,
+          "definitions": {
+            "ic_mean": {
+              "definition_id": "platform.factor.rank_ic.ic_mean.v2",
+              "formula": "mean(daily cross-sectional IC)",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            },
+            "ic_std": {
+              "definition_id": "platform.factor.rank_ic.ic_std.v2",
+              "formula": "std(daily IC, ddof=1)",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            },
+            "icir": {
+              "definition_id": "platform.factor.rank_ic.icir.v2",
+              "formula": "mean(IC)/std(IC, ddof=1)",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            },
+            "positive_ratio": {
+              "definition_id": "platform.factor.rank_ic.positive_ratio.v2",
+              "formula": "count(IC>0)/N",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            },
+            "nw_omega": {
+              "definition_id": "platform.factor.rank_ic.nw_omega.v2",
+              "formula": "gamma0+2*sum((1-k/(L+1))*gamma_k); gamma_k=sum(products)/N",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            },
+            "nw_se_mean": {
+              "definition_id": "platform.factor.rank_ic.nw_se_mean.v2",
+              "formula": "sqrt(omega/N); L=min(h-1,N-1); no small-sample correction",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            },
+            "t_stat": {
+              "definition_id": "platform.factor.rank_ic.t_stat.v2",
+              "formula": "mean(IC)/se_mean",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            },
+            "p_value": {
+              "definition_id": "platform.factor.rank_ic.p_value.v2",
+              "formula": "erfc(abs(t)/sqrt(2)); normal approximation",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            }
+          }
+        },
+        "fdr_q": 0.013870448017434667
+      },
+      {
+        "name": "momentum_20",
+        "rank_ic": {
+          "horizon": 1,
+          "days": 400,
+          "available": true,
+          "ic_mean": -0.043748467163263284,
+          "ic_std": 0.20097410616193587,
+          "icir": -0.21768210840063518,
+          "positive_ratio": 0.4075,
+          "nw_lag": 0,
+          "nw_se_mean": 0.010036136566082102,
+          "nw_omega": 0.04028961486922011,
+          "t_stat": -4.359094445876176,
+          "p_value": 1.3060174331096486e-05,
+          "tests_disclosed": 3,
+          "significance_available": true,
+          "significance_reason": null,
+          "expected_days": 400,
+          "definitions": {
+            "ic_mean": {
+              "definition_id": "platform.factor.rank_ic.ic_mean.v2",
+              "formula": "mean(daily cross-sectional IC)",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            },
+            "ic_std": {
+              "definition_id": "platform.factor.rank_ic.ic_std.v2",
+              "formula": "std(daily IC, ddof=1)",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            },
+            "icir": {
+              "definition_id": "platform.factor.rank_ic.icir.v2",
+              "formula": "mean(IC)/std(IC, ddof=1)",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            },
+            "positive_ratio": {
+              "definition_id": "platform.factor.rank_ic.positive_ratio.v2",
+              "formula": "count(IC>0)/N",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            },
+            "nw_omega": {
+              "definition_id": "platform.factor.rank_ic.nw_omega.v2",
+              "formula": "gamma0+2*sum((1-k/(L+1))*gamma_k); gamma_k=sum(products)/N",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            },
+            "nw_se_mean": {
+              "definition_id": "platform.factor.rank_ic.nw_se_mean.v2",
+              "formula": "sqrt(omega/N); L=min(h-1,N-1); no small-sample correction",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            },
+            "t_stat": {
+              "definition_id": "platform.factor.rank_ic.t_stat.v2",
+              "formula": "mean(IC)/se_mean",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            },
+            "p_value": {
+              "definition_id": "platform.factor.rank_ic.p_value.v2",
+              "formula": "erfc(abs(t)/sqrt(2)); normal approximation",
+              "input_refs": {
+                "panels": [
+                  {
+                    "factor_id": "42bbf6a9-c01e-4351-b406-0fdd817cef41",
+                    "panel_id": "f3ee4602-ece7-4404-bf2c-ba45ce775be3",
+                    "content_hash": "0905ec776b3d7ff52ccf5d8a317fd29d900747d64ef10f8795099b7798906472"
+                  },
+                  {
+                    "factor_id": "e331c581-f127-4482-a22c-26baf4d2cfe0",
+                    "panel_id": "89abaaa1-1012-4af7-af9f-87e5e1ab0151",
+                    "content_hash": "76bc6aece8b7c86e560857f893eb01bf762beeb0014a2a0d8478b3dad4d47eea"
+                  },
+                  {
+                    "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                    "panel_id": "b5a652b0-999b-4e5a-97f7-cb58681148a3",
+                    "content_hash": "fe9aa8bec1778ded8d692eb8fe328956221f5474161410f3e5d144673abcf3a1"
+                  }
+                ],
+                "dataset": {
+                  "id": "snapshot:free_cn_20260924_processed_v1",
+                  "version": "sha256:1af8450d022fc17d2db12e991350e6e12dee631a6430ce1964c1c3ebd768a7f7",
+                  "snapshot_label": "free_cn_20260924_processed_v1"
+                },
+                "calendar_id": "calendar:sha256:54baa5bb01ddde125664c623a4bd8715ed4326ae5e249415bc49cc5328dc7be0"
+              },
+              "input_basis": {
+                "kind": "absolute_forward_price_return",
+                "cost_basis": "before_cost",
+                "price_rule": "legacy close * optional factor; materialization semantics not certified",
+                "window": "shared calendar range; last h days excluded from significance"
+              },
+              "parameters": {
+                "horizons": [
+                  1,
+                  5,
+                  10
+                ],
+                "primary_horizon": 1,
+                "requested_factor_count": 3,
+                "cross_section_min": 5,
+                "ddof": 1,
+                "small_sample_correction": false,
+                "sample": {
+                  "start": "2025-02-07",
+                  "end": "2026-09-24",
+                  "dates": 401,
+                  "instruments": 643,
+                  "cells": 257843
+                },
+                "factor_names": [
+                  "turnover_20",
+                  "volatility_20",
+                  "momentum_20"
+                ],
+                "horizon": 1,
+                "lag": 0,
+                "factor_id": "ae8683f4-6e60-4914-8e2a-84fd2b63c5b4",
+                "method": "spearman"
+              },
+              "availability": "available",
+              "reason": null
+            }
+          }
+        },
+        "fdr_q": 3.918052299328946e-05
+      }
+    ],
+    "elapsed_seconds_observed": 11.75
+  },
+  "verification": {
+    "gate": "bash scripts/workbench_gate.sh",
+    "exit_code": 0,
+    "python_total": 313,
+    "python_passed": 308,
+    "python_skipped": 5,
+    "javascript_passed": 28,
+    "covered": [
+      "dataset/calendar identity mismatch rejection",
+      "consumed status content drift rejection",
+      "full-window ST filtering",
+      "membership exclusion",
+      "observed zero turnover",
+      "idempotent panel import",
+      "no current-profile fallback",
+      "frontend module graph delivery",
+      "real group preference",
+      "catalog without run selection",
+      "nonzero small probabilities"
+    ],
+    "warnings": "existing subprocess ResourceWarning, dependency deprecation and expected fault-injection logs present",
+    "browser": {
+      "navigation_by_keyboard": "data and factors verified",
+      "real_group_selected": true,
+      "real_statistics_rendered": true,
+      "historical_synthetic_labels_preserved": true,
+      "mouse_automation_limitation": "IAB locator/coordinate clicks landed on preceding sidebar item; keyboard activation correctly selected requested view. Full mouse-position acceptance not claimed.",
+      "screenshot": "20260929-real-factor-ui.png"
+    }
+  },
+  "limitations": [
+    "free community source, not official certification",
+    "historical available_at and revisions unknown",
+    "only consumed bytes verified per analysis; files count is manifest inventory",
+    "FDR family contains three baselines at primary h=1, unlike prior offline 12-hypothesis family",
+    "legacy synthetic and other analysis paths not migrated",
+    "real training, automatic mining workflow, portfolio backtest not delivered",
+    "remaining SR01-04 and SR05 parent acceptance remain open"
+  ]
+}

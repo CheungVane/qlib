@@ -583,3 +583,29 @@ test('A40: extracted state and transport expose native ESM factories', async()=>
  await raw.request('/v1/executions',{method:'POST'});
  assert.equal(calls[0][1].method,'POST');
 });
+
+test('real baseline is preferred and history is kept separate',async()=>{
+  const items=[{factor_id:'old',name:'old_demo',dataset:{id:'synthetic',version:'v1'},provenance:{data_nature:'synthetic'}},
+    {factor_id:'real',name:'momentum_20',dataset:{id:'snapshot:verified',version:'sha256:real'},provenance:{market_data_kind:'real'}}];
+  const paths=[];
+  const x=ui(async path=>{paths.push(path);return path==='/v1/factors'?response({items}):response({message:'input deliberately unavailable'},409);});
+  assert.equal(x.run('state.view'),'factors');
+  await x.run('renderFactors()');
+  assert.match(paths[1],/factor_id=real/);
+  assert.doesNotMatch(paths[1],/factor_id=old/);
+  assert.match(x.elements.content.innerHTML,/真实社区行情/);
+  assert.match(x.elements.content.innerHTML,/aria-selected="true"/);
+  assert.doesNotMatch(x.elements.content.innerHTML,/old_demo/);
+  assert.match(x.elements.content.innerHTML,/input deliberately unavailable/);
+});
+
+test('data catalog loads without a selected run and small probabilities remain nonzero',async()=>{
+  const x=ui(async()=>response({available:true,items:[{snapshot_id:'verified',components:[]}]}));
+  await x.run('renderDataEvidence()');
+  assert.match(x.elements.content.innerHTML,/verified/);
+  assert.doesNotMatch(x.elements.content.innerHTML,/选择研究以查看/);
+  const row=x.run("factorStatsRow({name:'real',provenance:{market_data_kind:'real'},rank_ic:{significance_available:true,p_value:0.000012},fdr_q:0.000036})");
+  assert.match(row,/1\.20e-5/);
+  assert.match(row,/3\.60e-5/);
+  assert.doesNotMatch(row,/来源性质未知/);
+});

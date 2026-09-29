@@ -145,4 +145,31 @@ state模块只创建/保存客户端选择与导航上下文；transport统一�
 - `services/execution.py`仍保留直接构造时加载默认policy的兼容路径，生产组合根显式传入同一policy实例；其旧监督、取消、预算行为仍受SR01—03限制。
 - 前端transport的`api`统一GET的JSON错误及过期渲染检测；`request`保留原始Response供提交/取消/入库处理。写操作不重放、不自动重试，也不自动套用GET的过期检测；现有写操作错误展示由页面处理。页面尚未完全模块化，后续不得误以为所有请求已统一成同一错误模型。
 
-2026-09-28数据处理实现归属：新增adapters/snapshot_files.py处理逐文件内容身份/已验证字节，adapters/data_preparation.py处理冻结/质量/发布与面板输出；FreeSnapshotReader消费已验证bytes；当前LocalDataDirectory仍为目录浏览，通用services/factors的数据端口接入待ARC11，不宣称已经完成。既有data_directory和factor_pipeline逐步委托，不把新IO放进services/domain。物理合同见[DATA_PROCESSING](DATA_PROCESSING.md)。
+2026-09-28数据处理实现归属：新增adapters/snapshot_files.py处理逐文件内容身份/已验证字节，adapters/data_preparation.py处理冻结/质量/发布与面板输出；FreeSnapshotReader消费已验证bytes；LocalDataDirectory本身仅为目录浏览；2026-09-29另以SnapshotAnalysisDirectory接入真实因子数据端口，见§8，不宣称所有分析路径已迁移。既有data_directory和factor_pipeline逐步委托，不把新IO放进services/domain。物理合同见[DATA_PROCESSING](DATA_PROCESSING.md)。
+
+## 8. 真实快照因子UI接入（2026-09-29，用户明确授权）
+
+用户要求恢复不可点击UI并切换到真实数据。入口故障证据：旧8765服务进程仍使用旧资源白名单，最新app.js依赖的state.js返回404；不是数据本身不可用。服务重启前确认无活动Attempt，平台库一致性备份后按现有迁移升级，禁止清空旧结果。前端增加模块加载失败可见提示/刷新，不再静默停在加载中。
+
+本批真实接入范围为数据目录、真实日频因子面板与统一因子分析；训练/组合回测入口仍按各自已验能力标记，不把已有模拟结果改成真实。推荐快照沿用free_cn_20260924_processed_v1；不改原CN模拟情景指纹，也不让历史结果随当前默认数据变化。
+
+新增`FactorDataPort.resolve(dataset, calendar_id)`与`FactorInputPort.calendar()/read(dates,instruments,horizons)`；实现放adapters/snapshot_analysis.py，组合根显式注入FactorService。返回标准数值网格/成员掩码/来源依据，不传Qlib/MLflow对象。真实面板使用`dataset.id=snapshot:<snapshot_id>`、version=登记content_digest、snapshot_label=<snapshot_id>，calendar_id=calendar:<calendar组件摘要>；这利用已有持久化字段，不迁移因子schema。snapshot命名空间必须经目录解析；未知/版本不符/日期身份不符/内容变动立即拒绝，不回退当前CN配置。旧无命名空间的显式模拟面板保留兼容路径。
+
+真实分析保留完整日历轴、逐日成员掩码，标签复用DATA_PROCESSING完整窗口与单价日保守规则。服务调用既有v2统计，不另写NW。新入库三个确定性手工基线因子momentum_20、volatility_20、turnover_20，以2025-01-02至2026-09-24计算，明确先排除20日热身，再保存401日×643历史标的面板，非成员/无效状态为null。它们是“真实行情上的工作台计算”，不是手写行情样本、Agent挖掘或训练成果。幂等导入保留内容版本，读取API不触发导入。
+
+UI优先选择真实数据组并明确来源/区间/基线性质；数据页不依赖先选运行，独立显示真实快照，旧运行的数据证据继续按该运行版本显示。默认真实因子窗口不代表已训练模型或回测收益；UI内明确指出模拟执行入口未切换。
+
+无hash且无运行/比较/研究查询上下文时，首次进入因子页；历史深链保留。因子分组选择须暴露aria-selected；真实基线用provenance.market_data_kind识别，既有data_nature保留兼容，不把“有来源”升级为官方认证。p/q小于显示精度时使用科学计数，不能把非零概率显示为0。首批适配器只接收free_community_unverified + finv_adjusted_v1；其他源需要明确扩展合同。
+
+### 可执行交接与失败边界
+
+仓库根运行（数据根须指向已处理目录；不下载、不训练）：
+
+```sh
+.venv/bin/python scripts/import_real_baseline_factors.py --root .data/workbench --data-root "$HOME/.qlib/qlib_data" --snapshot-id free_cn_20260924_processed_v1 --start 2025-01-02 --end 2026-09-24
+.venv/bin/qwb --root .data/workbench serve --port 8765
+```
+
+导入输出含panels[].factor_id/panel_id/content_hash/created/panel_created；重复运行须三个panel_created=false。查询`GET /v1/factors`取得真实组ID，随后`GET /v1/factor-analysis?factor_id=<ID1>&factor_id=<ID2>&factor_id=<ID3>&horizon=1&horizon=5&horizon=10&analysis_version=2`。成功响应schema_version=2，basis.sample为401×643，basis.dataset.version等于登记摘要；basis.snapshot.verification_scope=`consumed file bytes`。files=19824是登记文件总数，不表示每次分析消费了全部文件。失败例：登记版本或日历与面板不符返回409、code=`snapshot_content_mismatch`，details包含snapshot_id和component=`dataset/calendar identity`；未登记返回404、code=`snapshot_not_found`，不输出本机路径。
+
+时序：写命令先构造已验证读取器→计算/遮罩三面板→逐面板仓储事务幂等发布（非三面板全局事务，中断后重跑补齐）；只读分析先检查面板版本一致→解析登记身份/日历→对齐完整日期轴→核验实际消费字节并计算标签→同一成员/状态掩码处理因子→v2统计→携带依据与限制返回。每次请求重新解析登记，单请求可复用已验证不可变bytes。基线定义固定：动量仅要求两端价格，波动率要求21日价格完整，换手均值要求20日值完整；三者均按因子当日历史成分与已知状态过滤，不要求预测期末仍为成分股。未知源历史可用时点仍标unknown。

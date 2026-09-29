@@ -70,7 +70,7 @@
 
 2026-09-28结构更新：SQLite/本地对象存储实现已移到`adapters/storage/`，顶层`storage_*.py`/`storage.py`只兼容转发；结果、执行等8个专职服务已承接调用，仓储端口按职责拆分。`LocalResultRepository`仍组合连接/schema与三个域mixin，`object_store=`的`write/read`注入接口保持；无数据库迁移，不表示支持第二数据库或云存储。先前2026-09-26扁平目录说明由本段替代，历史过程见CHANGELOG。
 
-剩余偏差：旧因子/研究/政策模块仍有IO，ARC11分析路径仍读当前profile；前端只拆状态与请求，页面尚未拆全。全部配置/引擎根路径注入及部署恢复仍待验收，过渡依赖精确登记于ARCHITECTURE及架构门禁。
+剩余偏差：旧因子/研究/政策模块仍有IO，ARC11真实因子路径已按冻结快照解析（2026-09-29，见ARCHITECTURE §8），旧模拟及其他分析仍读当前profile；前端只拆状态与请求，页面尚未拆全。全部配置/引擎根路径注入及部署恢复仍待验收，过渡依赖精确登记于ARCHITECTURE及架构门禁。
 
 ```mermaid
 flowchart TD

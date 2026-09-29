@@ -1,8 +1,7 @@
 """Local registered-snapshot catalog adapter (T05 / A40 partial).
 
-CatalogService exposes these summaries through API/CLI. Analysis still follows
-legacy profile paths; this adapter does not establish SR05 content integrity or
-certify ARC11 immutable analysis resolution.
+CatalogService exposes these summaries through API/CLI. This catalog does not certify consumed file integrity; registered real factor
+analysis verifies its inputs separately through SnapshotAnalysisDirectory.
 """
 
 from __future__ import annotations

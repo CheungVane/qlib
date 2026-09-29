@@ -8,9 +8,9 @@ from pathlib import Path
 from . import factors as legacy
 
 
-def align(entries, snapshot: Path):
+def align(entries, snapshot: Path | None = None, *, calendar=None):
     """Restore missing calendar rows before constructing h-trading-day labels."""
-    calendar = (snapshot / "calendars/day.txt").read_text().split()
+    calendar = list(calendar) if calendar is not None else (snapshot / "calendars/day.txt").read_text().split()
     try:
         valid = all(date.fromisoformat(day).isoformat() == day for day in calendar)
     except ValueError:

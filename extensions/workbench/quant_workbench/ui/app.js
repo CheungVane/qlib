@@ -33,8 +33,8 @@ const HELP = {
   body:['PSR：Sharpe 大于基准的概率（偏度/峰度修正，逐期不年化）；DSR 以"声明的试验数 N 对应的期望最大 Sharpe"为基准，比 PSR 更保守。N 来自调用方声明或本次选择推断，后者只代表本次选择。','PBO（CSCV）：把收益矩阵切成等长时间块，样本内最优配置在样本外的秩低于中位的比例；完全相同或零离散度的配置会被拒绝而不是给出数值。','purge/embargo：训练集剔除与测试窗口标签重叠的样本及其后若干样本；唯一性权重和 Σw 不是独立有效样本量，不能据它推断显著性。','试验范围不完整时一律标探索性；共同观测取各 revision 的交集，被排除的配置会列出原因。','这些都不能替代前瞻/实盘验证：结果里固定列出"缺少前瞻样本"这条未接入项。']},
  'page.live':{title:'实时页为什么是空的',summary:'行情流尚未接入，没有连接记录时不显示 0。',ref:'LIVE01 / UI01',
   body:['实时行情、延迟与缺口能力属于后续阶段；当前没有数据流会话或采集记录。','按规范，无采集样本时不显示 0%，而是明确说明未接入。']},
- 'page.data':{title:'数据页怎么读',summary:'这里展示当前结果的来源与情景证据，不是供应商数据目录。',ref:'ARC06 / DATA01—05',
-  body:['数据页显示选中运行的数据集身份、内容版本、日历与执行情景指纹。','情景指纹描述配置，不能代替行情内容版本；供应商数据目录与真实 PIT 校验尚未接入。']},
+ 'page.data':{title:'数据页怎么读',summary:'先看登记快照，再看选中历史运行的来源；两者不能混用。',ref:'ARC06 / DATA01—05',
+  body:['快照目录独立于运行展示；登记本身不证明每个消费文件已通过验证。','真实因子分析按冻结身份校验输入。历史运行仍使用其原数据证据；历史 PIT 与真实训练、组合回测尚未接入。']},
  'page.system':{title:'系统页怎么读',summary:'这里只有工作台 HTTP 服务的实测遥测，不代表引擎错误率。',ref:'OBS01 / OBS02',
   body:['系统页展示本工作台服务的请求错误率、请求数量与响应耗时，并给出分母、窗口与采集覆盖。','任务失败率、引擎错误率与 Attempt 失败率是不同指标；本页不代替它们。']},
  'source.legend':{title:'来源标记怎么读',summary:'来源回答“数值从哪来”，与行情是否真实、能力是否具备是三件事。',ref:'PROVENANCE_AUDIT.md / ARC04 / ARC08',
@@ -721,8 +721,8 @@ async function refreshRuns(){
 function factorStatsRow(row){
  const rank=row.rank_ic||{},spread=row.quantile_spread||{},turn=row.turnover||{};
  const value=v=>typeof v==='number'?fmt(v,4):'不可用';
- const inference=v=>rank.significance_available===true?value(v):'不可用';
- return `<tr><td><strong>${esc(row.name)}</strong><small class="block muted">探索性 · ${esc(analysisNature(row.provenance?.data_nature))}</small>${row.coverage!==null&&row.coverage!==undefined?`<small class="block muted">覆盖 ${fmt(row.coverage*100,1)}%</small>`:''}<small class="block muted">${rank.significance_available===true?'显著性可计算（不代表显著）':esc(analysisReason(rank.significance_reason))}</small></td><td>${value(rank.ic_mean)}</td><td>${inference(rank.nw_se_mean)}</td><td>${inference(rank.t_stat)}</td><td>${inference(rank.p_value)}</td><td>${inference(row.fdr_q)}</td><td>${value(rank.icir)}</td><td>${typeof spread.top_minus_bottom==='number'?fmt(spread.top_minus_bottom*100,3)+'%':'不可用'}</td><td>${spread.monotonic===true?'满足代理阈值':spread.monotonic===false?'不满足代理阈值':'不可用'}</td><td>${value(turn.turnover)}</td><td>${rank.days??'未记录'}</td></tr>`;
+ const inference=v=>rank.significance_available===true?(typeof v==='number'&&v!==0&&Math.abs(v)<0.0001?v.toExponential(2):value(v)):'不可用';
+ return `<tr><td><strong>${esc(row.name)}</strong><small class="block muted">探索性 · ${esc(analysisNature(row.provenance?.data_nature||row.provenance?.market_data_kind))}</small>${row.coverage!==null&&row.coverage!==undefined?`<small class="block muted">覆盖 ${fmt(row.coverage*100,1)}%</small>`:''}<small class="block muted">${rank.significance_available===true?'显著性可计算（不代表显著）':esc(analysisReason(rank.significance_reason))}</small></td><td>${value(rank.ic_mean)}</td><td>${inference(rank.nw_se_mean)}</td><td>${inference(rank.t_stat)}</td><td>${inference(rank.p_value)}</td><td>${inference(row.fdr_q)}</td><td>${value(rank.icir)}</td><td>${typeof spread.top_minus_bottom==='number'?fmt(spread.top_minus_bottom*100,3)+'%':'不可用'}</td><td>${spread.monotonic===true?'满足代理阈值':spread.monotonic===false?'不满足代理阈值':'不可用'}</td><td>${value(turn.turnover)}</td><td>${rank.days??'未记录'}</td></tr>`;
 }
 function factorCorrelationTable(correlation,similarity,distance){
  if(!correlation||!correlation.labels?.length)return empty('没有可计算的重叠');
@@ -754,19 +754,19 @@ async function renderFactors(){
   (groups[key]=groups[key]||[]).push(item);
  });
  const keys=Object.keys(groups);
- if(!keys.includes(state.factorGroup))state.factorGroup=keys[0];
+ if(!keys.includes(state.factorGroup))state.factorGroup=keys.find(key=>groups[key][0]?.provenance?.market_data_kind==='real')||keys[0];
  const members=groups[state.factorGroup].slice(0,12);
  const query=members.map(item=>'factor_id='+encodeURIComponent(item.factor_id)).join('&');
  let report=null,error=null;
  try{report=await api(`/v1/factor-analysis?${query}&horizon=1&horizon=5&horizon=10&analysis_version=2`);if(report.schema_version!==2)throw new Error("旧定义，未满足当前纠正合同；需要因子 v2 服务");}catch(problem){error=problem.message;}
- const tabs=`<div class="subtabs" role="tablist" aria-label="因子数据集">${keys.map(key=>`<button type="button" role="tab" class="subtab ${key===state.factorGroup?'active':''}" data-factor-group="${esc(key)}">${esc(key)} <small>${groups[key].length}</small></button>`).join('')}</div>`;
- const membersCard=card('因子面板',`${tabs}<div class="history-scroll">${items.slice(0,40).map(item=>`<p><strong>${esc(item.name)}</strong> <small class="muted">${esc(item.source_instance_id)} · 面板 ${item.panel_count} 个 · ${esc((item.provenance?.experiment_key||'').slice(0,48))}</small>${item.definition?.formulation?`<br><small class="muted">${esc(String(item.definition.formulation).slice(0,90))}</small>`:''}</p>`).join('')}</div>`, '已入库的因子面板；同一数据集版本才能一起分析','factor.stats');
+ const tabs=`<div class="subtabs" role="tablist" aria-label="因子数据集">${keys.map(key=>`<button type="button" role="tab" aria-selected="${key===state.factorGroup}" class="subtab ${key===state.factorGroup?'active':''}" data-factor-group="${esc(key)}">${esc(key)} <small>${groups[key].length}</small></button>`).join('')}</div>`;
+ const membersCard=card('因子面板',`${tabs}<div class="history-scroll">${members.map(item=>`<p><strong>${esc(item.name)}</strong> <small class="muted">${esc(item.source_instance_id)} · 面板 ${item.panel_count} 个 · ${esc((item.provenance?.experiment_key||'').slice(0,48))}</small>${item.definition?.formulation?`<br><small class="muted">${esc(String(item.definition.formulation).slice(0,90))}</small>`:''}</p>`).join('')}</div>`, members[0]?.provenance?.market_data_kind==='real'?'真实社区行情 · 工作台计算的研究基线；不是模型训练或回测结果':'历史因子面板 · 请核对来源与模拟标记','factor.stats');
  if(error){
   document.getElementById('content').innerHTML=`<div class="stack">${membersCard}${card('因子分析',`<p class="warning">无法计算：${esc(error)}</p>`,'必须满足同一数据集内容版本与同一日历','factor.stats')}</div>`;
   bindFactorGroups();
   return;
  }
- const stats=card('单因子统计',`<p class="warning">探索性分析；显著性可计算不代表策略有效。换手与增量的既有估计量仍有缺陷，见下方限制。</p><div class="table-scroll"><table class="table analysis-table"><thead><tr><th>因子</th><th>Rank IC</th><th>均值标准误（NW）</th><th>t（NW）</th><th>p</th><th>FDR q</th><th>ICIR</th><th>分位差 Q5−Q1</th><th>单调性代理</th><th>换手</th><th>有效天数</th></tr></thead><tbody>${report.factors.map(factorStatsRow).join('')}</tbody></table></div><p class="panel-note">样本 ${esc(report.basis.sample.start)} → ${esc(report.basis.sample.end)}（${report.basis.sample.dates} 个交易日 × ${report.basis.sample.instruments} 个标的）；主口径 h=${report.basis.primary_horizon??'未记录'}；数据版本 ${esc(report.basis.dataset?.version||'未记录')}；请求 ${report.basis.parameters?.requested_factor_count??'未记录'} 个因子，实际 FDR 检验 ${report.basis.parameters?.tested_factor_count??'未记录'} 个。价格复权/PIT语义未认证。</p>`, '工作台计算；不是引擎原生指标', 'factor.stats');
+ const stats=card('单因子统计',`<p class="warning">探索性分析；显著性可计算不代表策略有效。换手与增量的既有估计量仍有缺陷，见下方限制。</p><div class="table-scroll"><table class="table analysis-table"><thead><tr><th>因子</th><th>Rank IC</th><th>均值标准误（NW）</th><th>t（NW）</th><th>p</th><th>FDR q</th><th>ICIR</th><th>分位差 Q5−Q1</th><th>单调性代理</th><th>换手</th><th>有效天数</th></tr></thead><tbody>${report.factors.map(factorStatsRow).join('')}</tbody></table></div><p class="panel-note">样本 ${esc(report.basis.sample.start)} → ${esc(report.basis.sample.end)}（${report.basis.sample.dates} 个交易日 × ${report.basis.sample.instruments} 个标的）；主口径 h=${report.basis.primary_horizon??'未记录'}；数据版本 ${esc(report.basis.dataset?.version||'未记录')}；请求 ${report.basis.parameters?.requested_factor_count??'未记录'} 个因子，实际 FDR 检验 ${report.basis.parameters?.tested_factor_count??'未记录'} 个。历史 PIT 未认证；具体价格口径见下方分析依据。</p>`, '工作台计算；不是引擎原生指标', 'factor.stats');
  const overlap=card('重叠性：相关、相似度与距离',factorCorrelationTable(report.overlap.value_correlation,report.overlap.absolute_correlation_similarity,report.overlap.correlation_distance)+`<p class="panel-note">共线性：最大 VIF ${report.overlap.collinearity?.max_vif===null||report.overlap.collinearity?.max_vif===undefined?'未记录':fmt(report.overlap.collinearity.max_vif,2)}${report.overlap.collinearity?.high_collinearity?' · 存在高共线因子':''}${report.overlap.collinearity?.perfect_collinearity?' · 存在完全共线因子':''}。${esc(report.overlap.collinearity?.note||'')}</p>`+`<p class="panel-note">未接入：${(report.overlap.not_available||[]).map(item=>`${esc(item.metric)}（${esc(item.reason)}）`).join('；')||'无'}</p>`, '相关结构不等于独立信息证明', 'factor.overlap');
  const increment=card('增量贡献（相对等权组合）',factorIncrementTable(report.overlap.incremental_ic,report.overlap.combined_ic),'组合口径为工作台计算', 'factor.overlap');
  document.getElementById('content').innerHTML=`<div class="stack">${membersCard}${stats}${overlap}${increment}${card('分析依据与限制',analysisDetails({basis:report.basis,factors:report.factors,overlap:report.overlap},report.limitations),'原始定义卡与输入版本')}</div>`;
@@ -905,14 +905,14 @@ function snapshotPanel(payload){
  if(!payload)return '';
  if(payload.available===false)return card('已登记数据快照',`<p class="panel-note">未配置数据目录：${esc(payload.reason||'未记录')}。结果页仍展示已有结果证据。</p>`, '数据目录未接入','page.data');
  const rows=(payload.items||[]).map(item=>`<tr><td><strong>${esc(item.snapshot_id)}</strong><small class="block muted">${esc(String(item.content_digest||'').slice(0,24))}</small></td><td>${item.calendar?esc(item.calendar.first+' → '+item.calendar.last):'<span class="muted">不可读</span>'}<small class="block muted">${item.calendar?item.calendar.days+' 天':esc(item.unreadable_reason||'')}</small></td><td>${(item.components||[]).map(c=>esc(c.kind)).join(' · ')||'未记录'}</td><td>${esc((item.reproducibility||{}).state||'未记录')}<small class="block muted">${esc((item.reproducibility||{}).reason||'')}</small></td></tr>`).join('');
- return card('已登记数据快照',`${badge('measured')}<p class="panel-note">按快照ID解析；来源、覆盖与可复现性随快照登记，不依赖当前配置。</p><div class="table-scroll"><table class="table analysis-table"><thead><tr><th>快照</th><th>日历覆盖</th><th>组件</th><th>可复现性</th></tr></thead><tbody>${rows||'<tr><td colspan="4">注册表为空</td></tr>'}</tbody></table></div>`, '数据目录（T05/A40）','page.data');
+ return card('已登记数据快照',`${badge('measured')}<p class="panel-note">按快照ID解析；目录登记不证明已接入研究。已入库的真实面板见“因子”页；真实训练与组合回测尚未接入。</p><div class="table-scroll"><table class="table analysis-table"><thead><tr><th>快照</th><th>日历覆盖</th><th>组件</th><th>可复现性</th></tr></thead><tbody>${rows||'<tr><td colspan="4">注册表为空</td></tr>'}</tbody></table></div>`, '数据目录（T05/A40）','page.data');
 }
 async function renderDataEvidence(){
- const selected=await selectedRevision();
- if(!selected){document.getElementById('content').innerHTML=empty('选择研究以查看其数据与执行证据');return;}
- const {summary,detail}=selected, e=detail.evidence, scenario=e.cn_scenario;
  const snapshots=await api('/v1/data-snapshots').catch(()=>({available:false,reason:'interface_unavailable'}));
- document.getElementById('content').innerHTML=`<div class="stack">${snapshotPanel(snapshots)}${card('当前研究的数据证据',`${badge('limited')}<h3>${esc(summary.run.title)}</h3><p>${sample(summary.run)}</p><dl class="context-grid"><dt>数据集</dt><dd>${esc(summary.run.dataset.id)}</dd><dt>内容版本</dt><dd>${esc(summary.run.dataset.version||'未记录')}</dd><dt>日历</dt><dd>${esc(scenario?.calendar_id||'未记录')}</dd><dt>执行情景指纹</dt><dd>${esc(scenario?.fingerprint||'未记录')}</dd><dt>研究模式</dt><dd>${esc(scenario?.mode||'未记录')}</dd></dl><p class="panel-note">情景指纹描述配置，不能代替行情内容版本。此页展示已有结果证据，供应商数据目录和真实PIT校验尚未接入。</p>`)}${reviewPanel(await api(`/v1/runs/${summary.run_id}/review`),e)}</div>`;
+ const selected=await selectedRevision();
+ if(!selected){document.getElementById('content').innerHTML=snapshotPanel(snapshots);return;}
+ const {summary,detail}=selected, e=detail.evidence, scenario=e.cn_scenario;
+ document.getElementById('content').innerHTML=`<div class="stack">${snapshotPanel(snapshots)}${card('历史运行的数据证据（保留原来源）',`${badge('limited')}<h3>${esc(summary.run.title)}</h3><p>${sample(summary.run)}</p><dl class="context-grid"><dt>数据集</dt><dd>${esc(summary.run.dataset.id)}</dd><dt>内容版本</dt><dd>${esc(summary.run.dataset.version||'未记录')}</dd><dt>日历</dt><dd>${esc(scenario?.calendar_id||'未记录')}</dd><dt>执行情景指纹</dt><dd>${esc(scenario?.fingerprint||'未记录')}</dd><dt>研究模式</dt><dd>${esc(scenario?.mode||'未记录')}</dd></dl><p class="panel-note">情景指纹描述配置，不能代替行情内容版本。切换研究数据不会改变历史运行来源。真实快照已接入因子分析；真实训练、组合回测与历史 PIT 校验尚未接入。</p>`)}${reviewPanel(await api(`/v1/runs/${summary.run_id}/review`),e)}</div>`;
 }
 function renderUnavailable(view){
   const info={live:['实时数据尚未接入','目前没有行情流会话或延迟记录。上线前需要数据供应商、交易日历、重连与缺口策略。'],data:['数据目录尚未接入','当前运行可查看结果来源，数据快照与质量报告将在数据层实施后出现。'],system:['系统遥测尚未接入','API和任务错误率没有采集样本，当前不显示0%。健康接口仅反映本地结果库可用性。']}[view];
@@ -944,7 +944,7 @@ async function init(){
   document.getElementById('run-search').oninput=event=>{state.search=event.target.value.toLocaleLowerCase().trim();renderRuns();};
   bindPalette();
   refreshAttention();
-  window.addEventListener('hashchange',()=>{const view=location.hash.slice(1)||'overview';if(view!==state.view)setView(view);});
+  window.addEventListener('hashchange',()=>{const view=location.hash.slice(1)||'factors';if(view!==state.view)setView(view);});
   try{
     const [runs,health]=await Promise.all([api('/v1/runs?limit=30'),api('/v1/health')]);
     state.runs=runs.items;await refreshRuns();
