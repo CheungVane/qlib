@@ -89,3 +89,7 @@ extensions/workbench/.venv/bin/python docs/spec/evidence/20260928-verify-process
 如本批来源发生修订，先登记新输入范围/解释版本，再使用新的snapshot_id处理；此CLI仅处理既有固定来源，不是通用自动更新器。没有采集完成凭据的旧缓存不能用fetch脚本“跳过即成功”；新采集另用版本目录，保持既有顺序/限速规则。该缓存保护已离线测试，本批没有联网验证供应商恢复。
 
 本批验收、缺口数量、研究复算及仍未支持能力见[IMPLEMENTATION顶部](IMPLEMENTATION.md)和[处理证据](evidence/20260928-data-processing.json)。数据固定与语义正确不等于供应商历史真值、PIT或可执行交易认证。工作台通用因子UI仍使用原CN配置；本批未自动替换演示数据或伪称真实训练/回测已接入。
+
+## 后续一键流水线的兼容边界（U29，仅设计）
+
+[DATA_PIPELINE](DATA_PIPELINE.md)定义后续在线/离线统一编排与CDF1/schema3目标。本文件的“本批不重新联网”仅约束2026-09-28处理批次，不禁止后续按明确来源政策执行用户发起的采集。本文件schema2、百分数turn_percent、FINV具体换算及现有年度CSV合同保持不变；新流水线的turnover_ratio通过显式换算生成新身份，不原地改列。发布校验/实际消费字节/缺失保护原则继续适用，新schema必须通过传递清单和历史兼容验收。

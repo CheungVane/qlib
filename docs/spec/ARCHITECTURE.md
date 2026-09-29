@@ -173,3 +173,59 @@ UI优先选择真实数据组并明确来源/区间/基线性质；数据页不�
 导入输出含panels[].factor_id/panel_id/content_hash/created/panel_created；重复运行须三个panel_created=false。查询`GET /v1/factors`取得真实组ID，随后`GET /v1/factor-analysis?factor_id=<ID1>&factor_id=<ID2>&factor_id=<ID3>&horizon=1&horizon=5&horizon=10&analysis_version=2`。成功响应schema_version=2，basis.sample为401×643，basis.dataset.version等于登记摘要；basis.snapshot.verification_scope=`consumed file bytes`。files=19824是登记文件总数，不表示每次分析消费了全部文件。失败例：登记版本或日历与面板不符返回409、code=`snapshot_content_mismatch`，details包含snapshot_id和component=`dataset/calendar identity`；未登记返回404、code=`snapshot_not_found`，不输出本机路径。
 
 时序：写命令先构造已验证读取器→计算/遮罩三面板→逐面板仓储事务幂等发布（非三面板全局事务，中断后重跑补齐）；只读分析先检查面板版本一致→解析登记身份/日历→对齐完整日期轴→核验实际消费字节并计算标签→同一成员/状态掩码处理因子→v2统计→携带依据与限制返回。每次请求重新解析登记，单请求可复用已验证不可变bytes。基线定义固定：动量仅要求两端价格，波动率要求21日价格完整，换手均值要求20日值完整；三者均按因子当日历史成分与已知状态过滤，不要求预测期末仍为成分股。未知源历史可用时点仍标unknown。
+
+## 9. 一键数据与人参与研究的扩展框架（U29/U30，设计未实现）
+
+本节新增目标边界，不能视为已存在的文件/Protocol或已支持能力。继续模块化单体、固定流程和共用Run/Attempt，不新增独立任务引擎或通用DAG。业务唯一合同为[DATA_PIPELINE](DATA_PIPELINE.md) ING01—08及[HUMAN_RESEARCH](HUMAN_RESEARCH.md) HR01—10。
+
+| 目标模块 | 定位、输入与输出 | 禁止跨界 |
+| --- | --- | --- |
+| domain/data_pipeline.py | 纯规则：计划/状态投影、CDF字段与缺失分类、合并/质量政策判定 | 不联网、不操作目录、不识别具体SDK |
+| services/data_pipeline.py | 数据方案/计划用例，编排固定7步，发布回执与默认指针管理 | 不直接读供应商文件、不按UI选项绕过门禁 |
+| ports/data_acquisition.py | SourceAdapter、Normalizer、Quality、Publisher的中立协议 | 不泄漏Qlib/DataFrame/供应商会话对象 |
+| adapters/data_sources/<source>.py | 来源能力/限流/原料采集和源格式映射；每源独立模块 | 不负责跨源选择、计算研究指标、直接写业务状态 |
+| adapters/data_normalization.py / data_quality.py | 执行版本化CDF映射/检查，生成摘要和分块产物，复用领域判定 | 不改旧快照；异常不静默删除 |
+| domain/research_inputs.py / factor_expression.py | 三类输入/评议/交接规则、受限公式AST/单位/时间推导 | 不调用LLM、无动态代码执行 |
+| services/research_workflows.py | 主题/定义/人工决定、固定交接链、幂等自动推进、账本 | 不包含供应商提示词、模型客户端或统计公式 |
+| ports/research_agent.py / factor_compute.py | 中立Agent任务和确定性公式执行/评价接口 | 不把LLM文本当指标，不混同评议和计算 |
+| adapters/research_agents/<agent>.py | TaskEnvelope到具体Agent协议转换、脱敏/输出解析与能力声明 | 不越过执行服务启动无预算进程，不改上游源码 |
+| adapters/factor_expression_engine.py | 受限DSL编译/隔离计算、产物验证；引擎实现可替换 | 不准任意Python/eval和临时安装依赖 |
+| services/factors.py | 复用已验统计版本并按协议组织评价、参考集和来源依据 | 不因入口为Agent就改口径或接受它自报数字 |
+| adapters/storage/storage_data_pipeline.py / storage_research_workflows.py | 各自仓储端口的事务、版本/边唯一约束、回执和恢复 | 不复制另一份结果/Attempt状态机 |
+| ui/pages/data_pipeline.js / research_inputs.js | 专业输入、进度、问题/结果与下一步；共用状态/transport | 不解析原料、不在浏览器计算统计或决定可信等级 |
+
+### 9.1 目标端口与数据传递
+
+下面是方法语义合同，DTO不得含活连接/引擎对象；大数据传不可变ArtifactRef（id/schema/digest/受控访问引用），API不返回本机绝对路径。签名与字段在实现时同步契约，不另改语义：
+
+| 端口方法 | 返回与约束 |
+| --- | --- |
+| SourceAdapter.capabilities() → SourceCapabilities | 支持组件/字段/频率/范围、版本锁/分页/限流/历史时点能力；已验证状态与版本 |
+| SourceAdapter.plan(SourceRequest) → SourceFetchPlan | 分块与冻结源身份、未知估计、预检；无下载 |
+| SourceAdapter.fetch(plan, checkpoint_ref, execution_context) → RawBatchManifestRef | 仅外部worker执行；受取消/限流/预算控制；checkpoint必须有完整性证据 |
+| Normalizer.normalize(raw_ref, mapping_revision) → NormalizedBatchManifestRef | 统一语义、缺失原因与来源引用；不跨源裁决 |
+| Reconciler.merge(batch_refs, merge_policy_revision) → CandidateSnapshotRef | 分区有界处理，选定值与全部冲突/来源清单 |
+| QualityEvaluator.evaluate(candidate_ref, quality_policy_revision) → QualityReportRef | 硬错误/受限用途/未知分开，报告失败可保存 |
+| SnapshotPublisher.publish(candidate_ref, report_ref) → PublicationReceipt | 服务端重验门禁与传递摘要，原子不覆盖发布/幂等复用；原始URI不是许可 |
+| ResearchAgent.review(TaskEnvelope, execution_context) → AgentArtifactBundle | 返回有schema版本的Review/Proposal，不直接写数据库 |
+| FormulaCompiler.validate(formula_revision, field_contract, operator_revision) → CompileReport | 类型/单位/时间/预算检查、规范AST或明确diagnostics；无隐式改写 |
+| FactorComputer.compute(definition_ref, snapshot_ref, protocol_ref, execution_context) → FactorPanelManifestRef | 受控worker，冻结计算身份；不把标签传成特征 |
+| FactorEvaluator.evaluate(panel_refs, protocol_ref, reference_set_ref) → EvaluationReportRef | 复用统一统计，实现与声明版本一致，未知/未支持项保持不可用 |
+
+服务通过共用ExecutionService创建/取消/监督Attempt，执行器注册固定workflow_kind；worker调用适配器并提交经验证的产物引用。bootstrap唯一组装注册表，新增来源或Agent由显式配置和能力注册完成，不通过名称反射导入任意类。上述方法不表示全部在HTTP请求线程顺序同步运行。
+
+### 9.2 Run身份、事务与跨阶段时序
+
+扩展LIFE01的唯一例外：Run.workflow_kind=data_prepare时definition_ref指向DataPipelineDefinitionRevision+DataPreparationPlan，experiment_id=null；研究direction_review/hypothesis_review/formula_evaluate仍指向ExperimentDefinitionRevision且属于Experiment；文字任务的data/protocol可空规则严格按RESEARCH_LIFECYCLE §6，不套用于公式数值评价/训练。Attempt依然只属于一个Run，结果记录与来源引擎状态不变。不因数据任务没有研究Experiment而创建伪模型/伪研究结果；列表按workflow_kind筛选。
+
+研究固定计划：方向=prepare→review→publish；假设=prepare→review→propose_formula→publish；公式=prepare→review_compile→compute→evaluate→publish。不改既有train/mine/backtest计划；formula_evaluate不偷偷训练模型或回测组合。Review业务否定可成功发布；没有候选时propose_formula阶段记录skipped/业务原因，而Attempt可succeeded。数据计划见ING03。
+
+准入事务：检查幂等及确切定义/plan→占并发槽和预留预算→创建Run/Attempt/自动边记录；提交后启动worker，失败留下启动失败证据。外部网络/模型/计算不持SQLite写锁。预算账本、TrialLedger记录与产物入库分别保留身份，不能拿运行条数冒充候选数；自动子边创建与任务准入通过持久化唯一键和事务保证至多一次准入，不承诺外部LLM调用恰好一次。超时后未确认调用结果不得隐式重放；显式重试会计费并留痕。
+
+产物先写临时对象并验证摘要/schema，再事务登记引用及阶段事件；失败前临时产物不对外宣称可用。跨原料文件/注册表/SQLite不是一个数据库事务：用发布回执+幂等恢复协调，目录发布事实以原子登记为准，恢复不反向覆盖它。用户决策与自动边都绑定确切版本，乐观并发expected_revision防止覆盖草稿。
+
+### 9.3 编码前物理设计门与兼容
+
+业务语义及逻辑端口本批已冻结；数据库DDL/索引、schema3 JSON Schema、全部HTTP DTO与CLI参数映射仍须在首个实现里程碑**编码前**提交设计补充，不能凭本文概念直接拼库。必交付：按现存最高schema递增的迁移/回滚备份方案（不预占数字）、版本与边唯一约束、预算原子性、对象发布回执恢复、完整成功/错误载荷、实际源与Agent能力矩阵、政策默认限额数值及来源、隔离样例契约测试。
+
+保留旧研究快照/因子面板/Attempt与v1/v2分析路由，不自动合并主题、不补写unknown来源、不原地升级schema2数据。首批功能开关默认关闭，只有相应验收通过后在能力目录暴露ready；关闭开关仍可读已发布历史产物。本轮只修改spec，不实施任何迁移。

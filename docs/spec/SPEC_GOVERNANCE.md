@@ -24,6 +24,7 @@
 | SPEC_GOVERNANCE.md | 维护优先级、工作流程、完成门槛 | 治理变化必须记录原因及用户依据 |
 | WORKBENCH_SPEC.md | 当前需求、架构与语义合同 | 稳定要求ID；修订标明受影响要求 |
 | DATA_PROCESSING.md | 免费日频数据的物理标准、版本及处理步骤 | 与DATA_SOURCES来源/FACTOR_ANALYSIS统计语义协作，不改写历史数据证据 |
+| DATA_PIPELINE.md / HUMAN_RESEARCH.md | U29采集编排/统一格式/质量报告及U30研究输入/评议/交接 | 目标协议与实际能力分开；分别引用数据物理/生命周期/统计/执行合同，不重复维护算法 |
 | ARCHITECTURE.md | 模块定位、端口/依赖、组合根、交互时序与后续填充规则 | 不替代专题业务语义，不以结构验收提升能力状态 |
 | RESEARCH_LIFECYCLE.md / TRADING_BOUNDARY.md | 实验/模型/策略生命周期与后续交易边界 | 新要求生效与实际实现状态分开，未实现不声明支持 |
 | RESEARCH_WORKBENCH.md | 研究结果、过程、比较与决策支持合同 | 与主规范一起执行；事实快照注明日期 |
@@ -37,7 +38,7 @@
 
 ### 单一语义归属与文档交付（GOV03）
 
-- 核心规范维护产品范围、稳定ID和跨域约束；细节各有唯一权威专题：代码结构与模块交接归ARCHITECTURE，生命周期归RESEARCH_LIFECYCLE，交易归TRADING_BOUNDARY，比较身份/风险指标归RESULT_CONTRACT，验证算法与证据归VALIDATION，因子归FACTOR_ANALYSIS，进程执行归EXECUTION。其他文档引用，不重复维护另一套公式或判定表。
+- 核心规范维护产品范围、稳定ID和跨域约束；细节各有唯一权威专题：代码结构与模块交接归ARCHITECTURE，采集编排/统一观察格式/质量报告归DATA_PIPELINE，人参与研究输入/评议/交接归HUMAN_RESEARCH，生命周期归RESEARCH_LIFECYCLE，交易归TRADING_BOUNDARY，比较身份/风险指标归RESULT_CONTRACT，验证算法与证据归VALIDATION，因子归FACTOR_ANALYSIS，进程执行归EXECUTION。其他文档引用，不重复维护另一套公式或判定表。
 - 同一规则被替代时更新当前合同；旧定义进入有日期的历史说明或CHANGELOG，明确替代关系。历史审查、旧证据不重写，不能与当前条款并列生效。
 - 产品目标、交互细节、缺陷修复分别组织；保留既有要求ID与追溯关系，不通过重排删除要求。
 - 状态用语：**生效合同**是必须达到的目标，**已实现**表示存在实现但不自动代表已验收，**已验收**只覆盖注明版本/输入/环境的证据，**待设计冻结**表示不能直接照概述编码。未实现的生效合同仍有效，不得因实现不足而降级要求。

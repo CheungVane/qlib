@@ -62,3 +62,13 @@
 独立打包不等于脱离仓库运行。引擎运行时、配置与资源路径应由显式部署配置注入；支持的部署方式必须有启动与恢复证据。当前执行器依赖仓库 `scripts/`、约定 `.venv` 与本地配置，迁移尚未实施。
 
 验收统一登记为 IMPLEMENTATION 的 A35—A37、A39-F、A40—A42；旧对象不自动补造关联、升级模型或策略版本，本次无数据库迁移。
+
+## 6. U29/U30数据准备与人参与研究扩展（2026-09-29，仅设计）
+
+新增生效合同[DATA_PIPELINE](DATA_PIPELINE.md)与[HUMAN_RESEARCH](HUMAN_RESEARCH.md)。方向/假设/公式是Experiment内三个独立入口，使用版本化输入、评议、提案、公式与评价报告；上游交接为新草稿引用，不修改旧产物。固定链中每个入口是独立Run/Attempt；等待人工是工作流投影，不能挂起进程等待回答，仍不支持单Stage断点续跑。
+
+LIFE01扩展：数据准备Run的definition_ref允许DataPipelineDefinitionRevision+冻结plan，workflow_kind=data_prepare且experiment_id=null；其他研究Run仍引用ExperimentDefinitionRevision并属于Experiment。Attempt只属于一个Run的规则不变。共享存储/准入规则见ARCHITECTURE §9；这不把数据任务变成研究回测结果。
+
+TrialLedger的候选身份与Attempt计费单位分开；全部方向/假设/公式分支、失败与保留集访问遵循HR07。自动推进仅到报告，策略采用/前瞻/交易仍受LIFE04及TRADING_BOUNDARY约束。新增业务规则已冻结，物理schema/完整DTO/迁移必须通过ARCHITECTURE §9.3设计门，当前对象草案未包含这些能力。
+
+文字评议的ExperimentDefinitionRevision使用明确的任务类型：direction_review/hypothesis_review允许snapshot_ref与evaluation_protocol_ref为null且标not_required_for_text_review，模型/组合/执行情景字段标not_applicable；不是可用于训练的残缺定义。formula_evaluate开始数值阶段前必须绑定快照、标签及评价协议。数据/协议从null变成已选版本时产生新定义和Run，不能运行中补入。字段可空的范围仅此处明示的文字任务，不放宽训练/回测原合同。

@@ -48,3 +48,7 @@
 - **宿主直跑（仅调试适配层）**：`scripts/prepare_rdagent_demo_data.py` → 从 RD-Agent checkout 用其 `.venv/bin/python` 执行 `../qlib/scripts/run_rdagent_factor_smoke.py --mode baseline|loop`。这条路径**不受**平台资源上限与调用预算约束，不能用作 A41 证据。
 
 工作台启动命令、RD-Agent 安装与会话目录彼此分离；外部 agent 失败不能改写 Qlib 原生运行状态。
+
+## U30能力适配目标（2026-09-29，仅设计）
+
+新增ResearchAgentPort及direction_review/hypothesis_review/formula_review/formula_proposal能力声明，见[HUMAN_RESEARCH](HUMAN_RESEARCH.md) HR05与[ARCHITECTURE](ARCHITECTURE.md) §9。现有baseline/loop探针不能证明这些能力已支持；适配器须逐项验证结构化输入/输出、预算与真实产物。RD-Agent不支持某项时明确not_supported，可由用户选择另一个已配置研究Agent，不自动改供应商。纯文字任务按自身能力要求预检，不统一强制Qlib/embedding；一旦需要计算则必须校验对应运行时/数据。既有AGENT04对旧Qlib因子执行入口的前置条件不削弱；新增文字能力的专属前置以本段和HR05为准。

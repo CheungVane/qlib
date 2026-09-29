@@ -153,3 +153,15 @@
 ### 2026-09-29真实数据入口补充
 
 真实面板的不可变身份与解析时序见ARCHITECTURE §8。历史池、全窗口状态/价格及保守单价日规则与离线DATA_PROCESSING统一；读取内容漂移拒绝。当前真实UI仅导入三个确定性基线因子，声明20日热身后401日×643只，不宣称完成自动挖掘。默认显示该真实组，旧模拟组可显式选择；不能混组分析。快照价格已复权，不再乘factor。完整日期轴末h日未成熟剔除，中间缺IC无显著性。此UI的FDR族为当前选中因子及主h，不与离线12假设族混为同一筛选结果。
+
+## 人参与研究的正交评价补充（HR07，生效目标，待实现）
+
+[HUMAN_RESEARCH](HUMAN_RESEARCH.md)要求自动评价公式，但不能把现有混合相关方法的正交增量当作纠正后结果。冻结新定义`factor_orthogonal_v1`，由未来analysis_version=3响应承载；现有v1/v2结果不重写，新研究入口在此定义未实现时返回unavailable/estimator_not_validated，不能标已支持正交。此补充不改变已有NW/缺IC/FDR算法。
+
+每个日期t、每个h、目标因子F和冻结参考集B，在历史成员/当前因子状态与完整窗口标签掩码后，取F、所有B及标签Y均有限的共同截面S_t；在该截面内重算所有秩。秩用平均并列秩，分别中心化并按样本标准差(ddof=1)标准化；常数列不可用。n≥max(5,k+3)，k为参考列数；不足返回insufficient_cross_section。无参考集返回reference_set_missing，不能用0作正交结果。
+
+构造Z=[1,rank(B1),…,rank(Bk)]，用确定性最小二乘分别残差化rank(F)与rank(Y)，返回二者**Pearson相关**作为partial_rank_ic。该名称不冒充传统原始IC。使用float64/SVD，秩判定阈值=max(n,k+1)×机器epsilon×最大奇异值，秩亏返回reference_rank_deficient，不暗中删列；残差范数≤1e-12×max(原向量范数,1)返回zero_residual_variance。报告输入参考版本、样本、阈值、系数与状态。残差化Y只为事后相关诊断，禁止把Y或其系数传给可交易因子/预测管线；真正生成正交因子只允许F对当时可用B的变换，另建有时间语义的因子定义。
+
+等权增量诊断使用同一S_t和同一标准化秩输入：full=Pearson(mean(rank(F),rank(B)),rank(Y))；without=Pearson(mean(rank(B)),rank(Y))；delta=full-without。预期方向符号若使用必须事前冻结，对full/without一致应用；不按结果翻符号。full/without各自退化则delta不可用，不在两个不同样本集上相减。跨日期均值/NW完整轴规则沿用§4.1，明确描述性共同样本覆盖；不能用正交相关证明经济独立、因果关系或成本后收益。
+
+独立验收oracle：n=6，B=[1,2,3,4,5,6]，F=[2,4,1,6,3,5]，Y=F时partial_rank_ic=1，Y=-F时为-1（1e-10容差）；F=B时zero_residual_variance；B重复两列时reference_rank_deficient；无参考集不可用；给其中一列插null后按共同S_t重算，与独立手算/最小二乘实现一致。新增未来价格不得改变此前生成的因子值，但可改变对应尚未成熟标签；验证分割/拟合范围继续服从VALIDATION。
