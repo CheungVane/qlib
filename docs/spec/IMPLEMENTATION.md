@@ -2,6 +2,8 @@
 
 ## 当前执行里程碑（2026-09-30）
 
+**G1-2c交付（基线`843e0fe8`，分支`codex/g1-foundation`）**：补齐`review/hypothesis_proposal/formula_proposal/factor_definition`（含Citation/Usage/Variable/递归AST）闭合校验；`Schema7Store`新增`record_workflow_edge`（`(parent,child_kind,workflow_revision)`身份+`UNIQUE(child_run_id)`）与`record_trial_event`（`event_id`身份）。相同内容重放、异内容`idempotency_conflict`，独立连接重复边只落一行。4项专项通过；完整门禁退出0：Python 363项（7跳过、0失败）、JS 28项通过；证据见[G1-2c证据](evidence/20260930-g1-2c-ledger.json)。自动评价/发布、旧submit/import保护、`prepared_input/model/prediction/strategy`等payload仍未接入。
+
 **G1-2b交付（基线`5b0eafd8`，分支`codex/g1-foundation`）**：`Schema7Store`新增`save_revision`（幂等、payload闭合校验、规范摘要与对象写入、新实体+首个artifact同事务、`entities.head_artifact_id`头CAS、`commands`回执）与`set_default_snapshot`（`pointers.row_version` CAS）。补齐`research_input/research_workflow/human_decision/dataset_snapshot`（含FilePart/UseVerdict）校验器及`RevisionConflict/VersionConflict`错误；实体/artifact互引通过事务内`defer_foreign_keys`保证可原子提交且不UPDATE不可变artifact。6项专项覆盖新实体保存与重放、同键异载荷冲突、陈旧CAS不写、非法payload、默认快照指针CAS。完整门禁退出0：Python 359项（7跳过、0失败）、JS 28项通过；证据见[G1-2b证据](evidence/20260930-g1-2b-save-pointer.json)。未接入生产；旧submit/import共享保护、review/proposal/factor_definition等剩余payload、workflow自动边/trial事件仍归G1-2c—G1-4。
 
 **G1-2a交付（基线`b58e92f8`，分支`codex/g1-foundation`）**：新增`adapters/storage/schema7.py`，在schema7夹具上实现不可变artifact登记、Experiment实体、replay→preflight→单事务准入（Run/Attempt/Stages/`concurrency:global`租约/admitted事件/commands回执）、`UsageBudgetPort.reserve_usage`多维度原子扣量、retry复用Run并递增attempt_no；补齐`execution_policy/data_plan/data_definition/research_definition`校验器与相应domain错误。12项专项覆盖：同键异载荷冲突、独立连接争最后并发槽、独立连接争最后预算单位、逐写入点故障完整回滚、计划过期/Ref错配拒绝、`ExecutionService.admit_managed`接真实store。完整门禁退出0：Python 353项（7跳过、0失败）、JS 28项通过；证据见[G1-2a证据](evidence/20260930-g1-2a-admission.json)。**未接入生产**：`supported_schema`仍为6，组合根不注入schema7；save_revision头CAS/set_pointer、剩余命令payload、旧Attempt共享保护、workflow边/trial事件、发布与监督分别归G1-2b、G1-3、G1-4、G1-5。
@@ -36,7 +38,7 @@
 
 ### 当前TODO：执行队列与任务完成门
 
-核对基线：`5b0eafd8`（2026-09-30）。**G1-0/G1-1/G1-2a/G1-2b已交付；下一片为G1-2c**。G编号是集成顺序，下面的G1子编号是交付切片；T编号是长期工作包，A编号是验收要求，SR编号是缺陷。它们描述同一工作，不是四份独立待办。下方T表维护范围映射，不再按T编号从头施工；已完成T01/T03及SR06限定复算不重复执行。
+核对基线：`843e0fe8`（2026-09-30）。**G1-0/G1-1/G1-2a/G1-2b/G1-2c已交付；下一片为G1-2d**。G编号是集成顺序，下面的G1子编号是交付切片；T编号是长期工作包，A编号是验收要求，SR编号是缺陷。它们描述同一工作，不是四份独立待办。下方T表维护范围映射，不再按T编号从头施工；已完成T01/T03及SR06限定复算不重复执行。
 
 这份队列不表示后续所有任务都已达到可直接编码状态。**可开始**指本片前置满足；**待前片**指前片证据通过后才能实施依赖部分；**待专属设计**指先补具体来源/引擎/载荷映射再编码。协议存在、目录已建或历史门禁通过都不解除前置。此处状态唯一维护，代码README只引用本节。
 
@@ -46,7 +48,8 @@
 | G1-1 契约校验与迁移实现 / **已交付（本提交，仅隔离库）；G1-2可开始** | `domain/contracts.py`共享标量/DTO/封套校验、`maintenance.py`运维门面、`adapters/storage/migrations.py`+`qwb storage`维护入口 | 空库及完整schema6夹具→7，外键/唯一键、旧ID/hash/字节不变；未知版本拒绝、故障回滚、重复维护命令行为按PHYSICAL §6；启动不新增6→7迁移。拒绝未知字段/NaN/重复JSON键/错类型/未注册payload；未发布引用由存储回调层拒绝。证据见[迁移与契约证据](evidence/20260930-g1-migration-contracts.json) | 仅隔离库与备份副本；无在线采集、用户库切换、生产managed注入；schema7仓储/命令payload仍归G1-2；对应T06/A35存储子项及A45-1 |
 | G1-2 原子准入与账本 / **部分：G1-2a已交付（本提交）** | `adapters/storage/schema7.py`实现`ManagedAdmissionPort`与`UsageBudgetPort`；`services/execution.py`经注入端口共用。G1-2a覆盖replay/单事务准入/并发槽/预算预留/retry；save_revision头CAS、set_pointer与剩余专题payload归G1-2b | G1-2a已验：重放先于只读预检；同键异载荷冲突；Run/Attempt/Stage/租约/事件/回执一次提交；两连接抢最后槽或最后额度只成功一个；逐写入点故障无半条记录；拒绝不扣。证据见[G1-2a证据](evidence/20260930-g1-2a-admission.json) | 生产注入归G1-5；不宣称引擎可运行、不启第二套状态机 |
 | G1-2b 保存端口与快照指针 / **已交付（本提交）** | `Schema7Store.save_revision`（新实体+首个artifact同事务、头CAS、幂等、commands存根）与`set_default_snapshot`（指针CAS）；补齐`research_input/research_workflow/human_decision/dataset_snapshot`校验 | SaveReceipt/RevisionConflict/VersionConflict语义；陈旧CAS不写；同键重放返回原回执；未注册payload拒绝。证据见[G1-2b证据](evidence/20260930-g1-2b-save-pointer.json) | A45-1部分；未接发布端口、监督、生产注入 |
-| G1-2c 遗留保护、自动边与剩余payload / **待G1-2b（已满足）；下一片** | 旧submit/import接入同一幂等/预算/槽保护且不改历史ID；注册`review/hypothesis_proposal/formula_proposal/factor_definition/prepared_input/model/prediction/strategy`等validator；实现workflow_edges/trial_events的至多一次准入 | 旧Attempt不绕过新保护；自动边重复/崩溃/并发不重复准入；未注册payload拒绝；不得用面板冒充策略权重 | A45-1/5部分；发布端口（G1-4）、监督（G1-3）、生产注入（G1-5）另片 |
+| G1-2c Agent评议校验与自动边 / **已交付（本提交）** | `review/hypothesis_proposal/formula_proposal/factor_definition`校验；`record_workflow_edge`/`record_trial_event`以主键/唯一键保证至多一次 | 同内容replay、异内容冲突；独立连接重复边只落一行；引用必须已发布。证据见[G1-2c证据](evidence/20260930-g1-2c-ledger.json) | A45-1/5部分；自动评价/发布、监督、生产注入另片 |
+| G1-2d 遗留保护与数据/模型payload / **待G1-2c（已满足）；下一片** | 旧submit/import接入同一幂等/预算/槽保护且不改历史ID；注册`prepared_input/model/prediction/strategy`等validator | 旧Attempt不绕过新保护；未注册payload拒绝；不得用面板冒充策略权重；引擎专属参数仍须G3/G4设计门 | A45-1/5部分；发布（G1-4）、监督（G1-3）、生产注入（G1-5）另片 |
 | G1-3 独立监督与旧路径保护 / **待G1-2** | `services/execution.py`监督用例、`adapters/executors.py`身份/停止核验、`bootstrap.py`及部署启动入口；持久化转移与lease共用G1-2仓储 | 无API读取且CLI退出仍按冻结deadline终止；监督启动失败不启动引擎；死包装进程/活容器、失联/清理失败保持占槽；重启核对launch_token不重启同一实例；取消/迟到退出/政策切换覆盖EXEC13-A八组反例，含实际隔离进程及所支持容器路线 | 修SR01/02；旧Qlib/RD-Agent入口同样复验，不能只保护新managed。自动研究链业务仍未交付 |
 | G1-4 产物发布与输入解析 / **待G1-2；可与G1-3分开开发，联合验收依赖G1-3** | `ArtifactPublicationPort`及预检/输入解析端口；实现落存储/数据适配器，领域计算不写业务表 | 暂存对象核验字节/schema/父引用/生产者后才能发布；失败质量报告可保存但不能发布可消费快照；发布前后崩溃/取消竞争按回执恢复，索引可重建；schema2历史不改、managed/imported绑定冲突拒绝 | A43-5/A45-1/2/5子项；快照发布采用离线夹具，不冒充真实在线源验收 |
 | G1-5 底座联合交付 / **待G1-3及G1-4** | 组合根成对注入预检/事务适配器；CLI/API共用服务与错误映射；新能力仍逐项登记 | 完整门禁及G1跨模块故障矩阵；临时部署启动/恢复、旧路由/导入/历史结果兼容；提供显式维护命令、备份恢复说明与验收证据。准备切换用户库时另按PHYSICAL §6核对真实环境前置 | 只交付底座，未验来源/Agent/训练仍为unavailable；不关闭A43/A44/A45父项，不把底座完成当作一键流水线完成 |
@@ -60,6 +63,8 @@ G1-1交付边界：`domain/contracts.py`实现严格JSON、标量、Ref/Snapshot
 G1-2a交付边界：`adapters/storage/schema7.py`是schema7夹具/候选适配器，不是生产组合根成员。它保存不可变artifact与Experiment实体，`admit_run`在一个`BEGIN IMMEDIATE`中完成幂等、已发布Ref/类型、plan有效期、workflow启用、Experiment存在、`concurrency:global`槽、Run/Attempt/Stages/租约/事件/回执；`reserve_usage`要求scope已由冻结policy预置，拒绝时不改变任何用量。旧`submit`/导入路径、`save_revision`头CAS、`set_pointer`、workflow自动边、trial_events、发布端口和监督都未接入；不得把本切片说成执行底座完成或功能可用。
 
 G1-2b交付边界：`save_revision`只服务已注册的版本化artifact类型（research_input/research_definition/data_definition/research_workflow）；实验本身仍由`save_experiment`创建，policy/rule等部署型artifact不开放通用Save。新实体与其首个artifact在`defer_foreign_keys`事务内一次提交，避免对不可变`artifacts`做UPDATE；更新必须带`expected_revision`并匹配当前head的ID与摘要。`set_default_snapshot`只写`default_research_snapshot`指针并要求目标已发布snapshot。旧Attempt保护、review/proposal/factor_definition等payload、workflow自动边与trial账本仍未接入。
+
+G1-2c交付边界：`record_workflow_edge`/`record_trial_event`只保证自动边与候选事件的持久化至多一次；它们不运行Agent、不评价因子、不发布结果，也不代替`workflow_instances`的启用状态检查。自动推进仍必须等G1-3监督与G1-4发布端口，且不得由GET触发。旧`submit`/导入路径尚未接入同一保护，不得据此宣称执行底座已完成。
 
 #### G1-0的具体交付清单
 

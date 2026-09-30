@@ -293,6 +293,83 @@ class Schema7Store:
             return {"name": DEFAULT_SNAPSHOT_POINTER, "snapshot_ref": parsed,
                     "row_version": new_version, "replayed": False}
 
+    def record_workflow_edge(self, *, workflow_id: str, workflow_revision_ref: ArtifactRef,
+                             parent_ref: ArtifactRef, child_kind: str, child_run_id: str) -> dict[str, Any]:
+        """At-most-once automatic edge; a duplicate identical edge is a replay."""
+        if not isinstance(child_kind, str) or not child_kind:
+            raise ValueError("child_kind must be a non-empty string")
+        with self._transaction() as conn:
+            instance = conn.execute("SELECT workflow_revision_id,enabled FROM workflow_instances "
+                                    "WHERE workflow_id=?", (workflow_id,)).fetchone()
+            if (instance is None or instance["enabled"] != 1
+                    or instance["workflow_revision_id"] != workflow_revision_ref.artifact_id):
+                raise PreconditionFailed(
+                    [{"code": "workflow_not_enabled", "status": "fail", "message": workflow_id,
+                      "field_path": None, "blocking": True}],
+                    ["the workflow is disabled, missing or bound to another revision"])
+            self.resolve_ref(workflow_revision_ref, conn)
+            self.resolve_ref(parent_ref, conn)
+            if conn.execute("SELECT 1 FROM runs WHERE run_id=?", (child_run_id,)).fetchone() is None:
+                raise ReferenceMismatch(child_run_id)
+            identity = (parent_ref.artifact_id, child_kind, workflow_revision_ref.artifact_id)
+            existing = conn.execute(
+                "SELECT child_run_id FROM workflow_edges WHERE parent_artifact_id=? AND child_kind=? "
+                "AND workflow_revision_id=?", identity).fetchone()
+            if existing is not None:
+                if existing["child_run_id"] != child_run_id:
+                    raise IdempotencyConflict(f"edge:{identity}", "record_workflow_edge")
+                return {"workflow_id": workflow_id, "child_run_id": child_run_id,
+                        "created": False, "replayed": True}
+            try:
+                conn.execute(
+                    "INSERT INTO workflow_edges(workflow_id,workflow_revision_id,parent_artifact_id,"
+                    "child_kind,child_run_id,created_at) VALUES(?,?,?,?,?,?)",
+                    (workflow_id, workflow_revision_ref.artifact_id, parent_ref.artifact_id,
+                     child_kind, child_run_id, utc_now()))
+            except sqlite3.IntegrityError:
+                raced = conn.execute(
+                    "SELECT child_run_id FROM workflow_edges WHERE child_run_id=?",
+                    (child_run_id,)).fetchone()
+                if raced is not None:
+                    return {"workflow_id": workflow_id, "child_run_id": child_run_id,
+                            "created": False, "replayed": True}
+                raise
+            return {"workflow_id": workflow_id, "child_run_id": child_run_id,
+                    "created": True, "replayed": False}
+
+    def record_trial_event(self, *, event_id: str, experiment_id: str,
+                           candidate_ref: ArtifactRef, event_kind: str,
+                           details: Mapping[str, Any] | None = None, workflow_id: str | None = None,
+                           run_id: str | None = None, attempt_id: str | None = None) -> dict[str, Any]:
+        """At-most-once candidate/trial event; same event_id must be identical to replay."""
+        if not isinstance(event_kind, str) or not event_kind:
+            raise ValueError("event_kind must be a non-empty string")
+        payload = dict(details or {})
+        encoded = canonical_json(payload)
+        with self._transaction() as conn:
+            existing = conn.execute("SELECT * FROM trial_events WHERE event_id=?",
+                                    (event_id,)).fetchone()
+            if existing is not None:
+                same = (existing["experiment_id"] == experiment_id
+                        and existing["candidate_id"] == candidate_ref.artifact_id
+                        and existing["event_kind"] == event_kind
+                        and existing["details_json"] == encoded
+                        and existing["workflow_id"] == workflow_id
+                        and existing["run_id"] == run_id
+                        and existing["attempt_id"] == attempt_id)
+                if not same:
+                    raise IdempotencyConflict(event_id, "record_trial_event")
+                return {"event_id": event_id, "created": False, "replayed": True}
+            self.resolve_ref(candidate_ref, conn)
+            if conn.execute("SELECT 1 FROM entities WHERE entity_id=?", (experiment_id,)).fetchone() is None:
+                raise ReferenceMismatch(experiment_id)
+            conn.execute(
+                "INSERT INTO trial_events(event_id,experiment_id,workflow_id,candidate_id,run_id,"
+                "attempt_id,event_kind,details_json,occurred_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                (event_id, experiment_id, workflow_id, candidate_ref.artifact_id, run_id, attempt_id,
+                 event_kind, encoded, utc_now()))
+            return {"event_id": event_id, "created": True, "replayed": False}
+
     # -- reference resolution --------------------------------------------
     def resolve_ref(self, ref: ArtifactRef, conn: sqlite3.Connection | None = None) -> sqlite3.Row:
         close = conn is None

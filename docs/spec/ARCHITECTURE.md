@@ -329,6 +329,8 @@ UI优先选择真实数据组并明确来源/区间/基线性质；数据页不�
 
 **G1-2a scope约定（2026-09-30冻结）**：并发槽唯一作用域`concurrency:global`；预算作用域为`global:<policy_artifact_id>`、`workflow:<workflow_id>`、`source:<source_id>`。limit必须先由已登记policy/budget artifact预置（`set_budget_scope`），`reserve_usage`不创建scope、不猜上限；同event_key同增量重放，异增量返回`idempotency_conflict`，任一维度不足则全部回滚。核心实现落`adapters/storage/schema7.py`；生产组合根注入仍归G1-5。
 
+**G1-2c自动边约定（2026-09-30）**：`workflow_edges`以`(parent_artifact_id,child_kind,workflow_revision_id)`为身份并`UNIQUE(child_run_id)`；相同边重复为replay，指向不同child为冲突。`trial_events`以`event_id`为身份，同内容replay、异内容`idempotency_conflict`。两者都要求引用已发布且Experiment/workflow存在，跨连接由主键/唯一键保证至多一次；这不等于自动评价或结果发布已完成。
+
 校验按层归属，下层不信任上层结论：
 
 1. **传输层**（`api.py`/`cli.py`）：严格JSON解析（拒绝重复键、NaN/Infinity、非对象根、未知字段、超限）并构造`schema_version:1`闭合DTO；不做业务授权，不返回堆栈/路径/密钥。

@@ -716,6 +716,107 @@ DATASET_SNAPSHOT = parse_object({
 })
 
 
+CITATION = parse_object({
+    "title": lambda value, path: parse_str(value, path, min_len=1, max_len=512),
+    "url": lambda value, path: parse_str(value, path, min_len=1, max_len=2048),
+    "accessed_at": nullable(parse_time),
+    "evidence_kind": parse_enum("retrieved", "user_supplied", "unverified"),
+})
+
+USAGE = parse_object({
+    "calls": lambda value, path: parse_int(value, path, minimum=0),
+    "tokens_in": nullable(lambda value, path: parse_int(value, path, minimum=0)),
+    "tokens_out": nullable(lambda value, path: parse_int(value, path, minimum=0)),
+    "cost_decimal": nullable(parse_decimal_string),
+    "currency": nullable(lambda value, path: parse_str(value, path, min_len=1, max_len=16)),
+    "measurement": parse_enum("exact", "partial", "unknown"),
+})
+
+VARIABLE = parse_object({
+    "name": lambda value, path: parse_str(value, path, min_len=1, max_len=128),
+    "meaning": lambda value, path: parse_str(value, path, min_len=1, max_len=4096),
+    "unit": lambda value, path: parse_str(value, path, min_len=1, max_len=64),
+    "field_name": nullable(lambda value, path: parse_str(value, path, min_len=1, max_len=128)),
+})
+
+REVIEW = parse_object({
+    "input_ref": parse_ref,
+    "review_kind": parse_enum("direction", "hypothesis", "formula"),
+    "decision": parse_enum("ready_to_test", "needs_clarification", "not_supported", "rejected"),
+    "intent_summary": lambda value, path: parse_str(value, path, max_len=32768),
+    "mechanism_type": parse_enum("causal", "risk_premium", "behavioral", "statistical"),
+    "target": lambda value, path: parse_str(value, path, max_len=512),
+    "expected_sign": parse_enum("positive", "negative", "unspecified"),
+    "horizons": parse_array(lambda value, path: parse_int(value, path, minimum=1), max_len=64),
+    "mechanism_steps": STRINGS,
+    "alternatives": STRINGS,
+    "falsification": STRINGS,
+    "data_requirements": STRINGS,
+    "known": STRINGS,
+    "unknown": STRINGS,
+    "citations": parse_array(CITATION, max_len=256),
+    "candidate_refs": REFS,
+    "agent_binding": AGENT_BINDING,
+    "usage": USAGE,
+    "question": nullable(lambda value, path: parse_str(value, path, max_len=32768)),
+})
+
+HYPOTHESIS_PROPOSAL = parse_object({
+    "statement": lambda value, path: parse_str(value, path, min_len=1, max_len=32768),
+    "expected_sign": parse_enum("positive", "negative", "unspecified"),
+    "horizons": parse_array(lambda value, path: parse_int(value, path, minimum=1), max_len=64),
+    "variables": parse_array(VARIABLE, max_len=256),
+    "mechanism": lambda value, path: parse_str(value, path, max_len=32768),
+    "falsification": STRINGS,
+    "pending_questions": STRINGS,
+    "input_ref": parse_ref,
+})
+
+FORMULA_PROPOSAL = parse_object({
+    "hypothesis_ref": nullable(parse_ref),
+    "expression": lambda value, path: parse_str(value, path, min_len=1, max_len=32768),
+    "math_explanation": lambda value, path: parse_str(value, path, max_len=32768),
+    "variables": parse_array(VARIABLE, max_len=256),
+    "lookback_sessions": lambda value, path: parse_int(value, path, minimum=0),
+    "signal_timing": parse_enum("session_close"),
+    "expected_sign": parse_enum("positive", "negative", "unspecified"),
+    "missing_policy": parse_enum("propagate_null"),
+    "limitations": STRINGS,
+})
+
+
+def _ast(value: Any, path: str) -> dict:
+    if not isinstance(value, dict):
+        raise ContractError(path, "object_required", "expected an AST node")
+    op = value.get("op")
+    if op == "field":
+        return parse_object({"op": parse_enum("field"),
+                             "name": lambda raw, where: parse_str(raw, where, min_len=1, max_len=128)})(value, path)
+    if op == "constant":
+        return parse_object({"op": parse_enum("constant"), "value": parse_decimal_string})(value, path)
+    if isinstance(op, str) and op.strip() and op not in ("field", "constant"):
+        return parse_object({
+            "op": lambda raw, where: parse_str(raw, where, min_len=1, max_len=64),
+            "args": parse_array(_ast, max_len=64, min_len=1),
+            "window": nullable(lambda raw, where: parse_int(raw, where, minimum=1)),
+        })(value, path)
+    raise ContractError(path, "invalid_ast", "op must be field, constant or a registered operator name")
+
+
+FACTOR_DEFINITION = parse_object({
+    "expression": lambda value, path: parse_str(value, path, min_len=1, max_len=32768),
+    "ast": _ast,
+    "operator_registry_ref": parse_ref,
+    "field_contract_ref": parse_ref,
+    "unit": lambda value, path: parse_str(value, path, min_len=1, max_len=64),
+    "lookback_sessions": lambda value, path: parse_int(value, path, minimum=0),
+    "signal_timing": parse_enum("session_close"),
+    "parameters": parse_array(PARAMETER, max_len=256),
+    "preprocessing_ref": nullable(parse_ref),
+    "compiler_ref": parse_ref,
+})
+
+
 PAYLOAD_VALIDATORS: dict[str, Callable[[Any, str], dict]] = {
     "budget_policy": BUDGET_POLICY,
     "code_identity": CODE_IDENTITY,
@@ -733,6 +834,10 @@ PAYLOAD_VALIDATORS: dict[str, Callable[[Any, str], dict]] = {
     "research_workflow": _research_workflow,
     "human_decision": HUMAN_DECISION,
     "dataset_snapshot": DATASET_SNAPSHOT,
+    "review": REVIEW,
+    "hypothesis_proposal": HYPOTHESIS_PROPOSAL,
+    "formula_proposal": FORMULA_PROPOSAL,
+    "factor_definition": FACTOR_DEFINITION,
     "execution_policy": EXECUTION_POLICY,
 }
 

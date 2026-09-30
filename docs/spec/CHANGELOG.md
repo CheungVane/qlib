@@ -2,6 +2,13 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-30 — G1-2c Agent评议校验与自动边至多一次
+
+- 来源：G1-2b后继续G1-2，交付评议/提案校验与自动边写入（G1-2c），基线`843e0fe8`。关联U29/U30/U31、A44/A45-1/A45-5；父项不关闭。
+- 实现：补齐`review/hypothesis_proposal/formula_proposal/factor_definition`（Citation/Usage/Variable/递归AST）闭合校验；`Schema7Store.record_workflow_edge`按`(parent_artifact_id,child_kind,workflow_revision_id)`与`UNIQUE(child_run_id)`保证至多一次，`record_trial_event`按`event_id`保证至多一次；同内容replay、异内容`idempotency_conflict`，并要求引用已发布。
+- 验证：`test_schema7_ledger.py`4项覆盖payload闭合、重复/并发边只落一行、trial事件同内容重放与异内容冲突；完整`workbench_gate.sh`退出0，Python 363项（7跳过、0失败）、JS 28项通过。证据见[G1-2c证据](evidence/20260930-g1-2c-ledger.json)。
+- 边界：仅schema7夹具；未接生产、未迁用户库。自动评价/结果发布、旧submit/import共享保护、`prepared_input/model/prediction/strategy`等payload归G1-2d及G3/G4，发布/监督/真实迁移归G1-3—5。
+
 ## 2026-09-30 — G1-2b保存版本、头CAS与快照指针
 
 - 来源：G1-2a通过后继续G1-2，交付保存/指针核心（G1-2b），基线`5b0eafd8`。关联U28/U31、T06、A45-1；父项不关闭。

@@ -1,0 +1,39 @@
+{
+  "date": "2026-09-30",
+  "baseline": "843e0fe8",
+  "branch": "codex/g1-foundation",
+  "milestone": "G1-2c agent/proposal validators and at-most-once workflow edge/trial events",
+  "deliverable": {
+    "adapter": "adapters/storage/schema7.py record_workflow_edge/record_trial_event",
+    "validators_added": ["review", "hypothesis_proposal", "formula_proposal", "factor_definition",
+                         "citation", "usage", "variable", "ast"],
+    "tests": "extensions/workbench/tests/test_schema7_ledger.py",
+    "production_wiring": "none; running service still supports schema6 only"
+  },
+  "implemented": [
+    "closed validation for agent review, hypothesis/formula proposals and factor definitions",
+    "recursive AST union validation (field, constant, registered-operator name)",
+    "workflow edge insert keyed by parent/kind/revision with UNIQUE(child_run_id)",
+    "duplicate identical edge is a replay; different child is an idempotency conflict",
+    "concurrent duplicate edge admits exactly one row",
+    "trial event keyed by event_id; identical event replays, different details conflict",
+    "trial event refuses missing Experiment/candidate references"
+  ],
+  "not_done": [
+    "legacy submit/import sharing the schema7 idempotency/budget/slot protection (G1-2d)",
+    "prepared_input/model/prediction/strategy payload validators and their engine-specific fields (G1-2d/G3)",
+    "automatic evaluation/publication of the produced candidate (G1-4/G2)",
+    "record_transition adapter and supervisor (G1-3)",
+    "production injection and real database migration (G1-5)"
+  ],
+  "verification": {
+    "command": "bash scripts/workbench_gate.sh",
+    "exit_code": 0,
+    "python": {"total": 363, "skipped": 7, "failures": 0, "errors": 0, "seconds": 111.713},
+    "javascript": {"total": 28, "passed": 28, "failed": 0},
+    "focused": {"test_schema7_ledger": 4, "test_schema7_save": 6, "test_schema7_admission": 12},
+    "known_non_failures": ["existing subprocess ResourceWarning", "expected fault-injection API traceback"]
+  },
+  "open": ["SR01-SR04", "A43-A45", "G1-2d legacy protection and data/model payload validators"],
+  "next": "G1-2d legacy Attempt protection and remaining data/model payloads"
+}
