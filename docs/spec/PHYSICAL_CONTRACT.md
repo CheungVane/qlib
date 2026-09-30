@@ -198,3 +198,25 @@ schema3的新发布事实以SQLite artifacts+publications为准；数据目录�
 6. 尚未恢复写入时可停止服务、恢复schema6备份与旧程序。恢复写入后不得直接覆盖新库：冻结并保留schema7库及新增对象，优先前向修复；必须回退时恢复备份到独立路径，明确列出备份后待重放命令/产物，显式切换，禁止声称无损降级。旧库/对象均保留。
 
 必须验证：空schema6/含所有历史表/失败注入/重复执行/未知schema/多连接竞争/重启；外键和唯一键反例；同key异载荷、同Run并发重试、跨预算同时抢最后额度、绑定冲突、发布前后崩溃。本文隔离DDL检查不替代这些未来实现测试。新服务启动拒绝未知schema，不自动运行迁移；迁移是独立维护命令。
+
+### 6.1 维护命令与启动/迁移分离（G1-0冻结，2026-09-30；实现归G1-1）
+
+维护命令是独立CLI入口，不构造常规服务、不暴露HTTP、不读取UI配置；`--root`指向平台目录（与`qwb`其它命令相同）。命令输出中可含本机路径供运维使用，但不得写入任何业务payload或API DTO。
+
+| 命令 | 行为 | 退出码 |
+| --- | --- | --- |
+| `qwb storage status [--json]` | 只读打开：报告`user_version`、表/列/索引指纹概要、非终态Attempt清单及是否有结束证据、对象存储根是否存在。不创建、不迁移、不修改文件 | 0成功；3打不开/指纹损坏 |
+| `qwb storage migrate --backup <path> [--confirm-attempt <id>]... [--json]` | 按§6执行schema6→7：预检→一致性备份→单事务迁移→核对→写`user_version=7` | 0成功或已在7；3阻断/拒绝；4执行失败已回滚 |
+| `qwb storage verify --schema 7 [--json]` | 只读打开目标库，核对版本、对象与索引存在、`foreign_key_check`无结果、`integrity_check=ok`、Run/绑定守恒、`latest_revision_id`归属；不改库 | 0通过；3失败/版本不符 |
+
+迁移命令冻结语义：
+
+1. **备份**：`--backup`必须是不存在的路径，禁止覆盖；使用SQLite backup API生成一致性副本（不直接复制WAL主文件），记录绝对路径与`sha256`。备份失败即阻断，不开始迁移。
+2. **打开Attempt核对**：schema6没有lease表，不能只看`status`。列出所有非终态或终态但缺结束证据的Attempt；调用方必须用`--confirm-attempt <id>`精确覆盖该集合，每个id只认一次、未知id拒绝。集合不完全匹配返回`migration_blocked_open_attempts`（3），不自动杀进程、不跳过、不把`interrupted`当已结束。
+3. **指纹预检**：核对`user_version=6`及实际表/列/索引指纹；登记各保留表行数与规范摘要、旧Run→external绑定的完整映射。未知版本/缺表/指纹不符一律3，不尝试修复坏库。
+4. **事务**：迁移连接先关闭`foreign_keys`（事务外），`BEGIN IMMEDIATE`后依§2执行；任何失败`ROLLBACK`并保留备份，退出4。表重建期间不得运行应用写入。
+5. **守恒核对**：`revisions/imports/factors/factor_panels/agent_budget`原列逐行摘要守恒；`attempts`原列守恒；新`runs`行数等于旧`runs`，`external_run_bindings`绑定数等于旧Run数且映射一致；`foreign_key_check`无结果、`integrity_check=ok`、每个非空`latest_revision_id`属于本Run。任一不符先阻断报告，不删坏行以通过。
+6. **重复执行**：已是`user_version=7`时`status`/`verify`正常，`migrate`返回`changed=false`且不重跑、不覆盖备份；不新建第二份schema7。
+7. **输出Receipt**：`source_version,target_version,changed,backup_path,backup_digest,open_attempts,preserved,postcheck,errors`；失败时保留备份路径与失败步骤，错误不吞。
+
+**启动与维护分离**：常规服务只接受其编译期声明的`supported_schema`；遇到`user_version=7`而该版本尚未接入时明确拒绝并提示运行`storage status`，不得降级读取、不得自动执行6→7。空目录初始化到`supported_schema`属创建而非升级。G1-1交付时`supported_schema=6`，因此只允许对隔离夹具执行6→7并用`storage verify`核对；把schema7注入生产组合根归G1-2/G1-5。现有0—6的遗留引导路径保持到G1-5切换，届时必须改为只创建当前版本、旧版本一律走显式维护命令。

@@ -167,6 +167,35 @@ EXEC13（执行政策与预算，LIFE06/AGENT04；**部分实现；2026-09-27监
 
 EXEC11（演进，GOV-UPSTREAM）：Qlib 与 RD-Agent 保持外部引擎边界；执行器是适配层，不修改上游源码，不把 RD-Agent 代码复制进 Qlib。RD-Agent 探针脚本位于本仓库 `scripts/`，RD-Agent checkout 只写其被 Git 忽略的目录。上游更新后重验执行器命令、前置条件检查与适配器契约。
 
+### EXEC13-B 独立监督与实例身份协议（G1-0冻结，2026-09-30；实现归G1-3）
+
+监督是单机、单实例、独立于HTTP/CLI请求的进程；只有它消费持久化launch意图、执行deadline终止、恢复占位并评估自动边。GET/list不得推进执行，也不承担维持超时的职责。
+
+**进程、所有权与重复实例**
+
+- 部署入口以`qwb supervise --root <storage_root>`前台启动，由launchd/systemd/运维脚本负责重启。`serve`、`execute`或任一CLI退出不停监督，也不代它推进；监督不因一次HTTP请求结束而停止。
+- 单实例保护：启动时对`<storage_root>/supervisor.lock`加排他`flock`，写入随机`supervisor_instance_id`、pid和启动时间；拿不到锁即退出`supervisor_already_running`，不触碰任务、不启动引擎。锁文件不是业务事实，丢失/重建后以数据库中的launch_token与lease为准，不凭锁判断任务是否结束。
+- 监督只经ports访问存储与执行器，不直接改表；同一数据库只允许一个监督消费launch意图，另建第二套调度器/Run状态机一律拒绝。
+
+**检查节奏与有界验收窗口**
+
+- `supervisor_interval_seconds=5`（政策字段，取值1—60，默认5）；deadline宽限沿用该Attempt冻结的`terminate_grace_seconds`（当前配置10）；`terminate_confirmation_seconds=5`（1—60，默认5）。
+- 有界验收窗口＝检查间隔＋终止宽限＋确认超时＋一个检查间隔余量＝25秒（默认值）。该窗口在测试编码前冻结；政策改值必须产生新policy_revision并同步本spec与验收，不得为让测试通过事后放宽。
+- 到达deadline：按该Attempt冻结政策发起终止，等待宽限后仍存活则升级终止；只有可归属同一执行身份的结束证据才落`failed/timeout`并释放lease。无法确认时保留`interrupted`与占位，追加事件并进入待核对，不假报结束。
+- 变更当前政策或重启服务不改变老Attempt的deadline、宽限、policy_revision与预算范围；缺老政策证据时保持待核对并阻止不安全的新准入。
+
+**实例身份与查询接口**
+
+- 准入在`admit_run`内预分配`launch_token`。引用该token的执行器端口新增两个方法，签名与中立DTO在G1-3冻结：`describe_instance(launch_token) -> ExecutionInstanceView|null`与`confirm_stopped(launch_token) -> StopEvidence`。返回`null`、超时或异常都表示“不能确认”，不等于已结束。
+- `ExecutionInstanceView`至少含`executor_id`、`launch_token`、`instance_id`（容器ID或进程身份）、`started_at`、`state ∈ queued|running|exited|unknown`；不返回命令行、密钥或宿主绝对路径。`StopEvidence`至少含`launch_token`、`instance_id`、`confirmed_at`、`method`、`evidence_digest`；`confirmed=false`时不得释放槽。
+- 启动已发生而回执丢失：按token查询原实例，找到即认领并补齐事件，禁止再次start。宿主编排进程消失不构成结束；容器运行时不可达、身份冲突或删除失败都不得`confirmed=true`。不得按可能复用的pid/容器名杀无关任务。
+- 重启后监督先核对全部未终态Attempt及launch_token，再开放新并发槽；不自动重放结果未知的外部调用；重试始终由用户/命令创建新Attempt。
+
+**证据与能力边界**
+
+- 监督、存储、执行器分别保留证据：launch事件与实例身份、状态转移与结束确认、策略/budget范围。`pid`缺失、进程成功退出、容器退出码或测试替身均不能单独证明业务完成。
+- G1-3交付前，上述协议只是目标；SR01—03保持开放，现有“状态读取触发超时/失联不占槽/预算可超支”的行为不得被解释为已满足EXEC13或EXEC13-B。
+
 ## 4. 已知限制（保持可见）
 
 - **SR01—03未修复**：当前超时只在状态读取时监督；interrupted不再计入槽位；宿主pid消失会提前确认取消；DB试验预算并发可超支。以上违反EXEC13，必须修复，不能视为允许的降级。反例和修复出口见[监督审查](archive/review-20260927-supervision.md)。

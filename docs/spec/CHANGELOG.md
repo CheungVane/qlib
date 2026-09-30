@@ -2,6 +2,15 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-30 — G1-0实施映射冻结（仅文档）
+
+- 来源：用户要求按spec开始实现；先执行G1-0实施映射，基线`ff1f5e54`。影响U28/U31、T04/T06、A40/A41/A43—45，不改变已冻结DDL/DTO语义、不提升运行能力。
+- 迁移：冻结[PHYSICAL §6.1](PHYSICAL_CONTRACT.md)维护命令`storage status|migrate|verify`、一致性备份、打开Attempt逐项确认、指纹预检、单事务迁移、守恒核对、重复执行与启动/维护分离；G1-1交付时`supported_schema=6`，只对隔离夹具执行6→7。
+- 端口与校验：[ARCHITECTURE §9.4](ARCHITECTURE.md)把PHYSICAL §3能力逐项映射到端口/所有者/事务边界/落点，并冻结五层校验职责与反例到G1-1—5、G2的测试证据层级；共享校验器归`domain/contracts.py`，旧`domain/research.py`只作兼容。
+- 监督：[EXECUTION EXEC13-B](EXECUTION.md)冻结单实例`qwb supervise`、`supervisor.lock`所有权、检查间隔5s/终止确认5s/25秒有界窗口、`describe_instance`/`confirm_stopped`身份协议与重启核对；SR01—03仍开放。[ARTIFACT §6](ARTIFACT_CONTRACT.md)补齐Parameter闭合形状并规定未注册payload拒绝。
+- 兼容：没有新增HTTP路由、数据库迁移、引擎启动或managed生产注入；0—6遗留引导路径保持到G1-5，6→7只能由维护命令执行。
+- 验证：文档链接/锚点、围栏、G1依赖与反例映射自查及`git diff --check`；本批为设计交付，运行验收归G1-1—5。
+
 ## 2026-09-30 — TODO执行交接补齐（仅文档）
 
 - 来源：用户要求检查TODO能否指导执行者开发；核对基线4a150314。关联U28/U31、T04/T06/T09/T11/T12、SR01—05及A35/A40/A41/A43—45，不新增业务能力或关闭缺口。

@@ -312,6 +312,45 @@ UI优先选择真实数据组并明确来源/区间/基线性质；数据页不�
 
 保留旧研究快照/因子面板/Attempt与v1/v2分析路由，不自动合并主题、不补写unknown来源、不原地升级schema2数据。首批功能开关默认关闭，只有相应验收通过后在能力目录暴露ready；关闭开关仍可读已发布历史产物。该共享设计批次仅修改spec；当前迁移仍未实施。
 
+### 9.4 G1共享端口、事务边界与校验归属（G1-0冻结，2026-09-30）
+
+本节把[PHYSICAL_CONTRACT §3](PHYSICAL_CONTRACT.md)的命令转成实现映射；端口名、所有者与事务边界不再由实现者另选。方法输入/返回使用[COMMAND_CONTRACT](COMMAND_CONTRACT.md)闭合DTO或domain不可变对象，不接收`Connection`、SDK对象或本机绝对路径。事务端口在失败时整体回滚；只读预检不占幂等键、不扣预算、不写业务行。
+
+| PHYSICAL §3能力 | 端口 → 所有者 | 同一事务内完成 | 当前状态 |
+| --- | --- | --- | --- |
+| save_revision | `ArtifactStorePort.save_revision` → `adapters/storage` | 幂等比对、头CAS、artifact/parents登记、头更新、commands响应存根 | 未实现；G1-2 |
+| admit_run | `ManagedAdmissionPort.admit_run` → `adapters/storage` | 重新检查幂等/引用/有效期/retry结束证明/workflow边/槽/全部预算，提交Run、Attempt、Stage、定义(适用时)、边、事件、launch意图与回执 | 端口草案已冻结(`ports/research.py`)；G1-2实现 |
+| record_transition | `AttemptTransitionPort.record_transition` → `adapters/storage` | 合法转移、预期事件seq、进程身份/结束证据、投影；仅确认结束时释放lease | 新端口；G1-3 |
+| reserve_usage | `UsageBudgetPort.reserve_usage` → `adapters/storage` | 多scope/dimension一次检查扣量，任一不足全回滚；同event_key异增量冲突 | 新端口；G1-2 |
+| publish_artifacts | `ArtifactPublicationPort.publish_stage` → `adapters/storage`（字节核验在对象存储适配器） | 已核验对象/父引用/生产者/阶段结果的artifact、parents、发布回执与完成事件；结果发布另写revisions/外部绑定 | 端口草案已冻结；G1-4 |
+| set_pointer | `ArtifactStorePort.set_pointer` → `adapters/storage` | 目标已发布、CAS、响应存根；不得替换Run定义 | 新端口；G1-4 |
+| replay / prepare_admission | `ManagedAdmissionPort.replay` / `AdmissionPreflightPort.prepare_admission` → `adapters/storage`+能力适配器 | 只读：replay先于预检，命中即按原回执返回；预检解析冻结版本与能力，不写库 | 端口草案已冻结；实现归G1-2/G1-5 |
+| schema迁移 | `storage`维护命令（不暴露为服务端口） | 独立进程；事务外`foreign_keys=OFF`，`BEGIN IMMEDIATE`内执行，末尾核对后写`user_version=7` | 命令与验收冻结于[PHYSICAL §6.1](PHYSICAL_CONTRACT.md)；实现归G1-1 |
+
+校验按层归属，下层不信任上层结论：
+
+1. **传输层**（`api.py`/`cli.py`）：严格JSON解析（拒绝重复键、NaN/Infinity、非对象根、未知字段、超限）并构造`schema_version:1`闭合DTO；不做业务授权，不返回堆栈/路径/密钥。
+2. **domain/contracts**：DTO→不可变对象；校验标量格式、必填/可空、判别联合、Ref四字段一致、parent自环与ordinal；未在专题冻结的载荷类型返回`payload_schema_not_frozen`，不猜字段。
+3. **services**：语义与所有权检查（入口能否写该对象、确切版本、可用时间、预算/计划/能力）；结果只作为预检，不是写授权。
+4. **adapters/storage**：事务内重新校验已发布Ref、CAS、唯一键、外键及跨行不变量（Run/Attempt/定义一致、同Run未结束Attempt数、producer归属、latest_revision归属）；不得因预检已过而跳过。
+5. **SQL约束**：键、引用与基础范围；跨行约束由第4层补齐，两者都须有反例。
+
+实现落点：共享校验器唯一位于`domain/contracts.py`；专题载荷各自注册validator。旧`domain/research.py`全字段草案只保留兼容与历史哈希，不是新判别DTO校验器。适配器不得把校验逻辑复制到服务或UI。
+
+反例到测试映射（证据层级：F=隔离夹具/临时库，C=独立连接或进程竞争，R=重启/恢复，X=真实隔离引擎或容器）：
+
+| 反例/场景 | 层级 | 负责切片 | 入口或复用 |
+| --- | --- | --- | --- |
+| 空schema6→7、完整历史↔行数/摘要守恒、未知schema拒绝、重复维护命令、故障回滚 | F | G1-1 | 新增`tests/test_migrations.py`；`tests/test_storage.py`现有夹具 |
+| 外键/唯一键/跨行不变量、发布前后崩溃、同键异载荷、绑定冲突 | F+C | G1-2/G1-4 | 扩展`tests/test_managed_framework.py`、新增事务端口测试 |
+| 同Run并发重试、跨预算抢最后额度、两连接抢并发槽 | C | G1-2 | 独立SQLite连接夹具 |
+| 无轮询超时、监督启动失败不执行、失联占槽、死包装/活容器、取消/迟到/政策切换 | C+X | G1-3 | 扩展`tests/test_execution.py`、`tests/test_execution_policy.py`、复用`tests/sandbox.py` |
+| 重启核对launch_token、发布/取消竞争、崩溃恢复 | R | G1-3/G1-4 | 临时部署目录+重启子进程 |
+| 旧路由/导入/结果在schema7前后兼容 | F+R | G1-5 | 现有结果/导入回归+临时部署 |
+| 统一输入准备、因子/训练同历同池、错单位/错成员拒绝 | F | G1-4/G2 | 扩展`tests/test_data_processing.py`、`tests/test_data_directory.py` |
+
+完整JSON Schema生成不在G1范围；G1交付“闭合DTO机器校验+反例”，新增专题载荷仍须单独冻结并注册。
+
 ## 10. U31代码框架落地切片（2026-09-30，实施范围）
 
 用户最新授权在代码中落实框架。本切片落实共享ArtifactRef、显式准入命令/准备结果/回执、7类固定计划、ResearchRunService/DataPipelineService/ResearchWorkflowService、数据/Agent/公式/引擎中立端口，以及组合根的显式注入。已有ExecutionService仍唯一拥有执行准入；新服务不能直接占槽、启动进程或分别提交预算。未注入通过验收的managed端口时明确拒绝，不复用旧submit冒充新研究Run。

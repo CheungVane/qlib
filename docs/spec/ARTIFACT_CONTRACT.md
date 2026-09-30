@@ -146,7 +146,7 @@ BudgetLimits完整字段为`max_hypotheses,max_formulas_per_hypothesis,max_numer
 | equivalence_report | `source_ref:Ref,materialized_parts:FilePart[],logical_input_digest:Digest,checked_rows:integer,checked_cells:integer,checks:Check[],algorithm_ref:Ref`；只做抽样不得声明全量等价 |
 | budget_policy | `limits:BudgetLimits,previous_policy_ref:Ref|null,decision_ref:Ref|null`；初版无修改时后两者null |
 
-axis/reference_set/evaluation_protocol等已在§4完整定义；execution_policy引用实际配置规范字段（不改已有字段名），data_resource_policy依§5。model_spec/engine_binding/search_policy需要按选定引擎补充参数schema，不允许作为未知payload发布；这是G3/G4适配设计门，不阻塞G1共享存储/命令实现。公式与数据首批所用rule/field_contract同样须发布具体版本实例和独立oracle，不能仅有类型表就开启能力。
+axis/reference_set/evaluation_protocol等已在§4完整定义；execution_policy引用实际配置规范字段（不改已有字段名），data_resource_policy依§5。model_spec/engine_binding/search_policy需要按选定引擎补充参数schema，不允许作为未知payload发布；这是G3/G4适配设计门，不阻塞G1共享存储/命令实现。公式与数据首批所用rule/field_contract同样须发布具体版本实例和独立oracle，不能仅有类型表就开启能力。G1-0补齐Parameter=`{name:string,value:string|integer|boolean|null,unit:string|null}`，仅接受该闭合形状；rule参数名/类型仍由各rule_id契约限定。未被专题冻结或未注册validator的artifact_type一律按`payload_schema_not_frozen`拒绝，不能用任意JSON绕过。
 
 ExecutionContext完整字段：`run_id,attempt_id,launch_token,definition_ref:Ref,execution_policy_ref:Ref,workflow_id:Id|null,budget_scope_ids:string[],deadline_at:Time,cancellation_token_id:Id,output_namespace:Id`；只在worker边界解析namespace为受控目录，不对API返回路径。执行器将secret_ref解析为短期进程环境，Context、命令、产物不含密钥。方法契约统一为ARCHITECTURE §9端口+此Context；长任务不持数据库连接，预算预留经ExecutionService受控调用，不信任worker自报剩余额度。
 
