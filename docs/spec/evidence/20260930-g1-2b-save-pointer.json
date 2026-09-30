@@ -1,0 +1,42 @@
+{
+  "date": "2026-09-30",
+  "baseline": "5b0eafd8",
+  "branch": "codex/g1-foundation",
+  "milestone": "G1-2b save_revision head CAS, default snapshot pointer and research validators",
+  "deliverable": {
+    "adapter": "extensions/workbench/quant_workbench/adapters/storage/schema7.py save_revision/set_default_snapshot",
+    "validators_added": ["research_input", "research_workflow", "human_decision", "dataset_snapshot",
+                         "file_part", "use_verdict"],
+    "tests": "extensions/workbench/tests/test_schema7_save.py",
+    "production_wiring": "none; running service still supports schema6 only"
+  },
+  "implemented": [
+    "save_revision validates the payload, computes the canonical content digest and writes the object envelope",
+    "new Save creates the versioned entity and its first head artifact in one deferred-FK transaction",
+    "Save idempotency shares the commands table with admission; replay returns the stored receipt",
+    "same key different payload -> idempotency_conflict",
+    "update requires entity_id plus expected_revision and CASes entities.head_artifact_id/digest",
+    "stale or tampered CAS -> revision_conflict and no new artifact/row",
+    "set_default_snapshot CASes pointers.row_version from 0 and refuses version_conflict",
+    "research_input/research_workflow/human_decision/dataset_snapshot payloads are closed and validated"
+  ],
+  "not_done": [
+    "legacy submit/import sharing the schema7 idempotency/budget/slot protection (G1-2c)",
+    "remaining payload validators (review, hypothesis/formula proposal, factor_definition, prepared_input, model, prediction, strategy)",
+    "workflow_edges/trial_events automatic edges and candidate ledger (G1-2c / G1-4)",
+    "record_transition adapter and supervisor (G1-3)",
+    "artifact publication port (G1-4)",
+    "production injection and real database migration (G1-5)"
+  ],
+  "verification": {
+    "command": "bash scripts/workbench_gate.sh",
+    "exit_code": 0,
+    "python": {"total": 359, "skipped": 7, "failures": 0, "errors": 0, "seconds": 111.121},
+    "javascript": {"total": 28, "passed": 28, "failed": 0},
+    "focused": {"test_schema7_save": 6, "test_schema7_admission": 12, "test_contracts": 11,
+                "test_migrations": 7, "test_architecture": 7},
+    "known_non_failures": ["existing subprocess ResourceWarning", "expected fault-injection API traceback"]
+  },
+  "open": ["SR01-SR04", "A43-A45", "G1-2c legacy protection and remaining payloads"],
+  "next": "G1-2c legacy Attempt protection and remaining research payload validators"
+}

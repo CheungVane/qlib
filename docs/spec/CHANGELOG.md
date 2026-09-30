@@ -2,6 +2,13 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-30 — G1-2b保存版本、头CAS与快照指针
+
+- 来源：G1-2a通过后继续G1-2，交付保存/指针核心（G1-2b），基线`5b0eafd8`。关联U28/U31、T06、A45-1；父项不关闭。
+- 实现：`Schema7Store.save_revision`（payload闭合校验→规范摘要与对象写入→新实体+首个artifact同事务→`entities.head_artifact_id`头CAS→`commands`幂等回执）与`set_default_snapshot`（`pointers.row_version` CAS）；新增`revision_conflict/version_conflict`错误。实体与artifact互引在事务内`defer_foreign_keys`，不UPDATE不可变artifact。补齐`research_input/research_workflow/human_decision/dataset_snapshot`（含FilePart/UseVerdict）校验器。
+- 验证：`test_schema7_save.py`6项覆盖新实体保存/重放、同键异载荷冲突、陈旧CAS不写、非法payload、默认快照指针CAS；完整`workbench_gate.sh`退出0，Python 359项（7跳过、0失败）、JS 28项通过。证据见[G1-2b证据](evidence/20260930-g1-2b-save-pointer.json)。
+- 边界：未注入生产、未迁移用户库；旧submit/import共享保护、review/proposal/factor_definition等payload、workflow自动边/trial账本归G1-2c，发布/监督/真实迁移留G1-3—5。
+
 ## 2026-09-30 — G1-2a原子准入、幂等与预算账本核心
 
 - 来源：用户授权按spec继续实施；G1-1完成后进入G1-2，本次交付其准入/账本核心（G1-2a），基线`b58e92f8`。关联U28/U31、T04/T06、SR03及A41/A45-1/A45-5；父项不关闭。

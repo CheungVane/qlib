@@ -20,16 +20,24 @@ from typing import Any, Callable, Iterable, Mapping
 
 from ...domain.admission import AdmissionCommand, AdmissionReceipt, AdmissionRequest, EntryPoint
 from ...domain.artifacts import ArtifactRef
-from ...domain.contracts import parse_envelope
+from ...domain.contracts import (parse_envelope, parse_key, parse_parent, parse_payload,
+                                 parse_snapshot_ref)
 from ...domain.errors import (BudgetExhausted, CapacityExceeded, IdempotencyConflict,
                               LedgerScopeMissing, PlanExpired, PreconditionFailed,
-                              ReferenceMismatch, RetryNotAllowed)
+                              ReferenceMismatch, RetryNotAllowed, RevisionConflict, VersionConflict)
 from .migrations import database_path
 from .storage_base import LocalObjectStore
 
 SCHEMA_VERSION = 7
 CONCURRENCY_SCOPE = "concurrency:global"
 SETTLED_ATTEMPT_STATUSES = ("succeeded", "failed", "cancelled")
+DEFAULT_SNAPSHOT_POINTER = "default_research_snapshot"
+ENTITY_KIND_BY_ARTIFACT = {
+    "research_input": "research_input",
+    "research_definition": "research_definition",
+    "data_definition": "data_definition",
+    "research_workflow": "research_workflow",
+}
 
 
 class Schema7VersionError(RuntimeError):
@@ -90,6 +98,10 @@ class Schema7Store:
         try:
             conn.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
             begun = True
+            # entities.head_artifact_id and artifacts.entity_id are mutually
+            # referencing; defer enforcement to COMMIT so a new entity+artifact
+            # can be inserted in one atomic step without an UPDATE on artifacts.
+            conn.execute("PRAGMA defer_foreign_keys=ON")
             yield conn
             if self.before_commit is not None:
                 self.before_commit()
@@ -158,6 +170,129 @@ class Schema7Store:
         return ArtifactRef(parsed["artifact_id"], parsed["artifact_type"], parsed["schema_version"],
                            computed)
 
+    def save_revision(self, *, operation: str, idempotency_key: str, artifact_type: str,
+                      payload: Mapping[str, Any], parent_refs: Iterable[Mapping[str, Any]] = (),
+                      entity_id: str | None = None, expected_revision: ArtifactRef | None = None,
+                      display_name: str | None = None, author_kind: str = "user_authored",
+                      author_ref: str | None = None) -> dict[str, Any]:
+        """PHYSICAL §3 save_revision: idempotency, head CAS, artifact + receipt."""
+        parse_key(idempotency_key)
+        if artifact_type not in ENTITY_KIND_BY_ARTIFACT:
+            raise PreconditionFailed(
+                [{"code": "not_user_versioned", "status": "fail", "message": artifact_type,
+                  "field_path": None, "blocking": True}],
+                ["this artifact_type is registered by deployment, not by a user Save"])
+        if not isinstance(display_name, str) or not 1 <= len(display_name) <= 200:
+            raise ValueError("display_name must be 1-200 characters")
+        if (entity_id is None) != (expected_revision is None):
+            raise ValueError("entity_id and expected_revision must both be null or both be set")
+        checked_payload = parse_payload(artifact_type, dict(payload))
+        checked_parents = [parse_parent(dict(parent)) for parent in parent_refs]
+        payload_digest = "sha256:" + hashlib.sha256(canonical_json({
+            "operation": operation, "artifact_type": artifact_type, "entity_id": entity_id,
+            "expected_revision": expected_revision.as_dict() if expected_revision else None,
+            "display_name": display_name, "payload": checked_payload,
+            "parent_refs": sorted(checked_parents, key=lambda item: (item["role"], item["ordinal"])),
+        }).encode("utf-8")).hexdigest()
+        artifact_id = uuid.uuid4().hex
+        provenance = {"market_data_kind": None, "source_class": None, "evidence_refs": [],
+                      "limitations": []}
+        digest = artifact_content_digest(artifact_type, 1, checked_parents, checked_payload,
+                                         provenance)
+        now = utc_now()
+        envelope = {"artifact_id": artifact_id, "artifact_type": artifact_type, "schema_version": 1,
+                    "content_digest": digest, "entity_id": entity_id, "created_at": now,
+                    "producer": {"run_id": None, "attempt_id": None, "author_kind": author_kind,
+                                 "author_ref": author_ref},
+                    "parent_refs": checked_parents, "payload": checked_payload,
+                    "provenance": provenance}
+        parse_envelope(envelope)
+        blob = canonical_json(envelope).encode("utf-8")
+        object_key = self.object_store.write(hashlib.sha256(blob).hexdigest(), blob)
+        with self._transaction() as conn:
+            stored = self._replay_raw(conn, idempotency_key, operation, payload_digest)
+            if stored is not None:
+                receipt = json.loads(stored)
+                receipt["replayed"] = True
+                receipt["created"] = False
+                return receipt
+            if entity_id is None:
+                resolved_entity = uuid.uuid4().hex
+                experiment_link = checked_payload.get("experiment_id") \
+                    if artifact_type in ("research_input", "research_definition", "research_workflow") else None
+                conn.execute(
+                    "INSERT INTO entities(entity_id,entity_kind,experiment_id,display_name,description,"
+                    "head_artifact_id,row_version,created_at,updated_at) "
+                    "VALUES(?,?,?,?,'',?,1,?,?)",
+                    (resolved_entity, ENTITY_KIND_BY_ARTIFACT[artifact_type], experiment_link,
+                     display_name, artifact_id, now, now))
+                created = True
+            else:
+                resolved_entity = entity_id
+                entity = conn.execute("SELECT entity_kind,head_artifact_id,row_version,experiment_id "
+                                      "FROM entities WHERE entity_id=?", (entity_id,)).fetchone()
+                if entity is None or entity["entity_kind"] != ENTITY_KIND_BY_ARTIFACT[artifact_type]:
+                    raise RevisionConflict(entity_id, expected_revision.as_dict(), None)
+                head = conn.execute("SELECT artifact_id,artifact_type,schema_version,content_digest "
+                                    "FROM artifacts WHERE artifact_id=?",
+                                    (entity["head_artifact_id"],)).fetchone()
+                current = (ArtifactRef(head["artifact_id"], head["artifact_type"],
+                                       head["schema_version"], head["content_digest"])
+                           if head is not None else None)
+                if (current is None or current.artifact_id != expected_revision.artifact_id
+                        or current.content_digest != expected_revision.content_digest
+                        or current.artifact_type != expected_revision.artifact_type
+                        or current.schema_version != expected_revision.schema_version):
+                    raise RevisionConflict(entity_id, expected_revision.as_dict(),
+                                           current.as_dict() if current else None)
+                conn.execute("UPDATE entities SET head_artifact_id=?,row_version=row_version+1,"
+                             "display_name=?,updated_at=? WHERE entity_id=?",
+                             (artifact_id, display_name, now, entity_id))
+                created = False
+            conn.execute(
+                "INSERT INTO artifacts(artifact_id,artifact_type,schema_version,content_digest,"
+                "entity_id,object_key,producer_run_id,producer_attempt_id,created_at) "
+                "VALUES(?,?,?,?,?,?,NULL,NULL,?)",
+                (artifact_id, artifact_type, 1, digest, resolved_entity, object_key, now))
+            for parent in sorted(checked_parents, key=lambda item: (item["role"], item["ordinal"])):
+                conn.execute("INSERT INTO artifact_parents(child_id,role,ordinal,parent_id) "
+                             "VALUES(?,?,?,?)",
+                             (artifact_id, parent["role"], parent["ordinal"],
+                              parent["ref"]["artifact_id"]))
+            ref = ArtifactRef(artifact_id, artifact_type, 1, digest)
+            receipt = {"entity_id": resolved_entity, "artifact_ref": ref.as_dict(),
+                       "created": created, "replayed": False}
+            conn.execute("INSERT INTO commands(idempotency_key,operation,payload_digest,response_json,"
+                         "committed_at) VALUES(?,?,?,?,?)",
+                         (idempotency_key, operation, payload_digest, canonical_json(receipt), now))
+            return receipt
+
+    def set_default_snapshot(self, snapshot_ref: ArtifactRef, expected_version: int) -> dict[str, Any]:
+        """COMMAND §2 /v1/data-default: CAS the research snapshot pointer."""
+        parsed = parse_snapshot_ref(snapshot_ref.as_dict())
+        if type(expected_version) is not int or expected_version < 0:
+            raise ValueError("expected_version must be a non-negative integer")
+        with self._transaction() as conn:
+            self.resolve_ref(snapshot_ref, conn)
+            row = conn.execute("SELECT artifact_id,row_version FROM pointers WHERE pointer_name=?",
+                               (DEFAULT_SNAPSHOT_POINTER,)).fetchone()
+            current = int(row["row_version"]) if row is not None else 0
+            if expected_version != current:
+                raise VersionConflict(DEFAULT_SNAPSHOT_POINTER, expected_version, current)
+            new_version = current + 1
+            if row is None:
+                conn.execute("INSERT INTO pointers(pointer_name,artifact_id,row_version,updated_at) "
+                             "VALUES(?,?,?,?)",
+                             (DEFAULT_SNAPSHOT_POINTER, snapshot_ref.artifact_id, new_version,
+                              utc_now()))
+            else:
+                conn.execute("UPDATE pointers SET artifact_id=?,row_version=?,updated_at=? "
+                             "WHERE pointer_name=?",
+                             (snapshot_ref.artifact_id, new_version, utc_now(),
+                              DEFAULT_SNAPSHOT_POINTER))
+            return {"name": DEFAULT_SNAPSHOT_POINTER, "snapshot_ref": parsed,
+                    "row_version": new_version, "replayed": False}
+
     # -- reference resolution --------------------------------------------
     def resolve_ref(self, ref: ArtifactRef, conn: sqlite3.Connection | None = None) -> sqlite3.Row:
         close = conn is None
@@ -195,13 +330,21 @@ class Schema7Store:
             conn.close()
 
     def _replay(self, conn: sqlite3.Connection, command: AdmissionCommand) -> AdmissionReceipt | None:
+        stored = self._replay_raw(conn, command.idempotency_key, command.operation,
+                                  command.payload_digest())
+        if stored is None:
+            return None
+        return self._receipt_from_json(stored, created=False)
+
+    def _replay_raw(self, conn: sqlite3.Connection, idempotency_key: str, operation: str,
+                    payload_digest: str) -> str | None:
         row = conn.execute("SELECT operation,payload_digest,response_json FROM commands "
-                           "WHERE idempotency_key=?", (command.idempotency_key,)).fetchone()
+                           "WHERE idempotency_key=?", (idempotency_key,)).fetchone()
         if row is None:
             return None
-        if row["operation"] != command.operation or row["payload_digest"] != command.payload_digest():
-            raise IdempotencyConflict(command.idempotency_key, row["operation"])
-        return self._receipt_from_json(row["response_json"], created=False)
+        if row["operation"] != operation or row["payload_digest"] != payload_digest:
+            raise IdempotencyConflict(idempotency_key, row["operation"])
+        return row["response_json"]
 
     def _receipt_from_json(self, text: str, *, created: bool) -> AdmissionReceipt:
         data = json.loads(text)

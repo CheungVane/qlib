@@ -318,12 +318,12 @@ UI优先选择真实数据组并明确来源/区间/基线性质；数据页不�
 
 | PHYSICAL §3能力 | 端口 → 所有者 | 同一事务内完成 | 当前状态 |
 | --- | --- | --- | --- |
-| save_revision | `ArtifactStorePort.save_revision` → `adapters/storage` | 幂等比对、头CAS、artifact/parents登记、头更新、commands响应存根 | 不可变artifact登记已实现(`Schema7Store.save_artifact`, G1-2a)；头CAS/命令存根归G1-2b |
+| save_revision | `ArtifactStorePort.save_revision` → `adapters/storage` | 幂等比对、头CAS、artifact/parents登记、头更新、commands响应存根 | G1-2b已实现(`Schema7Store.save_revision`：新实体+首版、头CAS、幂等、commands)；结果/部署型artifact的专门Save仍随各自命令 |
 | admit_run | `ManagedAdmissionPort.admit_run` → `adapters/storage` | 重新检查幂等/引用/有效期/retry结束证明/workflow边/槽/全部预算，提交Run、Attempt、Stage、定义(适用时)、边、事件、launch意图与回执 | G1-2a已实现核心事务(`adapters/storage/schema7.py`)；生产注入归G1-5 |
 | record_transition | `AttemptTransitionPort.record_transition` → `adapters/storage` | 合法转移、预期事件seq、进程身份/结束证据、投影；仅确认结束时释放lease | 新端口；G1-3 |
 | reserve_usage | `UsageBudgetPort.reserve_usage` → `adapters/storage` | 多scope/dimension一次检查扣量，任一不足全回滚；同event_key异增量冲突 | G1-2a已实现(`Schema7Store.reserve_usage`)；policy到scope的预置归命令层 |
 | publish_artifacts | `ArtifactPublicationPort.publish_stage` → `adapters/storage`（字节核验在对象存储适配器） | 已核验对象/父引用/生产者/阶段结果的artifact、parents、发布回执与完成事件；结果发布另写revisions/外部绑定 | 端口草案已冻结；G1-4 |
-| set_pointer | `ArtifactStorePort.set_pointer` → `adapters/storage` | 目标已发布、CAS、响应存根；不得替换Run定义 | 新端口；G1-4 |
+| set_pointer | `ArtifactStorePort.set_pointer` → `adapters/storage` | 目标已发布、CAS、响应存根；不得替换Run定义 | `set_default_snapshot`已实现(G1-2b)；其他指针随新用例 |
 | replay / prepare_admission | `ManagedAdmissionPort.replay` / `AdmissionPreflightPort.prepare_admission` → `adapters/storage`+能力适配器 | 只读：replay先于预检，命中即按原回执返回；预检解析冻结版本与能力，不写库 | replay已实现(G1-2a)；preflight适配器与其机器校验归G1-2b/G1-5 |
 | schema迁移 | `storage`维护命令（不暴露为服务端口） | 独立进程；事务外`foreign_keys=OFF`，`BEGIN IMMEDIATE`内执行，末尾核对后写`user_version=7` | 命令与验收冻结于[PHYSICAL §6.1](PHYSICAL_CONTRACT.md)；G1-1已实现并隔离验收，schema7仓储接入归G1-2/G1-5 |
 

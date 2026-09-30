@@ -627,6 +627,95 @@ DATA_DEFINITION = parse_object({
 })
 
 
+RESEARCH_INPUT = parse_object({
+    "experiment_id": parse_id,
+    "input_kind": parse_enum("direction", "hypothesis", "formula"),
+    "content": lambda value, path: parse_str(value, path, min_len=1, max_len=32768),
+    "language": lambda value, path: parse_str(value, path, min_len=1, max_len=32),
+    "hypothesis_type": parse_enum("causal", "risk_premium", "behavioral", "statistical",
+                                  "unspecified"),
+    "market": lambda value, path: parse_str(value, path, min_len=1, max_len=32),
+    "frequency": parse_enum("day"),
+    "constraints": STRINGS,
+    "attachments": REFS,
+    "author": parse_enum("user", "agent"),
+})
+
+
+def _research_workflow(value: Any, path: str) -> dict:
+    record = parse_object({
+        "experiment_id": parse_id,
+        "input_ref": parse_ref,
+        "entry_kind": parse_enum("direction_review", "hypothesis_review", "formula_evaluate"),
+        "mode": parse_enum("assisted", "automatic"),
+        "snapshot_ref": nullable(parse_snapshot_ref),
+        "protocol_ref": nullable(parse_ref),
+        "reference_set_ref": nullable(parse_ref),
+        "agent_binding": AGENT_BINDING,
+        "budget_policy_ref": parse_ref,
+        "stop_after": parse_enum("review", "factor_report"),
+        "selection_rule": parse_enum("feasibility_then_source_order"),
+        "code_ref": parse_ref,
+    })(value, path)
+    if record["mode"] == "automatic":
+        if record["stop_after"] != "factor_report" or record["snapshot_ref"] is None \
+                or record["protocol_ref"] is None:
+            raise ContractError(path, "invalid_workflow_mode",
+                                "automatic mode requires numeric inputs and stop_after=factor_report")
+    return record
+
+
+HUMAN_DECISION = parse_object({
+    "experiment_id": parse_id,
+    "subject_ref": parse_ref,
+    "decision": parse_enum("accept", "revise", "reject", "defer", "explore_anyway"),
+    "reason": lambda value, path: parse_str(value, path, max_len=32768),
+    "actor": parse_enum("user"),
+    "decided_at": parse_time,
+    "followup_refs": REFS,
+})
+
+FILE_PART = parse_object({
+    "part_id": parse_id,
+    "object_digest": parse_digest,
+    "byte_size": lambda value, path: parse_int(value, path, minimum=0),
+    "row_count": nullable(lambda value, path: parse_int(value, path, minimum=0)),
+    "serialization": parse_enum("parquet", "csv", "json", "binary"),
+    "schema_ref": nullable(parse_ref),
+    "partition": parse_object({
+        "market": nullable(lambda value, path: parse_str(value, path, min_len=1, max_len=32)),
+        "frequency": nullable(lambda value, path: parse_str(value, path, min_len=1, max_len=16)),
+        "year": nullable(lambda value, path: parse_int(value, path, minimum=1900, maximum=9999)),
+    }),
+    "sort_keys": STRINGS,
+})
+
+USE_VERDICT = parse_object({
+    "use": parse_enum("price_description", "exploratory_factor", "pit_training", "portfolio_backtest"),
+    "status": parse_enum("available", "limited", "blocked"),
+    "reasons": STRINGS,
+})
+
+DATASET_SNAPSHOT = parse_object({
+    "digest_scheme": parse_enum("snapshot_manifest_v3"),
+    "candidate_ref": parse_ref,
+    "quality_report_ref": parse_ref,
+    "raw_refs": REFS,
+    "normalized_refs": REFS,
+    "field_contract_ref": parse_ref,
+    "calendar_ref": parse_ref,
+    "membership_ref": parse_ref,
+    "availability_ref": parse_ref,
+    "merge_policy_ref": parse_ref,
+    "cleaning_policy_ref": parse_ref,
+    "parts": parse_array(FILE_PART, max_len=100000),
+    "market": lambda value, path: parse_str(value, path, min_len=1, max_len=32),
+    "frequency": parse_enum("day"),
+    "timezone": lambda value, path: parse_str(value, path, min_len=1, max_len=64),
+    "allowed_uses": parse_array(USE_VERDICT, max_len=16, min_len=1),
+})
+
+
 PAYLOAD_VALIDATORS: dict[str, Callable[[Any, str], dict]] = {
     "budget_policy": BUDGET_POLICY,
     "code_identity": CODE_IDENTITY,
@@ -640,6 +729,10 @@ PAYLOAD_VALIDATORS: dict[str, Callable[[Any, str], dict]] = {
     "data_plan": DATA_PLAN,
     "data_definition": DATA_DEFINITION,
     "research_definition": _research_definition,
+    "research_input": RESEARCH_INPUT,
+    "research_workflow": _research_workflow,
+    "human_decision": HUMAN_DECISION,
+    "dataset_snapshot": DATASET_SNAPSHOT,
     "execution_policy": EXECUTION_POLICY,
 }
 
@@ -672,10 +765,19 @@ def parse_envelope(value: Any, path: str = "$",
     """Validate the shared envelope and dispatch the payload to a frozen type."""
     registry = PAYLOAD_VALIDATORS if validators is None else validators
     envelope = ENVELOPE(value, path)
-    artifact_type = envelope["artifact_type"]
+    envelope["payload"] = parse_payload(envelope["artifact_type"], envelope["payload"],
+                                        f"{path}.payload", validators=registry)
+    return envelope
+
+
+def parse_payload(artifact_type: str, payload: Any, path: str = "$.payload",
+                  validators: Mapping[str, Callable[[Any, str], dict]] | None = None) -> dict:
+    """Validate one payload against its frozen type; unknown types are refused."""
+    registry = PAYLOAD_VALIDATORS if validators is None else validators
+    if not isinstance(payload, dict):
+        raise ContractError(path, "object_required", "expected a JSON object")
     parser = registry.get(artifact_type)
     if parser is None:
-        raise ContractError(f"{path}.payload", "payload_schema_not_frozen",
+        raise ContractError(path, "payload_schema_not_frozen",
                             f"artifact_type {artifact_type!r} has no frozen payload validator")
-    envelope["payload"] = parser(envelope["payload"], f"{path}.payload")
-    return envelope
+    return parser(payload, path)

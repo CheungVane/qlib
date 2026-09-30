@@ -139,6 +139,41 @@ class RetryNotAllowed(ExecutionError):
                 "reason_code": self.reason_code}
 
 
+class RevisionConflict(ExecutionError):
+    """COMMAND §4: expected_revision does not match the entity's current head."""
+
+    code = "revision_conflict"
+    status_code = 409
+
+    def __init__(self, entity_id: str, expected_revision: dict | None,
+                 current_revision: dict | None):
+        self.entity_id = entity_id
+        self.expected_revision = expected_revision
+        self.current_revision = current_revision
+        super().__init__(f"entity {entity_id!r} changed since the expected revision")
+
+    def as_details(self) -> dict[str, Any]:
+        return {"entity_id": self.entity_id, "expected_revision": self.expected_revision,
+                "current_revision": self.current_revision}
+
+
+class VersionConflict(ExecutionError):
+    """COMMAND §4: pointer/workflow CAS failed."""
+
+    code = "version_conflict"
+    status_code = 409
+
+    def __init__(self, resource_id: str, expected_version: int, current_version: int):
+        self.resource_id = resource_id
+        self.expected_version = expected_version
+        self.current_version = current_version
+        super().__init__(f"resource {resource_id!r} is at version {current_version}")
+
+    def as_details(self) -> dict[str, Any]:
+        return {"resource_id": self.resource_id, "expected_version": self.expected_version,
+                "current_version": self.current_version}
+
+
 class LedgerScopeMissing(ExecutionError):
     """PHYSICAL §3: reserve_usage never invents a limit; the scope must be registered."""
 

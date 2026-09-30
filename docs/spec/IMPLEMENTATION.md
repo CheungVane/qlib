@@ -2,6 +2,8 @@
 
 ## 当前执行里程碑（2026-09-30）
 
+**G1-2b交付（基线`5b0eafd8`，分支`codex/g1-foundation`）**：`Schema7Store`新增`save_revision`（幂等、payload闭合校验、规范摘要与对象写入、新实体+首个artifact同事务、`entities.head_artifact_id`头CAS、`commands`回执）与`set_default_snapshot`（`pointers.row_version` CAS）。补齐`research_input/research_workflow/human_decision/dataset_snapshot`（含FilePart/UseVerdict）校验器及`RevisionConflict/VersionConflict`错误；实体/artifact互引通过事务内`defer_foreign_keys`保证可原子提交且不UPDATE不可变artifact。6项专项覆盖新实体保存与重放、同键异载荷冲突、陈旧CAS不写、非法payload、默认快照指针CAS。完整门禁退出0：Python 359项（7跳过、0失败）、JS 28项通过；证据见[G1-2b证据](evidence/20260930-g1-2b-save-pointer.json)。未接入生产；旧submit/import共享保护、review/proposal/factor_definition等剩余payload、workflow自动边/trial事件仍归G1-2c—G1-4。
+
 **G1-2a交付（基线`b58e92f8`，分支`codex/g1-foundation`）**：新增`adapters/storage/schema7.py`，在schema7夹具上实现不可变artifact登记、Experiment实体、replay→preflight→单事务准入（Run/Attempt/Stages/`concurrency:global`租约/admitted事件/commands回执）、`UsageBudgetPort.reserve_usage`多维度原子扣量、retry复用Run并递增attempt_no；补齐`execution_policy/data_plan/data_definition/research_definition`校验器与相应domain错误。12项专项覆盖：同键异载荷冲突、独立连接争最后并发槽、独立连接争最后预算单位、逐写入点故障完整回滚、计划过期/Ref错配拒绝、`ExecutionService.admit_managed`接真实store。完整门禁退出0：Python 353项（7跳过、0失败）、JS 28项通过；证据见[G1-2a证据](evidence/20260930-g1-2a-admission.json)。**未接入生产**：`supported_schema`仍为6，组合根不注入schema7；save_revision头CAS/set_pointer、剩余命令payload、旧Attempt共享保护、workflow边/trial事件、发布与监督分别归G1-2b、G1-3、G1-4、G1-5。
 
 **G1-0/G1-1交付（基线`ff1f5e54`，分支`codex/g1-foundation`）**：G1-0已冻结维护命令、端口/事务/校验归属、监督身份协议与反例到测试映射（见[PHYSICAL §6.1](PHYSICAL_CONTRACT.md)、[ARCHITECTURE §9.4](ARCHITECTURE.md)、[EXECUTION EXEC13-B](EXECUTION.md)）。G1-1已实现`domain/contracts.py`共享闭合校验器、`maintenance.py`运维门面与`adapters/storage/migrations.py`+`qwb storage status|migrate|verify`：空/含历史schema6夹具→7，旧行数与摘要守恒、Run/外部绑定映射守恒、外键与完整性检查通过，未知schema拒绝、重复执行不重跑、失败回滚且保留备份、打开/中断Attempt须逐项`--confirm-attempt`确认；仅对隔离库执行。18项新专项（11+7）与完整门禁退出0：Python 341项（7跳过，0失败）、JS 28项通过；证据见[迁移与契约证据](evidence/20260930-g1-migration-contracts.json)。未迁移用户数据库、未接入schema7仓储、未实现原子准入/监督/发布；`supported_schema`仍为6，schema7程序不得回写。剩余边界的下一片为G1-2。
@@ -34,7 +36,7 @@
 
 ### 当前TODO：执行队列与任务完成门
 
-核对基线：`b58e92f8`（2026-09-30）。**G1-0/G1-1/G1-2a已交付；下一片为G1-2b**。G编号是集成顺序，下面的G1子编号是交付切片；T编号是长期工作包，A编号是验收要求，SR编号是缺陷。它们描述同一工作，不是四份独立待办。下方T表维护范围映射，不再按T编号从头施工；已完成T01/T03及SR06限定复算不重复执行。
+核对基线：`5b0eafd8`（2026-09-30）。**G1-0/G1-1/G1-2a/G1-2b已交付；下一片为G1-2c**。G编号是集成顺序，下面的G1子编号是交付切片；T编号是长期工作包，A编号是验收要求，SR编号是缺陷。它们描述同一工作，不是四份独立待办。下方T表维护范围映射，不再按T编号从头施工；已完成T01/T03及SR06限定复算不重复执行。
 
 这份队列不表示后续所有任务都已达到可直接编码状态。**可开始**指本片前置满足；**待前片**指前片证据通过后才能实施依赖部分；**待专属设计**指先补具体来源/引擎/载荷映射再编码。协议存在、目录已建或历史门禁通过都不解除前置。此处状态唯一维护，代码README只引用本节。
 
@@ -43,7 +45,8 @@
 | G1-0 实施映射 / **设计已交付（2026-09-30）；G1-1可开始** | 读PHYSICAL_CONTRACT §2—6、COMMAND_CONTRACT §1—4、ARTIFACT_CONTRACT §1/6、EXECUTION EXEC13-A；核对`adapters/storage/storage_base.py`的schema6和`ports/research.py` | 按下方清单把剩余工程决策写入各自权威专题，给出方法/对象/表/测试对应关系；确认现有旧准入与managed共用保护。设计验收不提升运行能力 | 关联T04/T06、A40/A41/A45设计映射；不等待T04/T05整体完成，不重设计已冻结DDL/DTO，不启动实际迁移 |
 | G1-1 契约校验与迁移实现 / **已交付（本提交，仅隔离库）；G1-2可开始** | `domain/contracts.py`共享标量/DTO/封套校验、`maintenance.py`运维门面、`adapters/storage/migrations.py`+`qwb storage`维护入口 | 空库及完整schema6夹具→7，外键/唯一键、旧ID/hash/字节不变；未知版本拒绝、故障回滚、重复维护命令行为按PHYSICAL §6；启动不新增6→7迁移。拒绝未知字段/NaN/重复JSON键/错类型/未注册payload；未发布引用由存储回调层拒绝。证据见[迁移与契约证据](evidence/20260930-g1-migration-contracts.json) | 仅隔离库与备份副本；无在线采集、用户库切换、生产managed注入；schema7仓储/命令payload仍归G1-2；对应T06/A35存储子项及A45-1 |
 | G1-2 原子准入与账本 / **部分：G1-2a已交付（本提交）** | `adapters/storage/schema7.py`实现`ManagedAdmissionPort`与`UsageBudgetPort`；`services/execution.py`经注入端口共用。G1-2a覆盖replay/单事务准入/并发槽/预算预留/retry；save_revision头CAS、set_pointer与剩余专题payload归G1-2b | G1-2a已验：重放先于只读预检；同键异载荷冲突；Run/Attempt/Stage/租约/事件/回执一次提交；两连接抢最后槽或最后额度只成功一个；逐写入点故障无半条记录；拒绝不扣。证据见[G1-2a证据](evidence/20260930-g1-2a-admission.json) | 生产注入归G1-5；不宣称引擎可运行、不启第二套状态机 |
-| G1-2b 保存端口、剩余payload与遗留保护 / **待G1-2a（已满足）；下一片** | 扩展`adapters/storage/schema7.py`：`save_revision`头CAS/entity head/commands存根、`set_pointer`；注册该批命令暴露的`research_input/research_workflow/review/proposals/factor_definition`等validator；旧submit/import接入同一幂等/预算/槽保护 | SaveReceipt/RevisionConflict语义；同entity并发CAS仅一个成功；旧Attempt不绕过新保护；未发布父引用拒绝；不改历史ID/字节 | A45-1部分；不接发布端口（G1-4）、不启监督（G1-3）、不注入生产（G1-5） |
+| G1-2b 保存端口与快照指针 / **已交付（本提交）** | `Schema7Store.save_revision`（新实体+首个artifact同事务、头CAS、幂等、commands存根）与`set_default_snapshot`（指针CAS）；补齐`research_input/research_workflow/human_decision/dataset_snapshot`校验 | SaveReceipt/RevisionConflict/VersionConflict语义；陈旧CAS不写；同键重放返回原回执；未注册payload拒绝。证据见[G1-2b证据](evidence/20260930-g1-2b-save-pointer.json) | A45-1部分；未接发布端口、监督、生产注入 |
+| G1-2c 遗留保护、自动边与剩余payload / **待G1-2b（已满足）；下一片** | 旧submit/import接入同一幂等/预算/槽保护且不改历史ID；注册`review/hypothesis_proposal/formula_proposal/factor_definition/prepared_input/model/prediction/strategy`等validator；实现workflow_edges/trial_events的至多一次准入 | 旧Attempt不绕过新保护；自动边重复/崩溃/并发不重复准入；未注册payload拒绝；不得用面板冒充策略权重 | A45-1/5部分；发布端口（G1-4）、监督（G1-3）、生产注入（G1-5）另片 |
 | G1-3 独立监督与旧路径保护 / **待G1-2** | `services/execution.py`监督用例、`adapters/executors.py`身份/停止核验、`bootstrap.py`及部署启动入口；持久化转移与lease共用G1-2仓储 | 无API读取且CLI退出仍按冻结deadline终止；监督启动失败不启动引擎；死包装进程/活容器、失联/清理失败保持占槽；重启核对launch_token不重启同一实例；取消/迟到退出/政策切换覆盖EXEC13-A八组反例，含实际隔离进程及所支持容器路线 | 修SR01/02；旧Qlib/RD-Agent入口同样复验，不能只保护新managed。自动研究链业务仍未交付 |
 | G1-4 产物发布与输入解析 / **待G1-2；可与G1-3分开开发，联合验收依赖G1-3** | `ArtifactPublicationPort`及预检/输入解析端口；实现落存储/数据适配器，领域计算不写业务表 | 暂存对象核验字节/schema/父引用/生产者后才能发布；失败质量报告可保存但不能发布可消费快照；发布前后崩溃/取消竞争按回执恢复，索引可重建；schema2历史不改、managed/imported绑定冲突拒绝 | A43-5/A45-1/2/5子项；快照发布采用离线夹具，不冒充真实在线源验收 |
 | G1-5 底座联合交付 / **待G1-3及G1-4** | 组合根成对注入预检/事务适配器；CLI/API共用服务与错误映射；新能力仍逐项登记 | 完整门禁及G1跨模块故障矩阵；临时部署启动/恢复、旧路由/导入/历史结果兼容；提供显式维护命令、备份恢复说明与验收证据。准备切换用户库时另按PHYSICAL §6核对真实环境前置 | 只交付底座，未验来源/Agent/训练仍为unavailable；不关闭A43/A44/A45父项，不把底座完成当作一键流水线完成 |
@@ -55,6 +58,8 @@ G1-0交付位置：迁移命令与启动分离冻结于[PHYSICAL_CONTRACT §6.1]
 G1-1交付边界：`domain/contracts.py`实现严格JSON、标量、Ref/SnapshotRef/WriteMeta/Save/Parent/Check/ArtifactEnvelope与9类已冻结技术载荷校验，未注册类型返回`payload_schema_not_frozen`；`maintenance.py`是运维门面（非服务端口），`adapters/storage/migrations.py`实现PHYSICAL §6.1的备份、逐项确认、单事务迁移、守恒核对与只读verify。迁移只在临时夹具验证，`SqliteStore`仍`supported_schema=6`并以`SchemaVersionError`拒绝schema7，直到G1-2/G1-5接入。业务命令载荷（research/data/model等）随其入口实现分别注册，未注册前对应命令不可用；这不是已知漏洞，而是按契约拒绝。
 
 G1-2a交付边界：`adapters/storage/schema7.py`是schema7夹具/候选适配器，不是生产组合根成员。它保存不可变artifact与Experiment实体，`admit_run`在一个`BEGIN IMMEDIATE`中完成幂等、已发布Ref/类型、plan有效期、workflow启用、Experiment存在、`concurrency:global`槽、Run/Attempt/Stages/租约/事件/回执；`reserve_usage`要求scope已由冻结policy预置，拒绝时不改变任何用量。旧`submit`/导入路径、`save_revision`头CAS、`set_pointer`、workflow自动边、trial_events、发布端口和监督都未接入；不得把本切片说成执行底座完成或功能可用。
+
+G1-2b交付边界：`save_revision`只服务已注册的版本化artifact类型（research_input/research_definition/data_definition/research_workflow）；实验本身仍由`save_experiment`创建，policy/rule等部署型artifact不开放通用Save。新实体与其首个artifact在`defer_foreign_keys`事务内一次提交，避免对不可变`artifacts`做UPDATE；更新必须带`expected_revision`并匹配当前head的ID与摘要。`set_default_snapshot`只写`default_research_snapshot`指针并要求目标已发布snapshot。旧Attempt保护、review/proposal/factor_definition等payload、workflow自动边与trial账本仍未接入。
 
 #### G1-0的具体交付清单
 
