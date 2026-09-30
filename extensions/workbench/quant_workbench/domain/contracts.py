@@ -817,6 +817,65 @@ FACTOR_DEFINITION = parse_object({
 })
 
 
+PREPARED_INPUT = parse_object({
+    "request_ref": parse_ref,
+    "snapshot_ref": parse_snapshot_ref,
+    "axis_ref": parse_ref,
+    "feature_parts": parse_array(FILE_PART, max_len=100000),
+    "label_parts": parse_array(FILE_PART, max_len=100000),
+    "membership_mask_parts": parse_array(FILE_PART, max_len=100000),
+    "feature_validity_parts": parse_array(FILE_PART, max_len=100000),
+    "label_validity_parts": parse_array(FILE_PART, max_len=100000),
+    "availability_parts": parse_array(FILE_PART, max_len=100000),
+    "exclusions_ref": parse_ref,
+    "logical_input_digest": parse_digest,
+    "checks": parse_array(CHECK, max_len=512),
+    "limitations": STRINGS,
+})
+
+MODEL = parse_object({
+    "model_spec_ref": parse_ref,
+    "engine_binding_ref": parse_ref,
+    "prepared_input_ref": parse_ref,
+    "fold_id": parse_id,
+    "feature_contract_ref": parse_ref,
+    "preprocessing_state_ref": parse_ref,
+    "label_ref": parse_ref,
+    "fit_interval": INTERVAL,
+    "validation_plan_ref": parse_ref,
+    "weights": parse_array(FILE_PART, max_len=100000),
+    "code_ref": parse_ref,
+    "environment_ref": parse_ref,
+    "seed": lambda value, path: parse_int(value, path, minimum=0, maximum=2 ** 63 - 1),
+})
+
+PREDICTION = parse_object({
+    "model_ref": parse_ref,
+    "prepared_input_ref": parse_ref,
+    "fold_id": nullable(lambda value, path: parse_str(value, path, min_len=1, max_len=128)),
+    "parts": parse_array(FILE_PART, max_len=100000),
+    "signal_availability_parts": parse_array(FILE_PART, max_len=100000),
+    "feature_contract_ref": parse_ref,
+    "code_ref": parse_ref,
+})
+
+
+def _strategy(value: Any, path: str) -> dict:
+    record = parse_object({
+        "signal_kind": parse_enum("model", "factor_rule"),
+        "model_ref": nullable(parse_ref),
+        "factor_definition_refs": REFS,
+        "signal_rule_ref": parse_ref,
+        "portfolio_rule_ref": parse_ref,
+        "risk_rule_ref": parse_ref,
+    })(value, path)
+    if record["signal_kind"] == "model" and record["model_ref"] is None:
+        raise ContractError(path, "invalid_strategy", "model signal requires model_ref")
+    if record["signal_kind"] == "factor_rule" and record["model_ref"] is not None:
+        raise ContractError(path, "invalid_strategy", "factor_rule signal must not carry model_ref")
+    return record
+
+
 PAYLOAD_VALIDATORS: dict[str, Callable[[Any, str], dict]] = {
     "budget_policy": BUDGET_POLICY,
     "code_identity": CODE_IDENTITY,
@@ -838,6 +897,10 @@ PAYLOAD_VALIDATORS: dict[str, Callable[[Any, str], dict]] = {
     "hypothesis_proposal": HYPOTHESIS_PROPOSAL,
     "formula_proposal": FORMULA_PROPOSAL,
     "factor_definition": FACTOR_DEFINITION,
+    "prepared_input": PREPARED_INPUT,
+    "model": MODEL,
+    "prediction": PREDICTION,
+    "strategy": _strategy,
     "execution_policy": EXECUTION_POLICY,
 }
 

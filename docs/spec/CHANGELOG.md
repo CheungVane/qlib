@@ -2,6 +2,13 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-30 — G1-2d数据/模型/策略payload闭合校验
+
+- 来源：G1-2c后继续G1-2，交付数据/模型/策略payload校验（G1-2d），基线`18b26bc8`。关联U20/U23/U31、G3/G4；父项不关闭。
+- 实现：`domain/contracts.py`新增`prepared_input/model/prediction/strategy`闭合validator；model要求fit区间/验证计划/权重/seed，prediction不携带fit字段，strategy强制model信号有`model_ref`、factor_rule信号无`model_ref`。未注册类型仍`payload_schema_not_frozen`。
+- 验证：`test_contracts.py`新增payload注册测试（12项通过）；完整`workbench_gate.sh`退出0，Python 364项（7跳过、0失败）、JS 28项通过。证据见[G1-2d证据](evidence/20260930-g1-2d-payloads.json)。
+- 边界：未注入生产、未迁用户库；引擎专属model_spec/execution_scenario参数schema仍须G3/G4设计门。旧submit/import共享保护归G1-2e，发布/监督/真实迁移归G1-3—5。
+
 ## 2026-09-30 — G1-2c Agent评议校验与自动边至多一次
 
 - 来源：G1-2b后继续G1-2，交付评议/提案校验与自动边写入（G1-2c），基线`843e0fe8`。关联U29/U30/U31、A44/A45-1/A45-5；父项不关闭。

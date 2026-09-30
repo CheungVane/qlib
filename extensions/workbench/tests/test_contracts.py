@@ -133,5 +133,35 @@ class EnvelopeTests(unittest.TestCase):
         self.assertEqual("missing_field", caught.exception.rule)
 
 
+class PayloadRegistryTests(unittest.TestCase):
+    def test_prepared_model_prediction_and_strategy_payloads(self):
+        snapshot = {"artifact_id": "S1", "artifact_type": "dataset_snapshot", "schema_version": 3,
+                    "content_digest": "sha256:" + "c" * 64}
+        prepared = {"request_ref": ref(), "snapshot_ref": snapshot, "axis_ref": ref(),
+                    "feature_parts": [], "label_parts": [], "membership_mask_parts": [],
+                    "feature_validity_parts": [], "label_validity_parts": [],
+                    "availability_parts": [], "exclusions_ref": ref(),
+                    "logical_input_digest": "sha256:" + "d" * 64, "checks": [], "limitations": []}
+        c.parse_payload("prepared_input", prepared)
+        model = {"model_spec_ref": ref(), "engine_binding_ref": ref(), "prepared_input_ref": ref(),
+                 "fold_id": "fold1", "feature_contract_ref": ref(), "preprocessing_state_ref": ref(),
+                 "label_ref": ref(), "fit_interval": {"start": "2020-01-01", "end": "2020-12-31"},
+                 "validation_plan_ref": ref(), "weights": [], "code_ref": ref(),
+                 "environment_ref": ref(), "seed": 1}
+        c.parse_payload("model", model)
+        prediction = {"model_ref": ref(), "prepared_input_ref": ref(), "fold_id": None, "parts": [],
+                      "signal_availability_parts": [], "feature_contract_ref": ref(), "code_ref": ref()}
+        c.parse_payload("prediction", prediction)
+        rule = {"signal_kind": "factor_rule", "model_ref": None, "factor_definition_refs": [ref()],
+                "signal_rule_ref": ref(), "portfolio_rule_ref": ref(), "risk_rule_ref": ref()}
+        c.parse_payload("strategy", rule)
+        with self.assertRaises(c.ContractError):
+            c.parse_payload("strategy", rule | {"model_ref": ref()})
+        with self.assertRaises(c.ContractError):
+            c.parse_payload("strategy", {"signal_kind": "model", "model_ref": None,
+                                         "factor_definition_refs": [], "signal_rule_ref": ref(),
+                                         "portfolio_rule_ref": ref(), "risk_rule_ref": ref()})
+
+
 if __name__ == "__main__":
     unittest.main()

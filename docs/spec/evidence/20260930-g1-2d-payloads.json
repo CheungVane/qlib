@@ -1,0 +1,37 @@
+{
+  "date": "2026-09-30",
+  "baseline": "18b26bc8",
+  "branch": "codex/g1-foundation",
+  "milestone": "G1-2d prepared_input/model/prediction/strategy closed payloads",
+  "deliverable": {
+    "module": "extensions/workbench/quant_workbench/domain/contracts.py",
+    "validators_added": ["prepared_input", "model", "prediction", "strategy"],
+    "tests": "extensions/workbench/tests/test_contracts.py PayloadRegistryTests",
+    "production_wiring": "none; running service still supports schema6 only"
+  },
+  "implemented": [
+    "prepared_input requires snapshot_ref, axis/exclusions refs, logical digest, typed FileParts and checks",
+    "model requires fit interval, validation plan, weights and seed; no implicit re-fit field",
+    "prediction carries model_ref/prepared_input_ref and no fit fields",
+    "strategy enforces model signal -> model_ref present; factor_rule -> model_ref absent",
+    "unknown fields and unsupported types remain refused by the closed-record layer"
+  ],
+  "not_done": [
+    "legacy submit/import sharing the schema7 idempotency/budget/slot protection (G1-2e)",
+    "engine-specific model_spec/generator/execution_scenario parameter schemas (G3/G4 design gates)",
+    "record_transition adapter and supervisor (G1-3)",
+    "artifact publication port and failure-report publication rules (G1-4)",
+    "production injection and real database migration (G1-5)"
+  ],
+  "verification": {
+    "command": "bash scripts/workbench_gate.sh",
+    "exit_code": 0,
+    "python": {"total": 364, "skipped": 7, "failures": 0, "errors": 0, "seconds": 111.667},
+    "javascript": {"total": 28, "passed": 28, "failed": 0},
+    "focused": {"test_contracts": 12, "test_schema7_ledger": 4, "test_schema7_save": 6,
+                "test_schema7_admission": 12},
+    "known_non_failures": ["existing subprocess ResourceWarning", "expected fault-injection API traceback"]
+  },
+  "open": ["SR01-SR04", "A43-A45", "G1-2e legacy Attempt protection"],
+  "next": "G1-2e legacy submit/import sharing the schema7 idempotency/budget/slot protection"
+}
