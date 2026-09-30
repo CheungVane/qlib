@@ -41,10 +41,6 @@ DataPipelineService.start / ResearchWorkflowService.start
 
 ## 后续实现顺序
 
-1. 按PHYSICAL_CONTRACT实现存储、迁移、原子准入与恢复，并修复EXEC13/SR保护；预检需要的工作流派生定义必须原子创建，不能在只读preflight偷写。当前工作流依赖缺失时应拒绝。
-2. 在bootstrap显式注入通过验收的实现；构造对象不启动引擎/下载。真实能力未验收之前，不新增ready声明或可点击生产入口。
-3. 分领域补适配器：data_sources、research_agents与训练/推理/回测实现；不先建立一堆空目录。新增实现只依赖domain/ports，不能反向导入services。
-4. 完成命令DTO解析与API/CLI映射，再接专业页面。现有ui/state.js、transport.js继续共用，新页面按ARCHITECTURE拆分，不把计算塞进app.js。
-5. 一个垂直流程完成后验收真实输入/输出/恢复和浏览器路径，回写spec；框架测试不替代A43—45。
+唯一执行队列见[IMPLEMENTATION](../../../docs/spec/IMPLEMENTATION.md)的“当前TODO：执行队列与任务完成门”。G1-0补剩余工程映射，G1-1—5分别交付契约/迁移、原子准入、独立监督、产物发布与联合验收；领域适配器和专业页面随后按G2—G4切片。本文只维护代码导航，不维护另一份任务状态。
 
 测试入口：仓库根`bash scripts/workbench_gate.sh`。`tests/test_managed_framework.py`使用隔离替身检查拒绝、幂等顺序、身份保持和单事务边界；`tests/architecture_rules.py`阻止错误依赖和绕过Run所有者。它们不证明SQLite并发、独立监督、真实源/Agent或引擎可用。
