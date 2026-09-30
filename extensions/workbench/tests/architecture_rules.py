@@ -6,7 +6,7 @@ See docs/spec/ARCHITECTURE.md for migration ownership and acceptance boundaries.
 import ast
 import importlib.util
 
-TOP_LEVEL = set('''__init__ api application bootstrap cli cn_market cn_schema dashboard
+TOP_LEVEL = set('''__init__ api application bootstrap cli maintenance cn_market cn_schema dashboard
  data_directory dto execution execution_policy factor_pipeline factors factors_v2 free_sources
  metrics model numeric provenance research research_lifecycle risk risk_v2 series_view
  source_safety storage storage_attempts storage_base storage_factors storage_results telemetry

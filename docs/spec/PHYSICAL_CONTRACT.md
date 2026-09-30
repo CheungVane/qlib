@@ -1,6 +1,6 @@
 # 共享物理合同：存储、事务与迁移
 
-状态：G0设计版本1，2026-09-29；U29/U30/U31、ARC13、LIFE01、EXEC04/13、A43—45。基线7c4b8b2f，当前数据库schema6。本文与[命令合同](COMMAND_CONTRACT.md)、[产物合同](ARTIFACT_CONTRACT.md)共同细化[总架构](ARCHITECTURE.md)，只设计，不是已部署迁移。下面DDL以schema6为输入，目标schema7；实施前若实际最高schema已变化，必须先重基设计，禁止覆盖别人的迁移编号。
+状态：G0设计版本1，2026-09-29；U29/U30/U31、ARC13、LIFE01、EXEC04/13、A43—45。基线7c4b8b2f，当前数据库schema6；G1-1已实现隔离迁移工具与只读verify（见IMPLEMENTATION与[证据](evidence/20260930-g1-migration-contracts.json)），未对任何生产库执行。本文与[命令合同](COMMAND_CONTRACT.md)、[产物合同](ARTIFACT_CONTRACT.md)共同细化[总架构](ARCHITECTURE.md)。下面DDL以schema6为输入，目标schema7；实施前若实际最高schema已变化，必须先重基设计，禁止覆盖别人的迁移编号。
 
 ## 1. 存储分工与不变量
 

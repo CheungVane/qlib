@@ -325,7 +325,7 @@ UI优先选择真实数据组并明确来源/区间/基线性质；数据页不�
 | publish_artifacts | `ArtifactPublicationPort.publish_stage` → `adapters/storage`（字节核验在对象存储适配器） | 已核验对象/父引用/生产者/阶段结果的artifact、parents、发布回执与完成事件；结果发布另写revisions/外部绑定 | 端口草案已冻结；G1-4 |
 | set_pointer | `ArtifactStorePort.set_pointer` → `adapters/storage` | 目标已发布、CAS、响应存根；不得替换Run定义 | 新端口；G1-4 |
 | replay / prepare_admission | `ManagedAdmissionPort.replay` / `AdmissionPreflightPort.prepare_admission` → `adapters/storage`+能力适配器 | 只读：replay先于预检，命中即按原回执返回；预检解析冻结版本与能力，不写库 | 端口草案已冻结；实现归G1-2/G1-5 |
-| schema迁移 | `storage`维护命令（不暴露为服务端口） | 独立进程；事务外`foreign_keys=OFF`，`BEGIN IMMEDIATE`内执行，末尾核对后写`user_version=7` | 命令与验收冻结于[PHYSICAL §6.1](PHYSICAL_CONTRACT.md)；实现归G1-1 |
+| schema迁移 | `storage`维护命令（不暴露为服务端口） | 独立进程；事务外`foreign_keys=OFF`，`BEGIN IMMEDIATE`内执行，末尾核对后写`user_version=7` | 命令与验收冻结于[PHYSICAL §6.1](PHYSICAL_CONTRACT.md)；G1-1已实现并隔离验收，schema7仓储接入归G1-2/G1-5 |
 
 校验按层归属，下层不信任上层结论：
 

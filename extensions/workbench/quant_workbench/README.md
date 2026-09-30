@@ -11,6 +11,7 @@
 | domain/workflows.py | 7类固定计划及顺序/步骤职责 | 描述计划，不是DAG运行器 |
 | domain/worker.py | worker上下文、截止时间、预算范围及受控输出身份 | 不携带SDK对象或本机绝对路径 |
 | domain/data_pipeline.py / factor_expression.py | 来源计划子集与公式编译结果 | 不是来源客户端或DSL解释器 |
+| domain/contracts.py | G1共享闭合校验：严格JSON、标量、Ref/Save/封套与已冻结技术载荷 | 不做I/O、授权或“引用已发布”判断；未注册payload拒绝 |
 | services/data_pipeline.py | 数据入口→ResearchRunService | 不能自己创建Attempt/扣预算/启动下载 |
 | services/research_workflows.py | 人参与入口→ResearchRunService | 后续人工交接、候选账本归此服务；无自动后台链实现 |
 | services/research_runs.py | 唯一Run用例入口→ManagedExecutionPort | 存储写入交给原子准入，不能先插Run再插预算 |
@@ -21,6 +22,12 @@
 | ports/modeling.py | fit / predict / portfolio / simulate各自独立 | 回测无fit，推理无重新拟合 |
 | bootstrap.py | 显式注入事务/预检实现，组装现有ExecutionService | 默认不注入，不暴露新HTTP能力 |
 | application.py | 将各领域入口暴露为同一服务对象图 | 兼容门面不扩展业务规则 |
+| maintenance.py | 运维门面：storage状态、显式迁移、只读verify | 不是服务端口，不被bootstrap/api构造；不启动引擎 |
+| adapters/storage/migrations.py | schema6→7单事务迁移、一致性备份、守恒与完整性核对 | 只在运维命令调用；启动路径不新增6→7迁移 |
+
+## 维护命令
+
+迁移是独立运维命令，不通过HTTP、不构造常规服务：`qwb --root <platform> storage status`只读报告版本与打开Attempt；`storage migrate --backup <new-path> [--confirm-attempt <id>]...`先备份再迁移，任何打开/中断Attempt必须逐项确认；`storage verify --schema 7`只读核对表/索引/外键/完整性与Run绑定归属。当前仓库仍`supported_schema=6`：schema7仓储归G1-2/G1-5，迁移只能对隔离夹具演练。
 
 ## 一次准入的实际调用链
 

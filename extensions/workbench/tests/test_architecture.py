@@ -39,6 +39,10 @@ class ArchitectureTests(unittest.TestCase):
             with self.subTest(module=module, source=source):
                 self.assertTrue(violations(module, source))
         self.assertFalse(violations('services.new_use_case', 'from ..ports import ResultRepository'))
+        # Operator maintenance is a facade that may assemble the migration
+        # adapter; cli/api still cannot bypass the service boundary.
+        self.assertFalse(violations('maintenance', 'from .adapters.storage import migrations'))
+        self.assertTrue(violations('cli', 'from .adapters.storage import migrations'))
 
     def test_repository_ports_cover_actual_service_calls(self):
         for module, protocol in [('results', ports.ResultRepository), ('factors', ports.FactorRepository),

@@ -1,0 +1,61 @@
+{
+  "date": "2026-09-30",
+  "baseline": "ff1f5e54",
+  "branch": "codex/g1-foundation",
+  "milestones": ["G1-0 implementation mapping", "G1-1 contract validators and schema6->7 migration"],
+  "g1_0_locations": {
+    "migration_command_and_startup_split": "docs/spec/PHYSICAL_CONTRACT.md section 6.1",
+    "ports_transactions_and_validation_layers": "docs/spec/ARCHITECTURE.md section 9.4",
+    "supervisor_and_instance_identity": "docs/spec/EXECUTION.md EXEC13-B",
+    "parameter_shape_and_unfrozen_payload_refusal": "docs/spec/ARTIFACT_CONTRACT.md section 6"
+  },
+  "g1_1_deliverables": {
+    "validator_module": "extensions/workbench/quant_workbench/domain/contracts.py",
+    "maintenance_facade": "extensions/workbench/quant_workbench/maintenance.py",
+    "migration_adapter": "extensions/workbench/quant_workbench/adapters/storage/migrations.py",
+    "cli": "qwb storage status|migrate|verify",
+    "tests": ["extensions/workbench/tests/test_contracts.py", "extensions/workbench/tests/test_migrations.py"]
+  },
+  "validator_scope": {
+    "implemented": ["strict JSON", "Id", "Digest", "Time", "Date", "Key", "decimal string",
+                    "Ref", "SnapshotRef", "WriteMeta", "Save", "Parent", "Check",
+                    "ArtifactEnvelope", "budget_policy", "code_identity", "environment",
+                    "capability_record", "execution_evidence", "feature_contract",
+                    "label_definition", "sample_plan", "date_rule", "Parameter"],
+    "refused_until_registered": ["research_input", "research_definition", "data_definition",
+                                 "data_plan", "dataset_snapshot", "prepared_input", "factor_panel",
+                                 "model", "prediction", "strategy", "execution_policy"],
+    "note": "Unknown or not-yet-registered artifact_type returns payload_schema_not_frozen; no arbitrary JSON is accepted. G1-2 adds the payload validators required by the commands it exposes."
+  },
+  "migration_evidence": {
+    "source_schema": 6,
+    "target_schema": 7,
+    "supported_schema_after_g1_1": 6,
+    "isolated_only": true,
+    "verified": ["empty and seeded schema6 fixtures", "full legacy row counts and digests preserved",
+                 "Run to external_run_bindings mapping preserved", "foreign_key_check ok",
+                 "integrity_check ok", "latest_revision ownership", "unknown schema refused",
+                 "repeat migrate returns changed=false without overwriting backup",
+                 "failed statement rolls back to schema6 and keeps the backup",
+                 "open/interrupted attempts require exact --confirm-attempt coverage"],
+    "cli_transcript": {
+      "status": {"user_version": 6, "open_attempts": []},
+      "migrate": {"changed": true, "target_version": 7, "postcheck": {"schema_version": 7,
+                  "foreign_key_check": "ok", "integrity_check": "ok"}},
+      "verify": {"schema_version": 7, "integrity_check": "ok"}
+    },
+    "not_done": ["production database migration", "schema7 repository/write path",
+                 "atomic admission/budget/leases", "independent supervisor",
+                 "artifact publication port"]
+  },
+  "verification": {
+    "command": "bash scripts/workbench_gate.sh",
+    "exit_code": 0,
+    "python": {"total": 341, "skipped": 7, "failures": 0, "errors": 0, "seconds": 110.389},
+    "javascript": {"total": 28, "passed": 28, "failed": 0},
+    "focused": {"test_contracts": 11, "test_migrations": 7, "test_architecture": 7},
+    "known_non_failures": ["existing subprocess ResourceWarning", "expected fault-injection API traceback"]
+  },
+  "open": ["SR01-SR04", "A43-A45", "G1-2 command payload validators and atomic admission"],
+  "next": "G1-2 atomic admission/budget/lease transaction"
+}

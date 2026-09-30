@@ -2,6 +2,8 @@
 
 ## 当前执行里程碑（2026-09-30）
 
+**G1-0/G1-1交付（基线`ff1f5e54`，分支`codex/g1-foundation`）**：G1-0已冻结维护命令、端口/事务/校验归属、监督身份协议与反例到测试映射（见[PHYSICAL §6.1](PHYSICAL_CONTRACT.md)、[ARCHITECTURE §9.4](ARCHITECTURE.md)、[EXECUTION EXEC13-B](EXECUTION.md)）。G1-1已实现`domain/contracts.py`共享闭合校验器、`maintenance.py`运维门面与`adapters/storage/migrations.py`+`qwb storage status|migrate|verify`：空/含历史schema6夹具→7，旧行数与摘要守恒、Run/外部绑定映射守恒、外键与完整性检查通过，未知schema拒绝、重复执行不重跑、失败回滚且保留备份、打开/中断Attempt须逐项`--confirm-attempt`确认；仅对隔离库执行。18项新专项（11+7）与完整门禁退出0：Python 341项（7跳过，0失败）、JS 28项通过；证据见[迁移与契约证据](evidence/20260930-g1-migration-contracts.json)。未迁移用户数据库、未接入schema7仓储、未实现原子准入/监督/发布；`supported_schema`仍为6，schema7程序不得回写。剩余边界的下一片为G1-2。
+
 **本次TODO可执行性复审（基线`4a150314`，仅文档）**：补充下方唯一执行队列G1-0—5，明确每片前置、落点、交付、反例与退出条件；消除T06与T04/T05父项的循环等待及旧“DDL/DTO未补”表述。下一任务为G1-0实施映射，尚未执行；后续未冻结的来源/引擎专属设计仍明确阻断相应用例。验证范围为文档链接/锚点、任务依赖无环、要求编号保留、代码落点存在及diff检查，没有运行时代码变更或新能力验收。
 
 **上批整理与结构复审（基线`4f11929a`，交付`4a150314`）**：根目录Markdown从35份减至22份，13份历史/重复入口迁入[archive](archive/README.md)，RW01—06原文及验收合入RESEARCH_LIFECYCLE §8。来源合同与审计历史分离，旧批次摘要归档；要求ID、原始数字、证据与开放缺口保留。修正共享DDL/DTO及验证v2的过期状态；当前代码框架范围仍如下，不因整理提升业务能力。
@@ -30,15 +32,15 @@
 
 ### 当前TODO：执行队列与任务完成门
 
-核对基线：`4a150314`（2026-09-30）。**下一位执行者从G1-0开始**，完成并回写后再领取下一片。G编号是集成顺序，下面的G1子编号是交付切片；T编号是长期工作包，A编号是验收要求，SR编号是缺陷。它们描述同一工作，不是四份独立待办。下方T表维护范围映射，不再按T编号从头施工；已完成T01/T03及SR06限定复算不重复执行。
+核对基线：`ff1f5e54`（2026-09-30）。**G1-0设计与G1-1迁移/共享校验器已交付；下一片为G1-2**。G编号是集成顺序，下面的G1子编号是交付切片；T编号是长期工作包，A编号是验收要求，SR编号是缺陷。它们描述同一工作，不是四份独立待办。下方T表维护范围映射，不再按T编号从头施工；已完成T01/T03及SR06限定复算不重复执行。
 
 这份队列不表示后续所有任务都已达到可直接编码状态。**可开始**指本片前置满足；**待前片**指前片证据通过后才能实施依赖部分；**待专属设计**指先补具体来源/引擎/载荷映射再编码。协议存在、目录已建或历史门禁通过都不解除前置。此处状态唯一维护，代码README只引用本节。
 
 | 切片 / 当前状态 | 输入与落点（包内路径） | 本片交付及最小验收 | 后续依赖 / 不包含 |
 | --- | --- | --- | --- |
 | G1-0 实施映射 / **设计已交付（2026-09-30）；G1-1可开始** | 读PHYSICAL_CONTRACT §2—6、COMMAND_CONTRACT §1—4、ARTIFACT_CONTRACT §1/6、EXECUTION EXEC13-A；核对`adapters/storage/storage_base.py`的schema6和`ports/research.py` | 按下方清单把剩余工程决策写入各自权威专题，给出方法/对象/表/测试对应关系；确认现有旧准入与managed共用保护。设计验收不提升运行能力 | 关联T04/T06、A40/A41/A45设计映射；不等待T04/T05整体完成，不重设计已冻结DDL/DTO，不启动实际迁移 |
-| G1-1 契约校验与迁移实现 / **待G1-0** | `domain/`纯校验、`adapters/storage/`迁移/版本检查、`cli.py`维护入口；按COMMAND/ARTIFACT已冻结的共享类型逐类机器校验；专属未冻类型明确拒绝，不猜字段 | 空库及完整schema6夹具→7，外键/唯一键、旧ID/hash/字节不变；未知版本拒绝、故障回滚、重复维护命令行为按PHYSICAL §6；启动不得偷偷迁移。拒绝未知字段/NaN/重复JSON键/错类型/未发布引用，校验职责按层分开 | 仅隔离库与备份副本；无在线采集、用户库切换、生产managed注入；为G1-2/4提供可验证存储；对应T06/A35存储子项及A45-1 |
-| G1-2 原子准入与账本 / **待G1-1** | `ports/research.py`实现落`adapters/storage/`，`services/execution.py`和Run入口共用；旧Attempt提交兼容接入同一幂等/预算/槽保护 | 重放先于只读预检；同键异载荷冲突；事务内重新验证并一次提交Run/Attempt/定义（适用时）/边/预算/槽/launch意图/回执。两个独立连接抢最后额度只准入一个；逐写入点故障注入无半条记录；拒绝不扣、准入后失败不退 | 修SR03及A45-1/5相关子项；不宣称引擎已能运行，不启动第二套预算/状态机 |
+| G1-1 契约校验与迁移实现 / **已交付（本提交，仅隔离库）；G1-2可开始** | `domain/contracts.py`共享标量/DTO/封套校验、`maintenance.py`运维门面、`adapters/storage/migrations.py`+`qwb storage`维护入口 | 空库及完整schema6夹具→7，外键/唯一键、旧ID/hash/字节不变；未知版本拒绝、故障回滚、重复维护命令行为按PHYSICAL §6；启动不新增6→7迁移。拒绝未知字段/NaN/重复JSON键/错类型/未注册payload；未发布引用由存储回调层拒绝。证据见[迁移与契约证据](evidence/20260930-g1-migration-contracts.json) | 仅隔离库与备份副本；无在线采集、用户库切换、生产managed注入；schema7仓储/命令payload仍归G1-2；对应T06/A35存储子项及A45-1 |
+| G1-2 原子准入与账本 / **待G1-1（已满足）；下一片** | `ports/research.py`实现落`adapters/storage/`，`services/execution.py`和Run入口共用；旧Attempt提交兼容接入同一幂等/预算/槽保护。先注册该命令暴露的`research_input/research_definition/data_definition/data_plan/execution_policy`等payload validator；其余类型保持`payload_schema_not_frozen`拒绝 | 重放先于只读预检；同键异载荷冲突；事务内重新验证并一次提交Run/Attempt/定义（适用时）/边/预算/槽/launch意图/回执。两个独立连接抢最后额度只准入一个；逐写入点故障注入无半条记录；拒绝不扣、准入后失败不退 | 修SR03及A45-1/5相关子项；不宣称引擎已能运行，不启动第二套预算/状态机 |
 | G1-3 独立监督与旧路径保护 / **待G1-2** | `services/execution.py`监督用例、`adapters/executors.py`身份/停止核验、`bootstrap.py`及部署启动入口；持久化转移与lease共用G1-2仓储 | 无API读取且CLI退出仍按冻结deadline终止；监督启动失败不启动引擎；死包装进程/活容器、失联/清理失败保持占槽；重启核对launch_token不重启同一实例；取消/迟到退出/政策切换覆盖EXEC13-A八组反例，含实际隔离进程及所支持容器路线 | 修SR01/02；旧Qlib/RD-Agent入口同样复验，不能只保护新managed。自动研究链业务仍未交付 |
 | G1-4 产物发布与输入解析 / **待G1-2；可与G1-3分开开发，联合验收依赖G1-3** | `ArtifactPublicationPort`及预检/输入解析端口；实现落存储/数据适配器，领域计算不写业务表 | 暂存对象核验字节/schema/父引用/生产者后才能发布；失败质量报告可保存但不能发布可消费快照；发布前后崩溃/取消竞争按回执恢复，索引可重建；schema2历史不改、managed/imported绑定冲突拒绝 | A43-5/A45-1/2/5子项；快照发布采用离线夹具，不冒充真实在线源验收 |
 | G1-5 底座联合交付 / **待G1-3及G1-4** | 组合根成对注入预检/事务适配器；CLI/API共用服务与错误映射；新能力仍逐项登记 | 完整门禁及G1跨模块故障矩阵；临时部署启动/恢复、旧路由/导入/历史结果兼容；提供显式维护命令、备份恢复说明与验收证据。准备切换用户库时另按PHYSICAL §6核对真实环境前置 | 只交付底座，未验来源/Agent/训练仍为unavailable；不关闭A43/A44/A45父项，不把底座完成当作一键流水线完成 |
@@ -46,6 +48,8 @@
 以上路径均相对`extensions/workbench/quant_workbench/`，具体已有文件见[代码导航](../../extensions/workbench/quant_workbench/README.md)。允许在既有层内按职责新增文件；不得为了“任务有代码落点”创建空壳或平行manager。
 
 G1-0交付位置：迁移命令与启动分离冻结于[PHYSICAL_CONTRACT §6.1](PHYSICAL_CONTRACT.md)；端口/所有者/事务边界/校验分层与反例到测试映射冻结于[ARCHITECTURE §9.4](ARCHITECTURE.md)；监督进程、实例身份和25秒有界窗口冻结于[EXECUTION EXEC13-B](EXECUTION.md)；Parameter闭合形状补于[ARTIFACT_CONTRACT §6](ARTIFACT_CONTRACT.md)。这些是设计交付，不提升任何运行能力；实际迁移、端口实现与监督仍按G1-1—5验收。
+
+G1-1交付边界：`domain/contracts.py`实现严格JSON、标量、Ref/SnapshotRef/WriteMeta/Save/Parent/Check/ArtifactEnvelope与9类已冻结技术载荷校验，未注册类型返回`payload_schema_not_frozen`；`maintenance.py`是运维门面（非服务端口），`adapters/storage/migrations.py`实现PHYSICAL §6.1的备份、逐项确认、单事务迁移、守恒核对与只读verify。迁移只在临时夹具验证，`SqliteStore`仍`supported_schema=6`并以`SchemaVersionError`拒绝schema7，直到G1-2/G1-5接入。业务命令载荷（research/data/model等）随其入口实现分别注册，未注册前对应命令不可用；这不是已知漏洞，而是按契约拒绝。
 
 #### G1-0的具体交付清单
 

@@ -1,6 +1,6 @@
 # 共享命令、查询与错误DTO
 
-状态：G0设计版本1，2026-09-29，未实现。归属U29/U30/U31，和[物理合同](PHYSICAL_CONTRACT.md)、[产物合同](ARTIFACT_CONTRACT.md)一起使用。新路由均为目标，不能写入当前可用能力清单；已有/v1/research观察路由、/v1/runs结果路由及分析v1/v2保持兼容。
+状态：G0设计版本1，2026-09-29；§1共享闭合校验器已由G1-1实现（`domain/contracts.py`），HTTP/CLI路由与写入仍按G1-2起实施。归属U29/U30/U31，和[物理合同](PHYSICAL_CONTRACT.md)、[产物合同](ARTIFACT_CONTRACT.md)一起使用。新路由均为目标，不能写入当前可用能力清单；已有/v1/research观察路由、/v1/runs结果路由及分析v1/v2保持兼容。
 
 ## 1. 类型、序列化与版本
 

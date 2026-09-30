@@ -126,11 +126,44 @@ def parser() -> argparse.ArgumentParser:
     sub.add_parser("health")
     a = sub.add_parser("serve", help="start read-only API on loopback")
     a.add_argument("--port", type=int, default=8765)
+    storage = sub.add_parser("storage", help="explicit schema maintenance (PHYSICAL_CONTRACT §6.1)")
+    storage_sub = storage.add_subparsers(dest="storage_command", required=True)
+    s = storage_sub.add_parser("status", help="read-only database/schema status")
+    s.add_argument("--json", action="store_true")
+    s = storage_sub.add_parser("migrate", help="explicit schema6 to 7 migration with a consistency backup")
+    s.add_argument("--backup", required=True, help="new path for the consistency backup; never overwritten")
+    s.add_argument("--confirm-attempt", action="append", dest="confirm_attempts", default=[],
+                   help="explicitly confirm one open/no-end Attempt; repeat for each")
+    s.add_argument("--json", action="store_true")
+    s = storage_sub.add_parser("verify", help="read-only target-schema verification")
+    s.add_argument("--schema", type=int, required=True, choices=[7])
+    s.add_argument("--json", action="store_true")
     return p
+
+
+def storage_command(args) -> int:
+    """Maintenance entry; never constructs the regular service or migrates implicitly."""
+    from . import maintenance
+
+    try:
+        if args.storage_command == "status":
+            result = maintenance.storage_status(args.root)
+        elif args.storage_command == "migrate":
+            result = maintenance.storage_migrate(args.root, args.backup, args.confirm_attempts)
+        else:
+            result = maintenance.storage_verify(args.root)
+    except maintenance.MigrationError as exc:
+        payload = {"code": exc.code, "message": str(exc), "details": exc.details}
+        print(json.dumps(payload, ensure_ascii=False, indent=None if args.json else 2), file=sys.stderr)
+        return exc.exit_code
+    print(json.dumps(result, ensure_ascii=False, allow_nan=False, indent=None if args.json else 2))
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
+    if args.command == "storage":
+        return storage_command(args)
     try:
         service = build_service(Path(args.root))
         if args.command == "import-json":

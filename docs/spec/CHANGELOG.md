@@ -2,6 +2,14 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-30 — G1-1共享校验器与schema6→7迁移工具
+
+- 来源：用户要求按spec开始实现；在G1-0映射基础上完成G1-1，基线`ff1f5e54`。关联U28/U31、T06、A35存储子项、A45-1；不关闭SR与A43—45父项。
+- 实现：新增`domain/contracts.py`（严格JSON、标量、Ref/SnapshotRef/WriteMeta/Save/Parent/Check/ArtifactEnvelope及9类已冻结技术载荷；未注册类型`payload_schema_not_frozen`）、`maintenance.py`运维门面、`adapters/storage/migrations.py`与`qwb storage status|migrate|verify`。迁移按PHYSICAL §6.1执行一致性备份、打开Attempt逐项确认、指纹预检、单事务DDL、旧行/绑定守恒、外键与完整性核对、重复执行不重跑。
+- 边界：`supported_schema`仍为6，启动路径不新增6→7迁移；schema7仓储/命令payload/原子准入/监督/发布仍归G1-2—5。业务命令载荷（research/data/model等）未注册前按契约拒绝，随各自入口实现注册；本轮只对临时隔离库运行。
+- 验证：完整`workbench_gate.sh`退出0，Python 341项（7跳过、0失败）、JS 28项通过；专项`test_contracts.py`11项、`test_migrations.py`7项、`test_architecture.py`7项通过；CLI `status→migrate→verify`实跑返回6→7、外键/完整性ok、备份摘要记录。保留既有subprocess ResourceWarning与预期故障注入traceback。脱敏摘要见[证据](evidence/20260930-g1-migration-contracts.json)。
+- 架构：CLI不直接导入存储适配器；新增`maintenance.py`运维组合根并纳入依赖门禁许可，cli/api仍禁止绕过服务边界（门禁反例保留）。
+
 ## 2026-09-30 — G1-0实施映射冻结（仅文档）
 
 - 来源：用户要求按spec开始实现；先执行G1-0实施映射，基线`ff1f5e54`。影响U28/U31、T04/T06、A40/A41/A43—45，不改变已冻结DDL/DTO语义、不提升运行能力。

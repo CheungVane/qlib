@@ -1,166 +1,136 @@
-"""API03: machine-readable contract checks for the workbench HTTP surface.
-
-These checks freeze route coverage and the key set of core read DTOs. A DTO change must
-update this file in the same commit, so drift is visible instead of silent.
-"""
-
-import tempfile
+"""G1 shared contract validators: strict JSON, scalars, Ref/Save and envelope."""
 import unittest
-from pathlib import Path
 
-from quant_workbench.api import create_app
-from quant_workbench.application import WorkbenchService
-from quant_workbench.execution import ExecutionService, attempt_dto
-from quant_workbench.storage import LocalResultRepository
-
-ROOT = Path(__file__).resolve().parents[3]
+from quant_workbench.domain import contracts as c
 
 
-# Key sets of core read DTOs. Adding or removing a field must be an explicit decision here.
-CORE_DTO_KEYS = {
-    "/v1/health": ["schema_version", "status"],
-    "/v1/capabilities": ["agent_observers", "execution_kinds", "executor", "executors",
-                         "live_data", "result_importers", "storage"],
-    "/v1/executions": ["items", "next_cursor"],
-    # T04: `policy` was added deliberately so the frozen execution policy and its usage are
-    # visible through the catalog; the key set changes with the contract test in the same commit.
-    "/v1/executions/catalog": ["checked_at", "items", "policy"],
-    "/v1/provenance/capabilities": ["items"],
-    "/v1/research": ["items", "next_offset", "total"],
-    "/v1/runs": ["items", "next_cursor"],
-}
-
-HTTP_OBSERVABILITY_KEYS = ["availability", "client_errors", "collection_started_at", "completed_requests",
-                           "coverage_seconds", "error_rate", "observed_at", "p95_ms", "scope",
-                           "server_errors", "truncated", "window_seconds"]
-
-ATTEMPT_DTO_KEYS = ["attempt_id", "cancel_pending", "cancel_requested_at", "config_fingerprint", "created_at",
-                    "ended_at", "error_code", "error_message", "executor_id", "exit_code", "has_log",
-                    "heartbeat_at", "idempotency_key_present", "kind", "label", "outcome", "params", "probe",
-                    "queued_at", "request_id", "started_at", "status", "workspace_label"]
+def ref(artifact_id="A1", artifact_type="research_definition", schema_version=1, digit="a"):
+    return {"artifact_id": artifact_id, "artifact_type": artifact_type,
+            "schema_version": schema_version, "content_digest": "sha256:" + digit * 64}
 
 
-def _snapshot(root, dates, instruments, prices):
-    import numpy as np
-    (root / "calendars").mkdir(parents=True, exist_ok=True)
-    (root / "calendars/day.txt").write_text("\n".join(dates) + "\n", encoding="utf-8")
-    (root / "instruments").mkdir(exist_ok=True)
-    (root / "instruments/all.txt").write_text(
-        "".join(f"{code}\t{dates[0]}\t{dates[-1]}\n" for code in instruments), encoding="utf-8")
-    for code, series in zip(instruments, prices):
-        folder = root / "features" / code.lower()
-        folder.mkdir(parents=True, exist_ok=True)
-        np.asarray([0.0] + list(series), dtype="<f4").tofile(folder / "close.day.bin")
-    (root / "price_semantics.json").write_text('{"price_basis":"adjusted_v1"}')
-    return root
+class StrictJsonTests(unittest.TestCase):
+    def test_rejects_duplicate_keys_and_non_finite_numbers(self):
+        for text in ('{"a":1,"a":2}', '{"a":NaN}', '{"a":Infinity}', '{"a":-Infinity}',
+                     '{"a":1e999}', '[1,2]', 'not json'):
+            with self.subTest(text=text), self.assertRaises(c.ContractError):
+                c.loads_strict(text)
+
+    def test_accepts_one_object_and_keeps_nested_duplicate_detection(self):
+        self.assertEqual({"a": {"b": 1}}, c.loads_strict('{"a":{"b":1}}'))
+        with self.assertRaisesRegex(c.ContractError, "duplicate"):
+            c.loads_strict('{"a":{"b":1,"b":2}}')
 
 
-class ContractTests(unittest.TestCase):
-    def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
-        root = Path(self.temp.name)
-        (root / "configs/cn").mkdir(parents=True)
-        (root / "configs/cn/profile.json").write_text("{}", encoding="utf-8")
-        (root / "scripts").mkdir()
-        self.repository = LocalResultRepository(root / "store")
-        self.execution = ExecutionService(self.repository, [])
-        self.service = WorkbenchService(self.repository, None, None, self.execution)
-        self.app = create_app(self.service)
-        from fastapi.testclient import TestClient
-        self.client = TestClient(self.app)
+class ScalarTests(unittest.TestCase):
+    def test_identifiers_digests_times_dates(self):
+        self.assertEqual("A1.b:c", c.parse_id("A1.b:c"))
+        for bad in ("", "../x", "/tmp/x", "a" * 129, "a b"):
+            with self.subTest(bad=bad), self.assertRaises(c.ContractError):
+                c.parse_id(bad)
+        self.assertEqual("sha256:" + "a" * 64, c.parse_digest("sha256:" + "a" * 64))
+        for bad in ("sha256:" + "A" * 64, "latest", "sha256:" + "a" * 63):
+            with self.subTest(bad=bad), self.assertRaises(c.ContractError):
+                c.parse_digest(bad)
+        self.assertEqual("2026-09-30T00:00:00.000Z", c.parse_time("2026-09-30T00:00:00.000Z"))
+        for bad in ("2026-09-30T00:00:00Z", "2026-02-30T00:00:00.000Z", "2026-09-30"):
+            with self.subTest(bad=bad), self.assertRaises(c.ContractError):
+                c.parse_time(bad)
+        self.assertEqual("2026-09-30", c.parse_date("2026-09-30"))
+        for bad in ("2026-2-3", "2026-02-30", "20260930"):
+            with self.subTest(bad=bad), self.assertRaises(c.ContractError):
+                c.parse_date(bad)
 
-    def tearDown(self):
-        self.temp.cleanup()
+    def test_canonical_decimal_strings(self):
+        for good in ("0", "10", "-0.5", "1.25", "0.0001"):
+            self.assertEqual(good, c.parse_decimal_string(good))
+        for bad in ("01", "1.0", "1.", "-0", "1e2", "+1", ".5", "1.10"):
+            with self.subTest(bad=bad), self.assertRaises(c.ContractError):
+                c.parse_decimal_string(bad)
 
-    def test_openapi_documents_every_v1_route(self):
-        documented = self.client.get("/openapi.json").json()["paths"]
-        routes = {route.path for route in self.app.routes if getattr(route, "path", "").startswith("/v1")}
-        self.assertTrue(routes, "the workbench must expose /v1 routes")
-        self.assertEqual(routes - set(documented), set(), "every /v1 route must appear in the OpenAPI document")
-        self.assertEqual(set(documented) - routes, set(), "the OpenAPI document must not invent routes")
-        for path, methods in documented.items():
-            self.assertTrue(methods, f"{path} documents no method")
-            for method, operation in methods.items():
-                responses = operation.get("responses") or {}
-                self.assertTrue(responses, f"{method.upper()} {path} documents no response")
+    def test_integer_rejects_boolean_and_float(self):
+        self.assertEqual(1, c.parse_int(1, minimum=1))
+        for bad in (True, 1.0, "1"):
+            with self.subTest(bad=bad), self.assertRaises(c.ContractError):
+                c.parse_int(bad)
+        with self.assertRaises(c.ContractError):
+            c.parse_int(0, minimum=1)
 
 
-    def test_new_domain_endpoints_freeze_their_top_level_keys(self):
-        """C6: the contract test must cover the endpoints added after API03."""
-        import json as _json
-        import numpy as np
-        from quant_workbench.cn_market import snapshot_content_digest
+class SaveAndRefTests(unittest.TestCase):
+    def save(self, **changes):
+        value = {"entity_id": None, "expected_revision": None, "display_name": "experiment",
+                 "artifact_type": "research_definition", "payload": {}, "parent_refs": []}
+        value.update(changes)
+        return value
 
-        fixture = _json.loads((ROOT / "extensions/workbench/examples/generic-result.json").read_text())
-        dates = [f"2021-{month:02d}-{day:02d}" for month in range(1, 4) for day in range(1, 11)]
-        rng = np.random.default_rng(11)
-        equity = 1_000_000 * np.cumprod(1 + rng.normal(0.001, 0.009, len(dates)))
-        fixture["run"]["dataset"] = {"id": "dataset1", "version": "content-v1"}
-        fixture["series"] = [{"metric_id": "platform.equity", "definition_id": "platform.equity.account.v1",
-                              "axis": "trading_date", "calendar_id": "qlib.day:dataset1", "unit": "CNY",
-                              "currency": "CNY", "availability": "available",
-                              "points": [{"x": day, "value": value} for day, value in zip(dates, equity)]}]
-        first = self.service.import_package("test", "contract-a", "generic_v1", fixture)["run_id"]
-        second = self.service.import_package("test", "contract-b", "generic_v1", fixture)["run_id"]
+    def test_save_identity_and_parent_ordinals(self):
+        self.assertIsNone(c.parse_save(self.save())["entity_id"])
+        with self.assertRaises(c.ContractError):
+            c.parse_save(self.save(entity_id="E1"))
+        parent = {"role": "input", "ordinal": 1, "ref": ref()}
+        with self.assertRaises(c.ContractError):
+            c.parse_save(self.save(parent_refs=[parent]))
+        self.assertEqual(1, len(c.parse_save(self.save(parent_refs=[
+            {"role": "input", "ordinal": 0, "ref": ref()}]) )["parent_refs"]))
 
-        instruments = [f"SH60000{index}" for index in range(6)]
-        snapshot = _snapshot(Path(self.temp.name) / "snap", dates, instruments,
-                             [equity.tolist()] * len(instruments))
-        digest = snapshot_content_digest(snapshot)
-        self.service.factor_snapshot_dir = lambda dataset: snapshot
-        factor = self.service.import_factor_panel(
-            {"source_instance_id": "test", "external_id": "contract-factor", "name": "mom",
-             "dataset": {"id": "dataset1", "version": digest["digest"], "snapshot_label": "snap"},
-             "calendar_id": "qlib.day:dataset1"},
-            {"schema_version": 1, "name": "mom", "dates": dates, "instruments": instruments,
-             "values": [float(value) for value in rng.normal(size=len(dates) * len(instruments))]})
+    def test_save_rejects_unknown_fields_and_bad_payload(self):
+        with self.assertRaises(c.ContractError):
+            c.parse_save(self.save(extra=1))
+        with self.assertRaises(c.ContractError):
+            c.parse_save(self.save(payload="not-object"))
 
-        expectations = {
-            "/v1/attention": ["counts", "generated_at", "items", "scope", "total"],
-            "/v1/factors": ["items"],
-            f"/v1/factors/{factor['factor_id']}": ["calendar_id", "created_at", "dataset", "definition",
-                                                   "external_id", "factor_id", "name", "panel", "panel_count",
-                                                   "panels", "provenance", "source_instance_id"],
-            f"/v1/factor-analysis?factor_id={factor['factor_id']}&horizon=1": ["basis", "factors", "limitations",
-                                                                              "overlap"],
-            f"/v1/risk?run_id={first}": ["count", "items", "periods_per_year",
-                                         "periods_per_year_source", "scope"],
-            f"/v1/validation?run_id={first}&run_id={second}&blocks=4": ["basis", "configs",
-                                                                        "leakage", "limitations",
-                                                                        "not_available", "pbo"],
-            f"/v1/runs/{first}/revisions": ["items", "next_cursor"],
+    def test_ref_mismatch_is_not_an_id_match(self):
+        c.assert_same_ref(ref(), ref())
+        with self.assertRaises(c.ContractError) as caught:
+            c.assert_same_ref(ref(), ref(digit="b"))
+        self.assertEqual("reference_mismatch", caught.exception.rule)
+
+    def test_unpublished_reference_is_refused_by_the_storage_callback(self):
+        with self.assertRaises(c.ContractError) as caught:
+            c.require_published(ref(), lambda parsed: False)
+        self.assertEqual("unpublished_reference", caught.exception.rule)
+        self.assertEqual(ref(), c.require_published(ref(), lambda parsed: True))
+        with self.assertRaises(c.ContractError):
+            c.require_published(ref(), None)
+
+
+class EnvelopeTests(unittest.TestCase):
+    def envelope(self, artifact_type="budget_policy", payload=None, **changes):
+        value = {
+            "artifact_id": "A1", "artifact_type": artifact_type, "schema_version": 1,
+            "content_digest": "sha256:" + "a" * 64, "entity_id": None,
+            "created_at": "2026-09-30T00:00:00.000Z",
+            "producer": {"run_id": None, "attempt_id": None, "author_kind": "platform_computed",
+                         "author_ref": None},
+            "parent_refs": [],
+            "payload": payload if payload is not None else {
+                "limits": {"max_hypotheses": 3, "max_formulas_per_hypothesis": 3,
+                           "max_numerical_evaluations": 3, "max_agent_attempts": 13,
+                           "max_agent_calls": 26},
+                "previous_policy_ref": None, "decision_ref": None},
+            "provenance": {"market_data_kind": None, "source_class": None,
+                           "evidence_refs": [], "limitations": []},
         }
-        for path, expected in expectations.items():
-            with self.subTest(path=path):
-                response = self.client.get(path)
-                self.assertEqual(response.status_code, 200, response.text)
-                self.assertEqual(sorted(response.json()), expected)
+        value.update(changes)
+        return value
 
-    def test_core_read_dto_keys_are_frozen(self):
-        for path, expected in CORE_DTO_KEYS.items():
-            with self.subTest(path=path):
-                response = self.client.get(path)
-                self.assertEqual(response.status_code, 200, response.text)
-                self.assertEqual(sorted(response.json()), expected)
+    def test_frozen_payload_passes_and_unknown_payload_is_refused(self):
+        self.assertEqual("budget_policy", c.parse_envelope(self.envelope())["artifact_type"])
+        with self.assertRaises(c.ContractError) as caught:
+            c.parse_envelope(self.envelope(artifact_type="model_spec", payload={}))
+        self.assertEqual("payload_schema_not_frozen", caught.exception.rule)
 
-    def test_observability_keeps_http_and_attempt_blocks(self):
-        body = self.client.get("/v1/observability").json()
-        self.assertEqual(sorted(key for key in body if key != "attempts"), HTTP_OBSERVABILITY_KEYS)
-        attempts = body["attempts"]
-        self.assertIn("failure_rate", attempts)
-        self.assertIn("statuses", attempts)
-        self.assertIn("by_kind", attempts)
-        self.assertIsNone(attempts["failure_rate"])
-        self.assertEqual(attempts["failure_denominator"], 0)
-
-    def test_attempt_dto_keys_are_frozen_and_hide_server_fields(self):
-        dto = attempt_dto({"attempt_id": "a", "kind": "k", "executor_id": "e", "label": "l", "status": "running",
-                           "created_at": "2026-01-01T00:00:00Z", "params": {}, "workspace": "/private/ws",
-                           "log_path": "/private/ws/attempt.log", "outcome": None})
-        self.assertEqual(sorted(dto), ATTEMPT_DTO_KEYS)
-        self.assertNotIn("workspace", dto)
-        self.assertNotIn("log_path", dto)
-        self.assertEqual(dto["workspace_label"], "ws")
+    def test_payload_unknown_field_and_missing_envelope_field(self):
+        payload = self.envelope()["payload"] | {"unexpected": 1}
+        with self.assertRaises(c.ContractError) as caught:
+            c.parse_envelope(self.envelope(payload=payload))
+        self.assertEqual("unknown_field", caught.exception.rule)
+        value = self.envelope()
+        del value["provenance"]
+        with self.assertRaises(c.ContractError) as caught:
+            c.parse_envelope(value)
+        self.assertEqual("missing_field", caught.exception.rule)
 
 
 if __name__ == "__main__":
