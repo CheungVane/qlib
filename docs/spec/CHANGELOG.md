@@ -2,6 +2,12 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-30 — U28/U31共享代码框架与边界门禁
+
+- 用户明确授权按设计在代码中准备目录、模块、接口、交互/流程与角色。在现有分层内新增领域引用/准入/worker/来源计划/编译结果、7类固定计划、ResearchRunService/DataPipelineService/ResearchWorkflowService和中立能力端口；生产组合显式注入，未配置managed依赖时拒绝。
+- 现有ExecutionService唯一负责准入；新路径固定重放→只读预检→单一事务端口admit→回执身份校验，不同步启动进程、不另造执行状态机。领域入口依赖门禁阻止绕过Run服务；保留旧门面/旧执行签名和统计口径。
+- 补代码导航与后续填充顺序；14项隔离框架行为测试及6项架构检查通过，完整回归结果见IMPLEMENTATION。测试替身不作为SQL原子性/真实引擎证据；无用户数据库迁移、真实采集/训练/Agent或交易操作，不关闭SR及A43—45。
+
 ## 2026-09-29 — G0共享DDL、DTO、产物及恢复细化（仅spec）
 
 - 用户明确要求沿全项目路线补齐DDL/DTO，不碰代码。核心合同0.4.1；新增PHYSICAL_CONTRACT、COMMAND_CONTRACT、ARTIFACT_CONTRACT，作为ARCHITECTURE的共享详细设计，不另造底座。

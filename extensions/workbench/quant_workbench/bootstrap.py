@@ -9,6 +9,7 @@ from .adapters.executors import QlibCNExecutor, RDAgentExecutor
 from .adapters.rdagent_status import RDAgentStatusProvider
 from .adapters.storage.storage import LocalResultRepository
 from .services.execution import ExecutionService
+from .ports.research import ManagedAdmissionPort, AdmissionPreflightPort
 from .research import ResearchSnapshots
 from .adapters.legacy_analysis import LegacyAnalysisConfiguration
 
@@ -34,8 +35,14 @@ def build_service(root: Path, with_executors: bool = True) -> WorkbenchService:
     return build_workbench(WorkbenchSettings.from_environment(root), with_executors=with_executors)
 
 
-def build_workbench(settings: WorkbenchSettings, *, with_executors: bool = True) -> WorkbenchService:
+def build_workbench(settings: WorkbenchSettings, *, with_executors: bool = True,
+                    managed_admission: ManagedAdmissionPort | None = None,
+                    managed_preflight: AdmissionPreflightPort | None = None) -> WorkbenchService:
     """Compose concrete adapters. No sample import, data download or engine start."""
+    if (managed_admission is None) != (managed_preflight is None):
+        raise ValueError("managed admission and preflight must be supplied together")
+    if managed_admission is not None and not with_executors:
+        raise ValueError("managed execution requires an execution service")
     root = settings.storage_root
     repository = LocalResultRepository(root)
     agent_root = settings.agent_root
@@ -48,7 +55,9 @@ def build_workbench(settings: WorkbenchSettings, *, with_executors: bool = True)
         execution = ExecutionService(repository,
                                      executors=[QlibCNExecutor(limits=limits),
                                                 RDAgentExecutor(limits=limits, budget_root=root / "agent_budget")],
-                                     importer=AttemptResultImporter(repository), policy=policy)
+                                     importer=AttemptResultImporter(repository), policy=policy,
+                                     managed_admission=managed_admission,
+                                     managed_preflight=managed_preflight)
     from .adapters.local_data_directory import LocalDataDirectory
     from .adapters.snapshot_analysis import SnapshotAnalysisDirectory
     data_root = settings.data_root

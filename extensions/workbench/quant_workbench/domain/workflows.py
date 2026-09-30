@@ -8,6 +8,10 @@ from enum import Enum
 
 
 class WorkflowKind(str, Enum):
+    DATA_PREPARE = "data_prepare"
+    DIRECTION_REVIEW = "direction_review"
+    HYPOTHESIS_REVIEW = "hypothesis_review"
+    FORMULA_EVALUATE = "formula_evaluate"
     TRAIN = "train"
     MINE = "mine"
     BACKTEST = "backtest"
@@ -41,6 +45,17 @@ def workflow_plan(kind: WorkflowKind | str) -> WorkflowPlan:
     """Return the canonical fixed plan; unknown kinds fail, never fall back."""
     kind = WorkflowKind(kind)
     sequences = {
+        WorkflowKind.DATA_PREPARE: (("preflight", "research"), ("acquire", "source_adapter"),
+                                    ("normalize", "normalizer"), ("reconcile", "reconciler"),
+                                    ("validate", "data_quality"), ("publish", "snapshot_publisher"),
+                                    ("report", "data_pipeline")),
+        WorkflowKind.DIRECTION_REVIEW: (("prepare", "research"), ("review", "research_agent"),
+                                       ("publish", "artifact_publisher")),
+        WorkflowKind.HYPOTHESIS_REVIEW: (("prepare", "research"), ("review", "research_agent"),
+                                        ("propose_formula", "research_agent"), ("publish", "artifact_publisher")),
+        WorkflowKind.FORMULA_EVALUATE: (("prepare", "research"), ("review_compile", "formula_compiler"),
+                                       ("compute", "factor_computer"), ("evaluate", "factor_analysis"),
+                                       ("publish", "artifact_publisher")),
         WorkflowKind.TRAIN: (("prepare", "research"), ("train", "training_adapter"),
                              ("predict", "prediction_adapter"), ("evaluate", "validation")),
         WorkflowKind.MINE: (("prepare", "research"), ("generate", "mining_adapter"),

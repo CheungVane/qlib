@@ -1,0 +1,44 @@
+{
+  "date": "2026-09-30",
+  "baseline_commit": "0dfefcc8",
+  "requirements": [
+    "U28",
+    "U31",
+    "ARC13",
+    "A40 structure subset"
+  ],
+  "scope": "Typed references and admission contracts, fixed plans, shared service wiring, neutral worker capability ports, architectural dependency gates.",
+  "validation": {
+    "full_gate": {
+      "command": "bash scripts/workbench_gate.sh",
+      "exit_code": 0,
+      "python_total": 326,
+      "python_passed": 321,
+      "python_skipped": 5,
+      "javascript_passed": 28
+    },
+    "final_targeted": {
+      "managed_framework": 14,
+      "architecture": 6,
+      "result": "passed",
+      "note": "After full-gate discovery: added source/compile invariants, tightened import guard, and distinguished staged worker outputs from published references through a central publication port; affected 14 framework and 6 architecture tests reran successfully."
+    },
+    "documentation": {
+      "relative_links_checked_before_evidence_link": 202,
+      "broken_links": 0,
+      "diff_check": "passed"
+    },
+    "warnings": [
+      "Existing isolated subprocess ResourceWarning and expected fault-injection output retained; no new runtime capability inferred."
+    ]
+  },
+  "not_implemented": [
+    "schema7 migration and production managed admission adapter",
+    "atomic budget enforcement and independent supervisor",
+    "persistent human handoffs and automatic chain",
+    "new HTTP/CLI routes and professional pages",
+    "new data source, Agent, training or backtest engine implementations"
+  ],
+  "production_effect": "Existing behavior retained; managed dependency injection absent by default; new domain calls refuse instead of falling back to legacy submit.",
+  "data_safety": "No user database migration, real acquisition, Agent call, training, trading, or data-file changes performed."
+}

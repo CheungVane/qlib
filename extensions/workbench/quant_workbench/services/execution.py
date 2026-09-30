@@ -14,8 +14,12 @@ from typing import Any
 
 from ..source_safety import Sanitizer
 from ..domain.errors import (StorageCapacityExceeded, ExecutionError, InvalidExecutionRequest,
-    UnknownExecutionKind, AttemptNotFound, PreconditionFailed, CapacityExceeded, BudgetExhausted)
+    UnknownExecutionKind, AttemptNotFound, PreconditionFailed, CapacityExceeded, BudgetExhausted,
+    ManagedExecutionUnavailable)
 from ..ports import AttemptRepository, ExecutorPort, AttemptImporter
+from ..ports.research import ManagedAdmissionPort, AdmissionPreflightPort
+from ..domain.admission import AdmissionCommand, AdmissionReceipt, AdmissionRequest
+from ..domain.workflows import workflow_plan
 
 TERMINAL_STATUSES = ("succeeded", "failed", "cancelled", "interrupted")
 OPEN_STATUSES = ("queued", "running")
@@ -64,7 +68,13 @@ class ExecutionService:
 
     def __init__(self, repository: AttemptRepository, executors: list[ExecutorPort] | None = None,
                  importer: AttemptImporter | None = None,
-                 stats_window_seconds: int = 86400, policy=None):
+                 stats_window_seconds: int = 86400, policy=None, *,
+                 managed_admission: ManagedAdmissionPort | None = None,
+                 managed_preflight: AdmissionPreflightPort | None = None):
+        if (managed_admission is None) != (managed_preflight is None):
+            raise ValueError("managed admission and preflight must be supplied together")
+        self.managed_admission = managed_admission
+        self.managed_preflight = managed_preflight
         self.repository = repository
         self.executors = list(executors or [])
         self.policy = policy
@@ -84,6 +94,28 @@ class ExecutionService:
             self._by_id[executor.executor_id] = executor
             for kind in executor.kinds:
                 self._by_kind[kind] = executor
+
+    def admit_managed(self, command: AdmissionCommand) -> AdmissionReceipt:
+        """Shared managed entry; no legacy submit fallback and no synchronous start.
+
+        replay must precede preflight. admit_run must recheck under its transaction
+        because another request may win while preflight is running.
+        """
+        if self.managed_admission is None or self.managed_preflight is None:
+            raise ManagedExecutionUnavailable("managed Run storage and supervision are not configured")
+        previous = self.managed_admission.replay(command)
+        if previous is not None:
+            previous.validate_command(command)
+            if previous.created:
+                raise ValueError("replay cannot claim a new admission")
+            return previous
+        prepared = self.managed_preflight.prepare_admission(command)
+        request = AdmissionRequest(command, prepared, workflow_plan(prepared.kind))
+        receipt = self.managed_admission.admit_run(request)
+        receipt.validate_command(command)
+        if receipt.definition_ref != prepared.definition_ref or receipt.plan_ref != prepared.plan_ref:
+            raise ValueError("receipt differs from prepared admission")
+        return receipt
 
     # -- catalog ---------------------------------------------------------
     def platform_checks(self) -> list[dict[str, Any]]:

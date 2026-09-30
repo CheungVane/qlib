@@ -58,3 +58,9 @@ class SnapshotError(ValueError):
         if component is not None:
             self.details['component'] = component
         super().__init__(code)
+
+
+class ManagedExecutionUnavailable(ExecutionError):
+    """Managed Run adapters/protection are absent; never fall back to legacy submit."""
+    code = "capability_unavailable"
+    status_code = 409

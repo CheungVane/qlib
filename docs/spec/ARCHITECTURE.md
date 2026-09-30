@@ -207,7 +207,7 @@ state模块只创建/保存客户端选择与导航上下文；transport统一�
 
 ## 7. 后续实现者从哪里填充
 
-以下是指定归属，**尚未创建/实现**；不要提前建返回成功的空类。先完成IMPLEMENTATION的SR修复，再依T06/T07设计门实施。
+以下是指定归属；§10已落地服务入口/协议，其余持久化和业务流程**尚未实现**。不要提前建返回成功的空类。先完成IMPLEMENTATION的SR修复，再依T06/T07设计门实施。
 
 | 待实现内容 | 指定位置 | 开始编码前必须冻结 |
 | --- | --- | --- |
@@ -256,9 +256,9 @@ UI优先选择真实数据组并明确来源/区间/基线性质；数据页不�
 
 时序：写命令先构造已验证读取器→计算/遮罩三面板→逐面板仓储事务幂等发布（非三面板全局事务，中断后重跑补齐）；只读分析先检查面板版本一致→解析登记身份/日历→对齐完整日期轴→核验实际消费字节并计算标签→同一成员/状态掩码处理因子→v2统计→携带依据与限制返回。每次请求重新解析登记，单请求可复用已验证不可变bytes。基线定义固定：动量仅要求两端价格，波动率要求21日价格完整，换手均值要求20日值完整；三者均按因子当日历史成分与已知状态过滤，不要求预测期末仍为成分股。未知源历史可用时点仍标unknown。
 
-## 9. 一键数据与人参与研究的扩展框架（U29/U30，设计未实现）
+## 9. 一键数据与人参与研究的扩展框架（U29/U30，框架部分落地、业务未实现）
 
-本节新增目标边界，不能视为已存在的文件/Protocol或已支持能力。继续模块化单体、固定流程和共用Run/Attempt，不新增独立任务引擎或通用DAG。业务唯一合同为[DATA_PIPELINE](DATA_PIPELINE.md) ING01—08及[HUMAN_RESEARCH](HUMAN_RESEARCH.md) HR01—10。
+本节为目标边界；§10明确本批已存在的文件/Protocol，其余仍待实现，不作为已支持能力。继续模块化单体、固定流程和共用Run/Attempt，不新增独立任务引擎或通用DAG。业务唯一合同为[DATA_PIPELINE](DATA_PIPELINE.md) ING01—08及[HUMAN_RESEARCH](HUMAN_RESEARCH.md) HR01—10。
 
 | 目标模块 | 定位、输入与输出 | 禁止跨界 |
 | --- | --- | --- |
@@ -311,3 +311,27 @@ UI优先选择真实数据组并明确来源/区间/基线性质；数据页不�
 2026-09-29已补共享物理设计：[PHYSICAL_CONTRACT](PHYSICAL_CONTRACT.md)冻结基于schema6的目标schema7 DDL、事务、迁移/回滚与发布恢复；[COMMAND_CONTRACT](COMMAND_CONTRACT.md)冻结新增命令/查询DTO、错误及CLI映射；[ARTIFACT_CONTRACT](ARTIFACT_CONTRACT.md)冻结版本载荷、schema3清单、输入准备、worker交接及初始限额。它们细化本主合同，不形成独立底座。首个实现需将闭合字段合同转成机器校验schema并执行反例，不能继续自选不同字段。若届时最高schema变化，先重基迁移编号。尚需按实际首个源/Agent/训练引擎补齐其字段映射、提示词/规则实例和引擎专属参数schema；完整JSON Schema生成/验证器、真实迁移和恢复测试未实施，不能据隔离DDL检查关闭G0所有适配项或G1验收。
 
 保留旧研究快照/因子面板/Attempt与v1/v2分析路由，不自动合并主题、不补写unknown来源、不原地升级schema2数据。首批功能开关默认关闭，只有相应验收通过后在能力目录暴露ready；关闭开关仍可读已发布历史产物。本轮只修改spec，不实施任何迁移。
+
+## 10. U31代码框架落地切片（2026-09-30，实施范围）
+
+用户最新授权在代码中落实框架。本切片落实共享ArtifactRef、显式准入命令/准备结果/回执、7类固定计划、ResearchRunService/DataPipelineService/ResearchWorkflowService、数据/Agent/公式/引擎中立端口，以及组合根的显式注入。已有ExecutionService仍唯一拥有执行准入；新服务不能直接占槽、启动进程或分别提交预算。未注入通过验收的managed端口时明确拒绝，不复用旧submit冒充新研究Run。
+
+准入调用时序固定为：领域入口构造不可变命令→ResearchRunService→ExecutionService→事务端口查询同键重放/冲突→只读预检端口解析已发布输入和能力→事务端口原子admit（再次幂等、版本/有效期/预算/槽/边验证，持久化launch意图）→回执。实际启动由后续独立监督消费launch意图，不在新服务里创建第二个启动器。未实现schema7存储或监督时不会在生产组合根注入这些端口，因此没有新增可执行能力。本批无实际迁移、新HTTP路由、采集/Agent/训练或实盘运行。
+
+端口签名是后续实现的结构边界；服务通过隔离contract doubles验证时序、失败短路、重放和原子提交边界，不用测试替身宣称真实执行可用。旧domain/research.py定义保留兼容，不用全字段旧草案验证新文字/数据任务。输入准备、来源适配、Agent、公式、训练/预测/回测端口只传精确版本引用及ExecutionContext；数值/文件/SDK处理留给各适配器。
+
+本切片不是“建空目录返回成功”：共享类型实际校验引用和任务关联，领域服务实际调用同一准入链；缺依赖明确拒绝。领域能力适配器和持久化实现尚缺，不提供默认内存库或伪执行器。后续沿现有目录填充，细节和验收回写IMPLEMENTATION；A43/A44/A45父项仍待真实证据。
+
+
+### 10.1 已落地结构与下一位实现者入口
+
+代码导航见[quant_workbench/README](../../extensions/workbench/quant_workbench/README.md)。domain新增artifacts/admission/worker/data_pipeline/factor_expression，ports新增research/data_inputs/data_acquisition/research_agent/factor_compute/modeling，services新增research_runs/data_pipeline/research_workflows；现有ExecutionService新增admit_managed，bootstrap以成对参数显式注入预检与准入端口，application组装三个领域入口。没有新平铺manager、第二个执行服务或伪存储实现。
+
+内部端口是共享载荷的窄投影，不冒充完整HTTP DTO：SourceFetchPlan仅选择冻结data_plan中某来源的chunk_keys；源必须核验其确属该plan，不重新解析latest。CompileReport返回通过编译的暂存factor_definition或错误diagnostics，不能带错误仍暴露可执行定义。SnapshotPublisher返回已发布snapshot Ref，其实现仍必须持久化PHYSICAL_CONTRACT回执。Agent端口以input/workflow引用构建TaskEnvelope，不能省略冻结模型/提示词/预算信息。中立模型/组合/回测端口先约束角色；未冻结的portfolio/引擎专属载荷继续阻断实际适配器，不因Protocol存在放行。
+
+新服务真实可执行的是参数/身份校验与准入编排；默认生产组合没有managed事务/预检实现，因此新调用明确capability_unavailable。没有HTTP/CLI新路由、schema7迁移、自动链、页面或worker实现。Workflow start所需派生定义尚未实现；只读预检不允许为绕过缺口先写一个定义，后续须随原子准入支持其创建并添加失败回滚证据。
+
+13项核心框架反例覆盖拒绝/重放/并发已赢回执/预检短路/引用替换/固定计划防训练混入；另有来源分块与编译结果合同检查。依赖门禁限制领域入口只经ResearchRunService，Run服务只经中立执行端口；门禁仍是静态检查，不是安全沙箱，也不证明事务/资源保护已通过。完整验证结果统一见IMPLEMENTATION。
+
+
+worker返回`ProducedArtifact(ref, object_digest)`，明确是尚未发布的对象，不能直接作为后续输入；原料/规范化/因子/模型等适配器无权直接登记业务状态。统一ArtifactPublicationPort读取受控对象区的完整封套，核验字节、schema、父引用和生产者，再原子登记产物/阶段/回执并返回可消费Ref。CompileReport.valid只代表编译通过，发布和数据准入仍需各自检查。SnapshotPublisher是包含质量门禁的发布能力，亦须使用同一存储事务设施；这些发布端口本批未实现。

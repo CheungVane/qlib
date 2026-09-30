@@ -12,6 +12,9 @@ from .services.validation import ValidationService
 from .services.catalog import CatalogService
 from .services.attention import AttentionService
 from .services.execution import ExecutionService
+from .services.research_runs import ResearchRunService
+from .services.data_pipeline import DataPipelineService
+from .services.research_workflows import ResearchWorkflowService
 
 class WorkbenchService:
     GENERIC_RUN_TITLES = GENERIC_RUN_TITLES
@@ -26,6 +29,9 @@ class WorkbenchService:
         self.rdagent = rdagent
         self.research = research
         self.execution_service = execution
+        self.research_runs = ResearchRunService(execution)
+        self.data_pipeline = DataPipelineService(self.research_runs)
+        self.research_workflows = ResearchWorkflowService(self.research_runs)
         self.data_directory = data_directory
         if analysis_configuration is None:
             # Legacy direct constructors keep working; only bootstrap selects the adapter.

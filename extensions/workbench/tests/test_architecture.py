@@ -21,7 +21,10 @@ class ArchitectureTests(unittest.TestCase):
         self.assertEqual([], failures)
 
     def test_checker_rejects_wrong_directions_and_hidden_io(self):
-        cases = [('domain.bad', 'import sqlite3'),
+        cases = [('services.data_pipeline', 'from .execution import ExecutionService'),
+                 ('services.research_workflows', 'from ..ports.research import ManagedAdmissionPort'),
+                 ('services.research_runs', 'from .data_pipeline import DataPipelineService'),
+                 ('domain.bad', 'import sqlite3'),
                  ('domain.bad', 'from ..services.results import ResultService'),
                  ('services.bad', 'from ..adapters.storage.storage import LocalResultRepository'),
                  ('services.bad', 'from .. import storage'),

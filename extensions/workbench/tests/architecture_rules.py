@@ -70,6 +70,19 @@ def violations(module, source):
                     errors.append('forbidden dependency: ' + dep)
             elif dep.split('.')[0] not in PURE_STDLIB:
                 errors.append('non-core dependency: ' + dep)
+        # Managed entry ownership: one Run owner, one execution admission owner.
+        managed_allowed = {
+            'services.data_pipeline': {'services.research_runs'},
+            'services.research_workflows': {'services.research_runs'},
+            'services.research_runs': set(),
+        }
+        if module in managed_allowed and internal:
+            if target_layer == 'services' and target not in managed_allowed[module]:
+                errors.append('managed entry bypasses Run ownership: ' + dep)
+            if module != 'services.research_runs' and target_layer == 'ports':
+                errors.append('domain entry bypasses Run transaction boundary: ' + dep)
+        if module == 'services.research_runs' and target_layer == 'ports' and target != 'ports.research':
+            errors.append('Run owner imports unrelated persistence: ' + dep)
         if layer == 'adapters' and internal and target_layer in {
                 'application', 'bootstrap', 'api', 'cli', 'services', *COMPAT}:
             errors.append('adapter depends on orchestration/compatibility: ' + dep)
