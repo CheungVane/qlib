@@ -1,0 +1,58 @@
+{
+  "date": "2026-09-30",
+  "review_base": "4f11929a",
+  "delivery_commit": "same commit as this evidence",
+  "scope": "Whole-spec organization/authority and structural code review; not exhaustive formula or runtime audit",
+  "root_markdown_before": 35,
+  "root_markdown_after": 22,
+  "archived_root_documents": 13,
+  "additional_historical_snapshots": [
+    "PROVENANCE_AUDIT_20260930.md",
+    "IMPLEMENTATION_BATCHES_20260930.md"
+  ],
+  "requirements_preserved": [
+    "RW01",
+    "RW02",
+    "RW03",
+    "RW04",
+    "RW05",
+    "RW06"
+  ],
+  "historical_preservation": "13 moved Markdown bodies match original after ignoring link targets; added historical notices only; existing evidence unchanged",
+  "code_change": "Reject mutable workflow containers and invalid typed members; clarify compatibility-only lifecycle draft",
+  "tests": {
+    "command": "bash scripts/workbench_gate.sh",
+    "exit_code": 0,
+    "python": {
+      "total": 328,
+      "passed": 323,
+      "skipped": 5,
+      "seconds": 111.853
+    },
+    "javascript": {
+      "total": 28,
+      "passed": 28
+    },
+    "limitations": [
+      "Existing subprocess ResourceWarnings and expected fault injection output retained",
+      "No real new business execution or database migration"
+    ]
+  },
+  "open": [
+    "SR01-SR04",
+    "Remaining SR05 identity paths",
+    "A43",
+    "A44",
+    "A45"
+  ],
+  "architecture_followup": "ARCHITECTURE.md section 11; implementation order remains G1-G4",
+  "document_checks": {
+    "markdown_files": 41,
+    "local_links_including_heading_links": 393,
+    "heading_links": 9,
+    "missing_files_or_headings": 0,
+    "rw_rules_preserved_verbatim": 6,
+    "archived_original_bodies_preserved": 13,
+    "fences_balanced": true
+  }
+}

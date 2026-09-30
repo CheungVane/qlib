@@ -2,7 +2,7 @@
 
 当前权威资料是 [spec 入口](../spec/README.md)。
 
-- [设计审查与问题处置](../spec/review-20260925.md)
+- [设计审查与问题处置](../spec/archive/review-20260925.md)
 - [核心规范](../spec/WORKBENCH_SPEC.md)
 - [实施顺序与验收标准](../spec/IMPLEMENTATION.md)
 

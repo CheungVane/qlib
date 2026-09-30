@@ -23,6 +23,14 @@ class WorkflowStep:
     owner: str
     depends_on: tuple[str, ...] = ()
 
+    def __post_init__(self):
+        if any(not isinstance(value, str) or not value.strip() for value in (self.key, self.owner)):
+            raise ValueError("step key and owner must be nonempty strings")
+        if not isinstance(self.depends_on, tuple) or any(
+            not isinstance(key, str) or not key.strip() for key in self.depends_on
+        ):
+            raise ValueError("step dependencies must be an immutable tuple of nonempty strings")
+
 
 @dataclass(frozen=True)
 class WorkflowPlan:
@@ -30,6 +38,10 @@ class WorkflowPlan:
     steps: tuple[WorkflowStep, ...]
 
     def __post_init__(self):
+        if not isinstance(self.kind, WorkflowKind):
+            raise ValueError("workflow kind must be a WorkflowKind")
+        if not isinstance(self.steps, tuple) or any(not isinstance(step, WorkflowStep) for step in self.steps):
+            raise ValueError("workflow steps must be an immutable tuple of WorkflowStep")
         seen = set()
         for step in self.steps:
             if not step.key or step.key in seen:

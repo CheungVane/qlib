@@ -78,6 +78,27 @@ class ArchitectureTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 WorkflowPlan(WorkflowKind.TRAIN, steps)
 
+    def test_fixed_plan_rejects_mutable_containers_and_untyped_members(self):
+        # Otherwise a caller can mutate the dependency graph after validation,
+        # despite the frozen dataclass declaration.
+        steps = [WorkflowStep('prepare', 'research')]
+        dependencies = ['prepare']
+        for build in (
+            lambda: WorkflowPlan(WorkflowKind.TRAIN, steps),
+            lambda: WorkflowStep('train', 'engine', dependencies),
+            lambda: WorkflowPlan('train', tuple(steps)),
+            lambda: WorkflowPlan(WorkflowKind.TRAIN, ('prepare',)),
+            lambda: WorkflowStep('train', 'engine', (1,)),
+            lambda: WorkflowStep('train', ' ', ()),
+            lambda: WorkflowStep(1, 'engine'),
+        ):
+            with self.subTest(build=build), self.assertRaises(ValueError):
+                build()
+        for kind in WorkflowKind:
+            plan = workflow_plan(kind)
+            self.assertIsInstance(plan.steps, tuple)
+            self.assertTrue(all(isinstance(step.depends_on, tuple) for step in plan.steps))
+
     def test_explicit_composition_uses_isolated_settings_without_starting_engines(self):
         import tempfile
         from unittest.mock import patch

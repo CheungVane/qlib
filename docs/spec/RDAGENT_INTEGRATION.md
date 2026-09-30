@@ -17,7 +17,7 @@
 - DeepSeek 聊天模型从 RD-Agent 本地 `.env` 注入，密钥不写入 tracked 文件、API 响应、浏览器代码、日志或研究结果。
 - 因子研究需另行满足 embedding、运行环境和 Qlib 数据/费用情景一致性；只配置聊天密钥不等于因子流程可运行。
 
-资源能力（**2026-09-27 部分实现，完整A41重新打开**）：AGENT04 要求的资源上限不再只是"检查资源下限"——整个 Attempt（LLM 驱动 + 因子代码）在 `qwb-rdagent-cpu:local` 容器内运行，内存=`--memory/--memory-swap` cgroup 硬上限、CPU=`--ulimit cpu=`，LLM 调用次数按政策在执行前通过文件账本原子预留；这不证明独立DB试验账本原子性。SR01—03的超时/失联恢复/试验预算反例仍待修，详见[监督审查](review-20260927-supervision.md)。行为合同见 [EXECUTION](EXECUTION.md) EXEC13，验收与证据见 [IMPLEMENTATION](IMPLEMENTATION.md) A41，构建与核验命令见 [EXECUTION §5.1](EXECUTION.md)。
+资源能力（**2026-09-27 部分实现，完整A41重新打开**）：AGENT04 要求的资源上限不再只是"检查资源下限"——整个 Attempt（LLM 驱动 + 因子代码）在 `qwb-rdagent-cpu:local` 容器内运行，内存=`--memory/--memory-swap` cgroup 硬上限、CPU=`--ulimit cpu=`，LLM 调用次数按政策在执行前通过文件账本原子预留；这不证明独立DB试验账本原子性。SR01—03的超时/失联恢复/试验预算反例仍待修，详见[监督审查](archive/review-20260927-supervision.md)。行为合同见 [EXECUTION](EXECUTION.md) EXEC13，验收与证据见 [IMPLEMENTATION](IMPLEMENTATION.md) A41，构建与核验命令见 [EXECUTION §5.1](EXECUTION.md)。
 
 ## 契约与阶段
 

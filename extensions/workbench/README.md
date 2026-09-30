@@ -114,14 +114,14 @@ extensions/workbench/.venv/bin/qwb factor-analysis <FACTOR_ID> [<FACTOR_ID> ...]
 
 导出不调用模型、不执行生成代码。签名pickle仅在RD-Agent进程中读取，工作台API只读脱敏JSON快照；修改后的smoke入口会在退出时自动同步。其他入口产生的记录需运行上述命令，再点界面“刷新记录”。真实记录须用 `--session <会话目录名> --real` 逐项选定；不要混合数据性质后整批标注。
 
-工作台 CLI：`qwb research-list`、`qwb research-detail <研究ID>`、`qwb review <运行ID>`。过程快照保存在 `.data/workbench/research`，平台结果仍使用不可变revision。新需求、限制与验收见 [研究工作台合同](../../docs/spec/RESEARCH_WORKBENCH.md)。
+工作台 CLI：`qwb research-list`、`qwb research-detail <研究ID>`、`qwb review <运行ID>`。过程快照保存在 `.data/workbench/research`，平台结果仍使用不可变revision。新需求、限制与验收见 [研究工作台合同](../../docs/spec/RESEARCH_LIFECYCLE.md#8-研究结果消费与过程追溯u09rw0106)。
 
 
 ### 2026-09-26 审查修复
 
 结果导出按Loop/runner事件分开，旧会话链接转为分轮导航；旧v1结果仍可追溯但禁止排名。Qlib只读导入始终在临时MLflow副本上进行。源证据与`--real/--synthetic`冲突会拒绝导入。序列按2000点分页，摘要使用完整revision；CLI `review --revision-id`可锁定版本，`compare --mode auto|equity|metric`使用共同口径检查。
 
-新增回归：`node --test extensions/workbench/tests/test_ui.cjs`；Python仍用上述unittest发现命令（2026-09-26含16项执行层回归）。详见[修复与验收](../../docs/spec/FIXES_20260926.md)与[执行层规范](../../docs/spec/EXECUTION.md)；不代表完整实时/数据目录/多数据库已经支持。
+新增回归：`node --test extensions/workbench/tests/test_ui.cjs`；Python仍用上述unittest发现命令（2026-09-26含16项执行层回归）。详见[修复与验收](../../docs/spec/archive/FIXES_20260926.md)与[执行层规范](../../docs/spec/EXECUTION.md)；不代表完整实时/数据目录/多数据库已经支持。
 
 验证与任务中心（U20/U21）：比较页在口径检查后会给出验证卡（每个运行的 Sharpe/PSR/DSR、配置间的 PBO、purged 折剔除比例与有效样本数）；命令行为 `qwb validate <RUN_ID>... [--horizon 1 --splits 5 --embargo 1 --blocks 8]`。PBO 只有在配置之间确有差异时才有意义，完全相同的配置（例如同情景重复运行）会标记为退化并说明不可区分。顶栏"待处理 N"来自 `/v1/attention`（失败执行、未入库结果、探针结果、取消请求中）；`Ctrl/⌘ + K` 打开命令面板，可跳转运行/研究/因子或执行命令，索引范围为命令 + 最近 100 个运行 + 最近 50 条研究 + 已入库因子。
 

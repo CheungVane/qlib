@@ -1,8 +1,9 @@
 """Lifecycle object contracts (T06 interface draft, RESEARCH_LIFECYCLE §2).
 
-This module freezes the *interface* the later storage/API work must satisfy: required
-fields, opaque identity plus content digest, and the retry/re-run/new-definition rules.
-It deliberately holds no database access — T06 decides the physical schema separately.
+These legacy full-field drafts remain for compatibility, including their identity
+hashes. They are not validators for new text/data workflows. New discriminated
+definitions follow COMMAND_CONTRACT and ARTIFACT_CONTRACT; PHYSICAL_CONTRACT
+defines the target persistence schema, whose implementation is still pending.
 """
 
 from __future__ import annotations
