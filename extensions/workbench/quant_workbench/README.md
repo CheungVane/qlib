@@ -24,6 +24,8 @@
 | application.py | 将各领域入口暴露为同一服务对象图 | 兼容门面不扩展业务规则 |
 | maintenance.py | 运维门面：storage状态、显式迁移、只读verify | 不是服务端口，不被bootstrap/api构造；不启动引擎 |
 | adapters/storage/migrations.py | schema6→7单事务迁移、一致性备份、守恒与完整性核对 | 只在运维命令调用；启动路径不新增6→7迁移 |
+| adapters/storage/schema7.py | schema7原子准入、幂等、并发槽、预算预留与不可变artifact登记 | G1-2a夹具/候选适配器；未接生产组合根、未启监督 |
+| ports/research.py UsageBudgetPort | `reserve_usage(event_key,attempt_id,items)`的多维度原子预留契约 | scope/limit须由冻结policy预置；不创建scope、不猜上限 |
 
 ## 维护命令
 

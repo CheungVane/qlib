@@ -45,6 +45,19 @@ class ManagedExecutionPort(Protocol):
     def admit_managed(self, command: AdmissionCommand) -> AdmissionReceipt: ...
 
 
+class UsageBudgetPort(Protocol):
+    def reserve_usage(self, event_key: str, attempt_id: str | None,
+                      items: tuple[dict, ...] | list[dict]) -> dict:
+        """Atomically check and consume one or more scope/dimension increments.
+
+        The scope/limit must already be registered from a frozen policy; this
+        port never invents a limit. The same event_key with the same amounts is
+        a replay, with different amounts it is an idempotency conflict, and any
+        refusal leaves all dimensions unchanged (PHYSICAL_CONTRACT §3).
+        """
+        ...
+
+
 class ArtifactPublicationPort(Protocol):
     def publish_stage(self, context: "ExecutionContext", stage_id: str,
                       outputs: tuple["ProducedArtifact", ...]) -> tuple["ArtifactRef", ...]:

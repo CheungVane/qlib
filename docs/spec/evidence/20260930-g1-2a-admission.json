@@ -1,0 +1,52 @@
+{
+  "date": "2026-09-30",
+  "baseline": "b58e92f8",
+  "branch": "codex/g1-foundation",
+  "milestone": "G1-2a atomic admission and usage-ledger core",
+  "deliverable": {
+    "adapter": "extensions/workbench/quant_workbench/adapters/storage/schema7.py",
+    "port": "ports/research.py UsageBudgetPort",
+    "validators_added": ["execution_policy", "data_plan", "data_definition", "research_definition"],
+    "tests": "extensions/workbench/tests/test_schema7_admission.py",
+    "production_wiring": "none (reserved for G1-5); running service still supports schema6 only"
+  },
+  "implemented": [
+    "immutable artifact registration with canonical content digest and object-store envelope",
+    "Experiment entity creation required before a managed research Run",
+    "replay-before-preflight idempotency via the commands table",
+    "same-key different-payload -> idempotency_conflict",
+    "one transaction commits Run, Attempt, Stages, concurrency lease, admitted event and response stub",
+    "concurrency lease scope concurrency:global bounded by execution_policy.max_concurrent",
+    "retry reuses the managed Run, requires a settled previous Attempt and increments attempt_no",
+    "reserve_usage atomically checks and consumes multiple scope/dimension increments",
+    "same event_key same amounts replays; different amounts conflict; refusal leaves usage unchanged",
+    "plan expiry and Ref digest/type/schema mismatch are refused",
+    "each write step is fault-injectable and a failure rolls the whole admission back"
+  ],
+  "evidence_level": {
+    "fixture": ["schema7 temp database", "artifact/experiment fixtures", "per-write-point fault injection"],
+    "independent_connection": ["two connections race for the last concurrency slot",
+                               "two connections race for the last budget unit"],
+    "service_integration": ["ExecutionService.admit_managed with the real store and a preflight double"]
+  },
+  "not_done": [
+    "save_revision head CAS/entity head/commands wrapper and set_pointer",
+    "remaining command payload validators (research_input, research_workflow, review, proposals, factor_definition, snapshot/prepared_input/model/...)",
+    "legacy submit/import attempts sharing the new idempotency/budget/slot protection",
+    "workflow_edges/trial_events publication and automatic edges",
+    "record_transition adapter and supervisor (G1-3)",
+    "artifact publication port (G1-4)",
+    "production composition-root injection and real database migration (G1-5)"
+  ],
+  "verification": {
+    "command": "bash scripts/workbench_gate.sh",
+    "exit_code": 0,
+    "python": {"total": 353, "skipped": 7, "failures": 0, "errors": 0, "seconds": 111.187},
+    "javascript": {"total": 28, "passed": 28, "failed": 0},
+    "focused": {"test_schema7_admission": 12, "test_contracts": 11, "test_migrations": 7,
+                "test_architecture": 7},
+    "known_non_failures": ["existing subprocess ResourceWarning", "expected fault-injection API traceback"]
+  },
+  "open": ["SR01-SR04", "A43-A45", "G1-2b command/head ports and legacy-protection integration"],
+  "next": "G1-2b save_revision/set_pointer, remaining payload validators and legacy Attempt protection"
+}

@@ -436,6 +436,197 @@ def _date_rule(value: Any, path: str) -> dict:
     raise ContractError(path, "invalid_date_rule", "kind must be absolute or latest_complete_session")
 
 
+INTERVAL = parse_object({"start": parse_date, "end": parse_date})
+
+CHUNK = parse_object({
+    "chunk_key": lambda value, path: parse_str(value, path, min_len=1, max_len=128),
+    "instrument_ids": parse_array(parse_id, max_len=100000),
+    "start": parse_date,
+    "end": parse_date,
+})
+
+SOURCE_PLAN = parse_object({
+    "source_id": parse_id,
+    "capability_ref": parse_ref,
+    "query_digest": parse_digest,
+    "release_id": nullable(lambda value, path: parse_str(value, path, min_len=1, max_len=256)),
+    "boundary": INTERVAL,
+    "chunks": parse_array(CHUNK, max_len=100000),
+    "limitations": STRINGS,
+})
+
+DATA_PLAN = parse_object({
+    "definition_ref": parse_ref,
+    "date_range": INTERVAL,
+    "universe_ref": parse_ref,
+    "calendar_ref": parse_ref,
+    "source_plans": parse_array(SOURCE_PLAN, max_len=64),
+    "base_snapshot_ref": nullable(parse_snapshot_ref),
+    "estimated_chunks": nullable(lambda value, path: parse_int(value, path, minimum=0)),
+    "estimated_bytes": nullable(lambda value, path: parse_int(value, path, minimum=0)),
+    "estimated_rows": nullable(lambda value, path: parse_int(value, path, minimum=0)),
+    "checks": parse_array(CHECK, max_len=512),
+    "created_at": parse_time,
+    "expires_at": parse_time,
+})
+
+EXECUTION_POLICY = parse_object({
+    "schema_version": lambda value, path: parse_int(value, path, minimum=1, maximum=1),
+    "note": lambda value, path: parse_str(value, path, max_len=4096),
+    "max_concurrent": lambda value, path: parse_int(value, path, minimum=1),
+    "timeout_seconds": lambda value, path: parse_int(value, path, minimum=1),
+    "terminate_grace_seconds": lambda value, path: parse_int(value, path, minimum=1),
+    "cpu_seconds": lambda value, path: parse_int(value, path, minimum=1),
+    "memory_bytes": lambda value, path: parse_int(value, path, minimum=1),
+    "enforce": parse_array(parse_enum("cpu", "memory"), max_len=2),
+    "container": parse_object({"note": lambda value, path: parse_str(value, path, max_len=4096)}),
+    "agent_budget": parse_object({
+        "max_trials": lambda value, path: parse_int(value, path, minimum=1),
+        "max_calls": lambda value, path: parse_int(value, path, minimum=1),
+        "scope": parse_enum("policy_revision"),
+    }),
+    "supervisor_interval_seconds": lambda value, path: parse_int(value, path, minimum=1, maximum=60),
+    "terminate_confirmation_seconds": lambda value, path: parse_int(value, path, minimum=1, maximum=60),
+}, required={"max_concurrent", "timeout_seconds", "terminate_grace_seconds", "cpu_seconds",
+             "memory_bytes", "enforce", "agent_budget"})
+
+
+AGENT_BINDING = parse_object({
+    "agent_id": parse_id,
+    "adapter_version": lambda value, path: parse_str(value, path, min_len=1, max_len=128),
+    "model_id": lambda value, path: parse_str(value, path, min_len=1, max_len=256),
+    "model_version": nullable(lambda value, path: parse_str(value, path, min_len=1, max_len=256)),
+    "prompt_ref": parse_ref,
+    "output_schema_version": lambda value, path: parse_int(value, path, minimum=1, maximum=1),
+    "capabilities": parse_array(lambda value, path: parse_str(value, path, min_len=1, max_len=64),
+                                max_len=16, min_len=1),
+    "allowed_tools": STRINGS,
+})
+
+REF_LIST = parse_array(parse_ref, max_len=512)
+
+DIRECTION_INPUTS = parse_object({
+    "input_ref": parse_ref,
+    "agent_binding": AGENT_BINDING,
+    "snapshot_ref": nullable(parse_snapshot_ref),
+    "protocol_ref": nullable(parse_ref),
+})
+
+FORMULA_EVALUATE_INPUTS = parse_object({
+    "input_ref": parse_ref,
+    "agent_binding": AGENT_BINDING,
+    "formula_ref": parse_ref,
+    "preparation_ref": parse_ref,
+    "protocol_ref": parse_ref,
+    "reference_set_ref": parse_ref,
+})
+
+TRAIN_INPUTS = parse_object({
+    "preparation_ref": parse_ref,
+    "feature_refs": REF_LIST,
+    "validation_plan_ref": parse_ref,
+    "preprocessing_ref": parse_ref,
+    "engine_binding_ref": parse_ref,
+    "model_spec_ref": parse_ref,
+    "evaluation_protocol_ref": parse_ref,
+    "selection_evidence_refs": REF_LIST,
+})
+
+MINE_INPUTS = parse_object({
+    "preparation_ref": parse_ref,
+    "generator_binding_ref": parse_ref,
+    "search_policy_ref": parse_ref,
+    "evaluation_protocol_ref": parse_ref,
+    "reference_set_ref": parse_ref,
+    "trial_scope_id": parse_id,
+})
+
+
+def _signal_input(value: Any, path: str) -> dict:
+    if not isinstance(value, dict):
+        raise ContractError(path, "object_required", "expected a signal_input object")
+    kind = value.get("kind")
+    if kind == "prediction":
+        return parse_object({"kind": parse_enum("prediction"), "prediction_ref": parse_ref})(value, path)
+    if kind == "model":
+        return parse_object({"kind": parse_enum("model"), "model_ref": parse_ref,
+                             "inference_preparation_ref": parse_ref})(value, path)
+    if kind == "factor_rule":
+        return parse_object({"kind": parse_enum("factor_rule"),
+                             "factor_panel_refs": REF_LIST})(value, path)
+    raise ContractError(path, "invalid_signal_input",
+                        "kind must be prediction, model or factor_rule")
+
+
+BACKTEST_INPUTS = parse_object({
+    "preparation_ref": parse_ref,
+    "strategy_ref": parse_ref,
+    "signal_input": _signal_input,
+    "execution_scenario_ref": parse_ref,
+    "evaluation_protocol_ref": parse_ref,
+    "engine_binding_ref": parse_ref,
+})
+
+RESEARCH_INPUTS_BY_KIND = {
+    "direction_review": DIRECTION_INPUTS,
+    "hypothesis_review": DIRECTION_INPUTS,
+    "formula_evaluate": FORMULA_EVALUATE_INPUTS,
+    "train": TRAIN_INPUTS,
+    "mine": MINE_INPUTS,
+    "backtest": BACKTEST_INPUTS,
+}
+
+
+def _research_definition(value: Any, path: str) -> dict:
+    base = parse_object({
+        "experiment_id": parse_id,
+        "workflow_kind": parse_enum(*RESEARCH_INPUTS_BY_KIND),
+        "inputs": lambda raw, where: raw if isinstance(raw, dict) else _object_needed(where),
+        "seed": lambda raw, where: parse_int(raw, where, minimum=0, maximum=2 ** 63 - 1),
+        "code_ref": parse_ref,
+    })(value, path)
+    parser = RESEARCH_INPUTS_BY_KIND[base["workflow_kind"]]
+    base["inputs"] = parser(base["inputs"], f"{path}.inputs")
+    return base
+
+
+COMPONENT_REQUEST = parse_object({
+    "component": lambda value, path: parse_str(value, path, min_len=1, max_len=64),
+    "fields": parse_array(lambda value, path: parse_str(value, path, min_len=1, max_len=64),
+                          max_len=256, min_len=1),
+    "required": parse_bool,
+})
+
+DATA_SOURCE_BINDING = parse_object({
+    "source_id": parse_id,
+    "capability_ref": parse_ref,
+    "component": lambda value, path: parse_str(value, path, min_len=1, max_len=64),
+    "field_group": lambda value, path: parse_str(value, path, min_len=1, max_len=64),
+    "role": parse_enum("primary", "supplement", "validator"),
+    "priority": lambda value, path: parse_int(value, path, minimum=0),
+    "required": parse_bool,
+    "fallback_allowed": parse_bool,
+})
+
+DATA_DEFINITION = parse_object({
+    "market": lambda value, path: parse_str(value, path, min_len=1, max_len=32),
+    "frequency": parse_enum("day"),
+    "timezone": lambda value, path: parse_str(value, path, min_len=1, max_len=64),
+    "universe_ref": parse_ref,
+    "date_rule": DATE_RULE,
+    "components": parse_array(COMPONENT_REQUEST, max_len=64, min_len=1),
+    "source_bindings": parse_array(DATA_SOURCE_BINDING, max_len=64, min_len=1),
+    "acquisition_mode": parse_enum("online_fetch", "registered_import"),
+    "update_mode": parse_enum("full", "incremental"),
+    "revision_policy_ref": parse_ref,
+    "merge_policy_ref": parse_ref,
+    "cleaning_policy_ref": parse_ref,
+    "quality_policy_ref": parse_ref,
+    "resource_policy_ref": parse_ref,
+    "output_schema_version": lambda value, path: parse_int(value, path, minimum=3, maximum=3),
+})
+
+
 PAYLOAD_VALIDATORS: dict[str, Callable[[Any, str], dict]] = {
     "budget_policy": BUDGET_POLICY,
     "code_identity": CODE_IDENTITY,
@@ -446,6 +637,10 @@ PAYLOAD_VALIDATORS: dict[str, Callable[[Any, str], dict]] = {
     "label_definition": LABEL_DEFINITION,
     "sample_plan": SAMPLE_PLAN,
     "date_rule": DATE_RULE,
+    "data_plan": DATA_PLAN,
+    "data_definition": DATA_DEFINITION,
+    "research_definition": _research_definition,
+    "execution_policy": EXECUTION_POLICY,
 }
 
 ENVELOPE = parse_object({

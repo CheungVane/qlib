@@ -2,6 +2,14 @@
 
 本文件保留决策历史；当前合同见[入口](README.md)，维护流程见[治理规范](SPEC_GOVERNANCE.md)。以下既有工作为追溯登记，不冒充当时已具备的治理机制。
 
+## 2026-09-30 — G1-2a原子准入、幂等与预算账本核心
+
+- 来源：用户授权按spec继续实施；G1-1完成后进入G1-2，本次交付其准入/账本核心（G1-2a），基线`b58e92f8`。关联U28/U31、T04/T06、SR03及A41/A45-1/A45-5；父项不关闭。
+- 实现：新增`adapters/storage/schema7.py`（不可变artifact/Experiment登记、`replay`、单事务`admit_run`、`reserve_usage`、`release_lease`）与`ports/research.py UsageBudgetPort`；`admit_run`一次提交Run/Attempt/Stages/`concurrency:global`租约/admitted事件/commands回执，retry复用Run并递增attempt_no。补齐`execution_policy/data_plan/data_definition/research_definition`闭合校验与`IdempotencyConflict/PlanExpired/ReferenceMismatch/RetryNotAllowed/LedgerScopeMissing`错误。
+- 设计冻结：ARCHITECTURE §9.4登记scope约定`concurrency:global`、`global:<policy_id>`、`workflow:<id>`、`source:<id>`；limit先由冻结policy预置，`reserve_usage`不创建scope/不猜上限；同event_key异增量冲突、任一不足全回滚。
+- 验证：完整`workbench_gate.sh`退出0，Python 353项（7跳过、0失败）、JS 28项通过；`test_schema7_admission.py`12项覆盖同键异载荷、两个独立连接争最后并发槽/最后额度单位、逐写入点故障完整回滚、plan过期/Ref错配、retry身份以及`ExecutionService.admit_managed`接真实store。脱敏摘要见[G1-2a证据](evidence/20260930-g1-2a-admission.json)。
+- 边界：未注入生产组合根，`supported_schema`仍为6；save_revision头CAS/set_pointer、剩余命令payload、旧submit/import共享保护归G1-2b，workflow边/trial事件归后续，发布/监督/真实迁移留G1-3—5。没有运行真实引擎或迁移用户数据库。
+
 ## 2026-09-30 — G1-1共享校验器与schema6→7迁移工具
 
 - 来源：用户要求按spec开始实现；在G1-0映射基础上完成G1-1，基线`ff1f5e54`。关联U28/U31、T06、A35存储子项、A45-1；不关闭SR与A43—45父项。
